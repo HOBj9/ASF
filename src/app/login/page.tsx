@@ -32,6 +32,14 @@ export default function LoginPage() {
     }
   }, [status, session, router])
 
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<LoginFormValues>({
+    resolver: zodResolver(loginSchema),
+  })
+
   // Show loading state while checking session
   if (status === "loading") {
     return (
@@ -45,14 +53,6 @@ export default function LoginPage() {
   if (status === "authenticated") {
     return null
   }
-
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-  } = useForm<LoginFormValues>({
-    resolver: zodResolver(loginSchema),
-  })
 
   const onSubmit = async (data: LoginFormValues) => {
     setIsLoading(true)
