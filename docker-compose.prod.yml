@@ -1,0 +1,40 @@
+services:
+  mongodb:
+    image: mongo:7
+    container_name: rapido-go-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: admin123
+      MONGO_INITDB_DATABASE: rapido-go
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - app-network
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rapido-go-app
+    restart: unless-stopped
+    ports:
+      - "3020:3020"
+    environment:
+      MONGODB_URI: mongodb://admin:admin123@mongodb:27017/rapido-go?authSource=admin
+      NEXTAUTH_URL: http://localhost:3020
+      NEXTAUTH_SECRET: your-secret-key-change-in-production
+    depends_on:
+      - mongodb
+    networks:
+      - app-network
+
+volumes:
+  mongodb_data:
+
+networks:
+  app-network:
+    driver: bridge
+

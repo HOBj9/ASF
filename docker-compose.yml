@@ -1,0 +1,54 @@
+# Docker Compose Configuration for Local Development
+# This file is configured for local development environment
+# For production, use docker-compose.prod.yml
+
+services:
+  # MongoDB Database Service (Local)
+  mongodb:
+    image: mongo:7
+    container_name: rapido-go-mongodb
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:27017:27017"  # Bind to localhost only for security
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: admin123
+      MONGO_INITDB_DATABASE: rapido-go
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - app-network
+
+  # Application Service (Local Development)
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: rapido-go-app
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3020:3020"  # Bind to localhost only
+    environment:
+      # Local MongoDB connection (inside Docker network)
+      MONGODB_URI: mongodb://admin:admin123@mongodb:27017/rapido-go?authSource=admin
+      # Local development URL
+      NEXTAUTH_URL: http://localhost:3020
+      NEXTAUTH_SECRET: local-development-secret-key-change-in-production
+      # Enable file watching in Docker
+      WATCHPACK_POLLING: "true"
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/.next
+    depends_on:
+      - mongodb
+    networks:
+      - app-network
+
+volumes:
+  mongodb_data:
+
+networks:
+  app-network:
+    driver: bridge
+
