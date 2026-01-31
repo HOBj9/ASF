@@ -108,6 +108,7 @@ export interface User {
     name: string
     nameAr: string
   }
+  municipalityId?: string
   isActive: boolean
   avatar?: string
   createdAt: string
@@ -169,6 +170,136 @@ export interface UserApiKey {
   _id: string
   userId: string
   lastUsedAt?: string
+  createdAt: string
+  updatedAt: string
+}
+
+// Municipality Types
+export interface Municipality {
+  _id: string
+  name: string
+  nameAr?: string
+  governorate: string
+  areaName?: string
+  addressText?: string
+  centerLat: number
+  centerLng: number
+  timezone: string
+  atharKey?: string
+  isActive: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+// Driver Types
+export interface Driver {
+  _id: string
+  municipalityId: string
+  name: string
+  phone?: string
+  nationalId?: string
+  assignedVehicleId?: string
+  isActive: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+// Vehicle Types
+export interface Vehicle {
+  _id: string
+  municipalityId: string
+  name: string
+  plateNumber?: string
+  imei: string
+  atharObjectId?: string
+  driverId?: string
+  routeId?: string
+  isActive: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+// Point Types
+export type PointType = 'container' | 'station' | 'facility' | 'other'
+
+export interface Point {
+  _id: string
+  municipalityId: string
+  name: string
+  nameAr?: string
+  nameEn?: string
+  type: PointType
+  lat: number
+  lng: number
+  radiusMeters: number
+  zoneId?: string
+  addressText?: string
+  isActive: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+// Route Types
+export interface Route {
+  _id: string
+  municipalityId: string
+  name: string
+  description?: string
+  path?: {
+    type: "LineString"
+    coordinates: number[][]
+  }
+  isActive: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+// Route Point Types
+export interface RoutePoint {
+  _id: string
+  routeId: string
+  pointId: string
+  order: number
+  createdAt: string
+  updatedAt: string
+}
+
+// Zone Event Types
+export type ZoneEventType = 'zone_in' | 'zone_out'
+
+export interface ZoneEvent {
+  _id: string
+  municipalityId: string
+  vehicleId?: string
+  driverId?: string
+  pointId?: string
+  zoneId?: string
+  imei?: string
+  atharEventId?: string
+  name?: string
+  driverName?: string
+  type: ZoneEventType
+  eventTimestamp?: string
+  receivedAt: string
+  createdAt: string
+  updatedAt: string
+}
+
+// Point Visit Types
+export type VisitStatus = 'open' | 'closed'
+
+export interface PointVisit {
+  _id: string
+  municipalityId: string
+  vehicleId: string
+  pointId: string
+  zoneId?: string
+  entryEventId?: string
+  exitEventId?: string
+  entryTime: string
+  exitTime?: string
+  durationSeconds?: number
+  status: VisitStatus
   createdAt: string
   updatedAt: string
 }

@@ -6,6 +6,7 @@ export interface IUser extends Document {
   password: string;
   phone?: string;
   role: mongoose.Types.ObjectId;
+  municipalityId?: mongoose.Types.ObjectId;
   avatar?: string;
   businessName?: string;
   isActive: boolean;
@@ -41,6 +42,12 @@ const UserSchema: Schema = new Schema(
       type: Schema.Types.ObjectId,
       ref: 'Role',
       required: true,
+    },
+    municipalityId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Municipality',
+      default: null,
+      index: true,
     },
     isActive: {
       type: Boolean,

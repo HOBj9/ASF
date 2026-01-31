@@ -1,28 +1,71 @@
-"use client"
+﻿"use client"
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useSession } from "next-auth/react"
-import { apiClient } from "@/lib/api/client"
-import { 
-  LayoutDashboard, 
+import {
+  LayoutDashboard,
   X,
   UserCog,
   KeyRound,
   User,
   Settings,
+  Building2,
+  Truck,
+  Users,
+  MapPin,
+  Route,
+  FileText,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { apiClient } from "@/lib/api/client"
 import { cn } from "@/lib/utils"
 import { useSidebarStore } from "@/store/sidebar-store"
 import { useEffect, useState, useMemo } from "react"
-import { isAdmin } from "@/lib/permissions"
+import { hasAnyPermission, isAdmin } from "@/lib/permissions"
+import { permissionActions, permissionResources } from "@/constants/permissions"
 
 const menuItems = [
   {
     title: "لوحة التحكم",
     href: "/dashboard",
     icon: LayoutDashboard,
+  },
+  {
+    title: "البلديات",
+    href: "/dashboard/admin/municipalities",
+    icon: Building2,
+    adminOnly: true,
+  },
+  {
+    title: "الشاحنات والمركبات",
+    href: "/dashboard/vehicles",
+    icon: Truck,
+    permissions: [{ resource: permissionResources.VEHICLES, action: permissionActions.READ }],
+  },
+  {
+    title: "السائقون",
+    href: "/dashboard/drivers",
+    icon: Users,
+    permissions: [{ resource: permissionResources.DRIVERS, action: permissionActions.READ }],
+  },
+  {
+    title: "الحاويات",
+    href: "/dashboard/points",
+    icon: MapPin,
+    permissions: [{ resource: permissionResources.POINTS, action: permissionActions.READ }],
+  },
+  {
+    title: "المسارات",
+    href: "/dashboard/routes",
+    icon: Route,
+    permissions: [{ resource: permissionResources.ROUTES, action: permissionActions.READ }],
+  },
+  {
+    title: "التقارير",
+    href: "/dashboard/reports",
+    icon: FileText,
+    permissions: [{ resource: permissionResources.REPORTS, action: permissionActions.READ }],
   },
   {
     title: "المستخدمون",
@@ -128,6 +171,11 @@ export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarP
     (item) => {
       // Show admin-only items only for admin
       if (item.adminOnly && !userIsAdmin) return false
+      if (userIsAdmin) return true
+      if (item.permissions && item.permissions.length > 0) {
+        const role = session?.user?.role || null
+        return hasAnyPermission(role as any, item.permissions)
+      }
       return true
     }
   )
@@ -206,10 +254,10 @@ export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarP
                 )}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-foreground truncate">
-                  مرحباً {roleName || 'مستخدم'}
-                </p>
-              </div>
+  <p className="text-sm font-semibold text-foreground truncate">
+    مرحبًا، {currentUser.name}
+  </p>
+</div>
             </Link>
           </div>
         </div>
@@ -250,4 +298,11 @@ export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarP
     </>
   )
 }
+
+
+
+
+
+
+
 

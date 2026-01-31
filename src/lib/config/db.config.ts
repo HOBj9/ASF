@@ -5,7 +5,7 @@
 
 export const dbConfig = {
   // MongoDB Connection
-  uri: process.env.MONGODB_URI || 'mongodb://localhost:27017/rapido-go',
+  uri: process.env.MONGODB_URI || 'mongodb://localhost:27017/waste-management-system',
   
   // Connection Options
   options: {
@@ -15,7 +15,7 @@ export const dbConfig = {
   },
 
   // Database Name (extracted from URI if not provided)
-  databaseName: process.env.DB_NAME || 'rapido-go',
+  databaseName: process.env.DB_NAME || 'waste-management-system',
 
   // Model Settings
   models: {

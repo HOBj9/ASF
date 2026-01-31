@@ -23,7 +23,7 @@ export async function POST(request: Request) {
     if (authResult instanceof NextResponse) return authResult
 
     const body = await request.json()
-    const { name, email, phone, password, role, isActive } = body
+    const { name, email, phone, password, role, isActive, municipalityId } = body
 
     if (!name || !email || !password || !role) {
       return NextResponse.json(
@@ -38,6 +38,7 @@ export async function POST(request: Request) {
       phone: phone || undefined,
       password,
       role,
+      municipalityId: municipalityId || undefined,
       isActive: isActive ?? true,
     })
 

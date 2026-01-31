@@ -72,6 +72,13 @@ export async function POST() {
       permissions: userPermissionIds,
     })
 
+    // Create municipality admin role
+    const municipalityRole = await roleService.create({
+      name: defaultRoles.municipalityAdmin.name,
+      nameAr: defaultRoles.municipalityAdmin.nameAr,
+      permissions: userPermissionIds,
+    })
+
     // Create users using service
     const userService = new UserService()
     
@@ -101,6 +108,9 @@ export async function POST() {
         user: { 
           email: appConfig.defaultUser.email, 
           password: appConfig.defaultUser.password 
+        },
+        municipalityAdminRole: {
+          name: municipalityRole.name,
         },
       },
     })

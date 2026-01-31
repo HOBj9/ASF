@@ -27,7 +27,7 @@ export default async function UsersPage() {
   return (
     <div className="text-right">
       <div className="mb-6 lg:mb-8">
-        <h1 className="text-2xl lg:text-3xl font-bold">إدارة المستخدمون</h1>
+        <h1 className="text-2xl lg:text-3xl font-bold">إدارة المستخدمين</h1>
         <p className="text-muted-foreground mt-2">عرض وإدارة المستخدمين في النظام</p>
       </div>
       <UsersTable users={JSON.parse(JSON.stringify(users))} />

@@ -16,6 +16,7 @@ export interface CreateUserData {
   password: string;
   phone?: string;
   role: string;
+  municipalityId?: string;
   isActive?: boolean;
 }
 
@@ -25,6 +26,7 @@ export interface UpdateUserData {
   password?: string;
   phone?: string;
   role?: string;
+  municipalityId?: string;
   isActive?: boolean;
 }
 
@@ -57,6 +59,7 @@ export class UserService {
       password: hashedPassword,
       phone: data.phone || null,
       role: data.role,
+      municipalityId: data.municipalityId || null,
       isActive: data.isActive ?? true,
     });
 
@@ -127,6 +130,9 @@ export class UserService {
     const updateData: any = { ...data };
     if (data.email) {
       updateData.email = data.email.toLowerCase();
+    }
+    if (data.municipalityId !== undefined) {
+      updateData.municipalityId = data.municipalityId || null;
     }
     
     // Ensure isActive is a boolean if provided

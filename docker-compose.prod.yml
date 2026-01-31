@@ -1,14 +1,14 @@
 services:
   mongodb:
     image: mongo:7
-    container_name: rapido-go-mongodb
+    container_name: waste-management-system-mongodb
     restart: unless-stopped
     ports:
-      - "27017:27017"
+      - "27018:27017"  # Host 27018 to avoid conflict with local MongoDB
     environment:
       MONGO_INITDB_ROOT_USERNAME: admin
       MONGO_INITDB_ROOT_PASSWORD: admin123
-      MONGO_INITDB_DATABASE: rapido-go
+      MONGO_INITDB_DATABASE: waste-management-system
     volumes:
       - mongodb_data:/data/db
     networks:
@@ -18,13 +18,13 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: rapido-go-app
+    container_name: waste-management-system-app
     restart: unless-stopped
     ports:
-      - "3020:3020"
+      - "3036:3036"
     environment:
-      MONGODB_URI: mongodb://admin:admin123@mongodb:27017/rapido-go?authSource=admin
-      NEXTAUTH_URL: http://localhost:3020
+      MONGODB_URI: mongodb://admin:admin123@mongodb:27017/waste-management-system?authSource=admin
+      NEXTAUTH_URL: http://localhost:3036
       NEXTAUTH_SECRET: your-secret-key-change-in-production
     depends_on:
       - mongodb

@@ -26,6 +26,7 @@ const userFormSchema = z.object({
   phone: z.string().optional(),
   password: z.string().min(6, "كلمة المرور يجب أن تكون على الأقل 6 أحرف"),
   role: z.string().min(1, "يجب اختيار دور"),
+  municipalityId: z.string().optional(),
   isActive: z.boolean().default(true),
 })
 
@@ -37,6 +38,11 @@ interface Role {
   nameAr: string
 }
 
+interface Municipality {
+  _id: string
+  name: string
+}
+
 interface UserFormProps {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -45,7 +51,9 @@ interface UserFormProps {
 
 export function UserForm({ open, onOpenChange, onSuccess }: UserFormProps) {
   const [roles, setRoles] = useState<Role[]>([])
+  const [municipalities, setMunicipalities] = useState<Municipality[]>([])
   const [loadingRoles, setLoadingRoles] = useState(false)
+  const [loadingMunicipalities, setLoadingMunicipalities] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
   const form = useForm<UserFormValues>({
@@ -56,14 +64,15 @@ export function UserForm({ open, onOpenChange, onSuccess }: UserFormProps) {
       phone: "",
       password: "",
       role: "",
+      municipalityId: "",
       isActive: true,
     },
   })
 
-  // Fetch roles when dialog opens
   useEffect(() => {
     if (open) {
       fetchRoles()
+      fetchMunicipalities()
     }
   }, [open])
 
@@ -71,7 +80,6 @@ export function UserForm({ open, onOpenChange, onSuccess }: UserFormProps) {
     setLoadingRoles(true)
     try {
       const response = await apiClient.get("/admin/roles")
-      // Handle both response structures for compatibility
       const rolesData = response.data?.roles || response.data?.data?.roles || response.roles
       if (rolesData && Array.isArray(rolesData)) {
         setRoles(rolesData)
@@ -84,9 +92,28 @@ export function UserForm({ open, onOpenChange, onSuccess }: UserFormProps) {
     }
   }
 
+  const fetchMunicipalities = async () => {
+    setLoadingMunicipalities(true)
+    try {
+      const response = await apiClient.get("/municipalities")
+      const data = response.municipalities || response.data?.municipalities || response.data?.data?.municipalities
+      if (Array.isArray(data)) {
+        setMunicipalities(data)
+      }
+    } catch (error) {
+      console.error("Failed to fetch municipalities:", error)
+      toast.error("فشل في تحميل البلديات")
+    } finally {
+      setLoadingMunicipalities(false)
+    }
+  }
+
   const onSubmit = async (values: UserFormValues) => {
     setSubmitting(true)
     try {
+      if (!values.municipalityId) {
+        delete (values as any).municipalityId
+      }
       const data = await apiClient.post("/admin/users", values)
 
       if (!data.data) {
@@ -108,109 +135,129 @@ export function UserForm({ open, onOpenChange, onSuccess }: UserFormProps) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[500px] max-h-[90vh] flex flex-col">
         <DialogHeader className="flex-shrink-0">
-          <DialogTitle className="text-right">إضافة مستخدم جديد</DialogTitle>
+<DialogTitle className="text-right">إضافة مستخدم جديد</DialogTitle>
           <DialogDescription className="text-right">
             قم بملء البيانات التالية لإنشاء مستخدم جديد في النظام
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col flex-1 min-h-0">
           <div className="flex-1 overflow-y-auto pr-2 space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="name" className="text-right">الاسم</Label>
-            <Input
-              id="name"
-              {...form.register("name")}
-              placeholder="أدخل اسم المستخدم"
-              className="text-right"
-              disabled={submitting}
-            />
-            {form.formState.errors.name && (
-              <p className="text-sm text-destructive text-right">{form.formState.errors.name.message}</p>
-            )}
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="email" className="text-right">البريد الإلكتروني</Label>
-            <Input
-              id="email"
-              type="email"
-              {...form.register("email")}
-              placeholder="example@email.com"
-              className="text-right"
-              disabled={submitting}
-            />
-            {form.formState.errors.email && (
-              <p className="text-sm text-destructive text-right">{form.formState.errors.email.message}</p>
-            )}
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="phone" className="text-right">رقم الهاتف</Label>
-            <Input
-              id="phone"
-              type="tel"
-              {...form.register("phone")}
-              placeholder="+966XXXXXXXXX"
-              className="text-right"
-              disabled={submitting}
-            />
-            {form.formState.errors.phone && (
-              <p className="text-sm text-destructive text-right">{form.formState.errors.phone.message}</p>
-            )}
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="password" className="text-right">كلمة المرور</Label>
-            <Input
-              id="password"
-              type="password"
-              {...form.register("password")}
-              placeholder="أدخل كلمة المرور"
-              className="text-right"
-              disabled={submitting}
-            />
-            {form.formState.errors.password && (
-              <p className="text-sm text-destructive text-right">{form.formState.errors.password.message}</p>
-            )}
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="role" className="text-right">الدور</Label>
-            <Select
-              onValueChange={(value) => form.setValue("role", value)}
-              defaultValue={form.watch("role")}
-              disabled={submitting || loadingRoles}
-            >
-              <SelectTrigger id="role" className="text-right">
-                <SelectValue placeholder={loadingRoles ? "جاري التحميل..." : "اختر الدور"} />
-              </SelectTrigger>
-              <SelectContent>
-                {roles.map((role) => (
-                  <SelectItem key={role._id} value={role._id}>
-                    {role.nameAr || role.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {form.formState.errors.role && (
-              <p className="text-sm text-destructive text-right">{form.formState.errors.role.message}</p>
-            )}
-          </div>
-
-          <div className="flex items-center justify-between rounded-lg border p-3">
-            <div className="space-y-0.5">
-              <Label htmlFor="isActive" className="text-right">المستخدم نشط</Label>
-              <div className="text-sm text-muted-foreground text-right">
-                المستخدم النشط يمكنه تسجيل الدخول
-              </div>
+            <div className="space-y-2">
+              <Label htmlFor="name" className="text-right">الاسم</Label>
+              <Input
+                id="name"
+                {...form.register("name")}
+                placeholder="أدخل اسم المستخدم"
+                className="text-right"
+                disabled={submitting}
+              />
+              {form.formState.errors.name && (
+                <p className="text-sm text-destructive text-right">{form.formState.errors.name.message}</p>
+              )}
             </div>
-            <Checkbox
-              id="isActive"
-              checked={form.watch("isActive")}
-              onCheckedChange={(checked) => form.setValue("isActive", checked as boolean)}
-              disabled={submitting}
-            />
-          </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="email" className="text-right">البريد الإلكتروني</Label>
+              <Input
+                id="email"
+                type="email"
+                {...form.register("email")}
+                placeholder="example@email.com"
+                className="text-right"
+                disabled={submitting}
+              />
+              {form.formState.errors.email && (
+                <p className="text-sm text-destructive text-right">{form.formState.errors.email.message}</p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="phone" className="text-right">رقم الهاتف</Label>
+              <Input
+                id="phone"
+                type="tel"
+                {...form.register("phone")}
+                placeholder="+966XXXXXXXXX"
+                className="text-right"
+                disabled={submitting}
+              />
+              {form.formState.errors.phone && (
+                <p className="text-sm text-destructive text-right">{form.formState.errors.phone.message}</p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="password" className="text-right">كلمة المرور</Label>
+              <Input
+                id="password"
+                type="password"
+                {...form.register("password")}
+                placeholder="أدخل كلمة المرور"
+                className="text-right"
+                disabled={submitting}
+              />
+              {form.formState.errors.password && (
+                <p className="text-sm text-destructive text-right">{form.formState.errors.password.message}</p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="role" className="text-right">الدور</Label>
+              <Select
+                onValueChange={(value) => form.setValue("role", value)}
+                defaultValue={form.watch("role")}
+                disabled={submitting || loadingRoles}
+              >
+                <SelectTrigger id="role" className="text-right">
+                  <SelectValue placeholder={loadingRoles ? "جاري التحميل..." : "اختر الدور"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {roles.map((role) => (
+                    <SelectItem key={role._id} value={role._id}>
+                      {role.nameAr || role.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {form.formState.errors.role && (
+                <p className="text-sm text-destructive text-right">{form.formState.errors.role.message}</p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="municipalityId" className="text-right">البلدية</Label>
+              <Select
+                onValueChange={(value) => form.setValue("municipalityId", value)}
+                defaultValue={form.watch("municipalityId")}
+                disabled={submitting || loadingMunicipalities}
+              >
+                <SelectTrigger id="municipalityId" className="text-right">
+                  <SelectValue placeholder={loadingMunicipalities ? "جاري التحميل..." : "اختيار بلدية (اختياري)"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {municipalities.map((municipality) => (
+                    <SelectItem key={municipality._id} value={municipality._id}>
+                      {municipality.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex items-center justify-between rounded-lg border p-3">
+              <div className="space-y-0.5">
+                <Label htmlFor="isActive" className="text-right">المستخدم نشط</Label>
+                <div className="text-sm text-muted-foreground text-right">
+                  المستخدم النشط يمكنه تسجيل الدخول
+                </div>
+              </div>
+              <Checkbox
+                id="isActive"
+                checked={form.watch("isActive")}
+                onCheckedChange={(checked) => form.setValue("isActive", checked as boolean)}
+                disabled={submitting}
+              />
+            </div>
           </div>
 
           <DialogFooter className="flex-shrink-0 flex-row-reverse gap-2 mt-4 pt-4 border-t">
@@ -231,4 +278,3 @@ export function UserForm({ open, onOpenChange, onSuccess }: UserFormProps) {
     </Dialog>
   )
 }
-

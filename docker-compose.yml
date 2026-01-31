@@ -1,38 +1,38 @@
-# Docker Compose Configuration for Local Development
+# Docker Compose Configuration for Waste Management System
 # This file is configured for local development environment
 # For production, use docker-compose.prod.yml
 
 services:
-  # MongoDB Database Service (Local)
+  # MongoDB Database Service (Waste Management System)
   mongodb:
     image: mongo:7
-    container_name: rapido-go-mongodb
+    container_name: waste-management-system-mongodb
     restart: unless-stopped
     ports:
-      - "127.0.0.1:27017:27017"  # Bind to localhost only for security
+      - "127.0.0.1:27018:27017"  # Host 27018 to avoid conflict with local MongoDB
     environment:
       MONGO_INITDB_ROOT_USERNAME: admin
       MONGO_INITDB_ROOT_PASSWORD: admin123
-      MONGO_INITDB_DATABASE: rapido-go
+      MONGO_INITDB_DATABASE: waste-management-system
     volumes:
       - mongodb_data:/data/db
     networks:
       - app-network
 
-  # Application Service (Local Development)
+  # Application Service (Waste Management System)
   app:
     build:
       context: .
       dockerfile: Dockerfile.dev
-    container_name: rapido-go-app
+    container_name: waste-management-system-app
     restart: unless-stopped
     ports:
-      - "127.0.0.1:3020:3020"  # Bind to localhost only
+      - "127.0.0.1:3036:3036"  # Bind to localhost only
     environment:
-      # Local MongoDB connection (inside Docker network)
-      MONGODB_URI: mongodb://admin:admin123@mongodb:27017/rapido-go?authSource=admin
-      # Local development URL
-      NEXTAUTH_URL: http://localhost:3020
+      # MongoDB connection (inside Docker network)
+      MONGODB_URI: mongodb://admin:admin123@mongodb:27017/waste-management-system?authSource=admin
+      # Application URL
+      NEXTAUTH_URL: http://localhost:3036
       NEXTAUTH_SECRET: local-development-secret-key-change-in-production
       # Enable file watching in Docker
       WATCHPACK_POLLING: "true"
