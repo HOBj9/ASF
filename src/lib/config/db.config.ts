@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Database Configuration
  * MongoDB connection and model settings
  */

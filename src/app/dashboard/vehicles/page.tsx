@@ -1,9 +1,10 @@
-import { getServerSession } from "next-auth"
+﻿import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { redirect } from "next/navigation"
 import { VehiclesManager } from "@/components/municipality/vehicles-manager"
 import { hasPermission, isAdmin } from "@/lib/permissions"
 import { permissionActions, permissionResources } from "@/constants/permissions"
+import { getLabelsForSession } from "@/lib/utils/labels.util"
 
 export default async function VehiclesPage() {
   const session = await getServerSession(authOptions)
@@ -16,13 +17,16 @@ export default async function VehiclesPage() {
     redirect("/unauthorized")
   }
 
+  const labels = await getLabelsForSession(session)
+
   return (
     <div className="text-right">
       <div className="mb-6 lg:mb-8">
-        <h1 className="text-2xl lg:text-3xl font-bold">إدارة الشاحنات والمركبات</h1>
-        <p className="text-muted-foreground mt-2">إضافة وربط الشاحنات والمركبات بالسائقين والمسارات</p>
+        <h1 className="text-2xl lg:text-3xl font-bold">إدارة {labels.vehicleLabel}</h1>
+        <p className="text-muted-foreground mt-2">إضافة وربط {labels.vehicleLabel} بـ {labels.driverLabel} و{labels.routeLabel}</p>
       </div>
       <VehiclesManager />
     </div>
   )
 }
+

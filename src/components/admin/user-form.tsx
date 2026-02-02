@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { useState, useEffect } from "react"
 import { useForm } from "react-hook-form"
@@ -19,6 +19,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { ActionButton } from "@/components/ui/action-button"
 import { apiClient } from "@/lib/api/client"
 import toast from "react-hot-toast"
+import { useLabels } from "@/hooks/use-labels"
 
 const userFormSchema = z.object({
   name: z.string().min(2, "الاسم يجب أن يكون على الأقل حرفين"),
@@ -26,7 +27,7 @@ const userFormSchema = z.object({
   phone: z.string().optional(),
   password: z.string().min(6, "كلمة المرور يجب أن تكون على الأقل 6 أحرف"),
   role: z.string().min(1, "يجب اختيار دور"),
-  municipalityId: z.string().optional(),
+  branchId: z.string().optional(),
   isActive: z.boolean().default(true),
 })
 
@@ -38,7 +39,7 @@ interface Role {
   nameAr: string
 }
 
-interface Municipality {
+interface Branch {
   _id: string
   name: string
 }
@@ -51,10 +52,11 @@ interface UserFormProps {
 
 export function UserForm({ open, onOpenChange, onSuccess }: UserFormProps) {
   const [roles, setRoles] = useState<Role[]>([])
-  const [municipalities, setMunicipalities] = useState<Municipality[]>([])
+  const [branches, setBranches] = useState<Branch[]>([])
   const [loadingRoles, setLoadingRoles] = useState(false)
-  const [loadingMunicipalities, setLoadingMunicipalities] = useState(false)
+  const [loadingBranches, setLoadingBranches] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const { labels } = useLabels()
 
   const form = useForm<UserFormValues>({
     resolver: zodResolver(userFormSchema),
@@ -64,7 +66,7 @@ export function UserForm({ open, onOpenChange, onSuccess }: UserFormProps) {
       phone: "",
       password: "",
       role: "",
-      municipalityId: "",
+      branchId: "",
       isActive: true,
     },
   })
@@ -72,7 +74,7 @@ export function UserForm({ open, onOpenChange, onSuccess }: UserFormProps) {
   useEffect(() => {
     if (open) {
       fetchRoles()
-      fetchMunicipalities()
+      fetchBranches()
     }
   }, [open])
 
@@ -92,30 +94,30 @@ export function UserForm({ open, onOpenChange, onSuccess }: UserFormProps) {
     }
   }
 
-  const fetchMunicipalities = async () => {
-    setLoadingMunicipalities(true)
+  const fetchBranches = async () => {
+    setLoadingBranches(true)
     try {
-      const response = await apiClient.get("/municipalities")
-      const data = response.municipalities || response.data?.municipalities || response.data?.data?.municipalities
+      const response = await apiClient.get("/branches")
+      const data = response.branches || response.data?.branches || response.data?.data?.branches
       if (Array.isArray(data)) {
-        setMunicipalities(data)
+        setBranches(data)
       }
     } catch (error) {
-      console.error("Failed to fetch municipalities:", error)
-      toast.error("فشل في تحميل البلديات")
+      console.error("Failed to fetch branches:", error)
+      toast.error(`فشل في تحميل ${labels.branchLabel}`)
     } finally {
-      setLoadingMunicipalities(false)
+      setLoadingBranches(false)
     }
   }
 
   const onSubmit = async (values: UserFormValues) => {
     setSubmitting(true)
     try {
-      if (!values.municipalityId) {
-        delete (values as any).municipalityId
+      if (!values.branchId) {
+        delete (values as any).branchId
       }
-      const data = await apiClient.post("/admin/users", values)
 
+      const data = await apiClient.post("/admin/users", values)
       if (!data.data) {
         throw new Error(data.error || "حدث خطأ")
       }
@@ -135,11 +137,12 @@ export function UserForm({ open, onOpenChange, onSuccess }: UserFormProps) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[500px] max-h-[90vh] flex flex-col">
         <DialogHeader className="flex-shrink-0">
-<DialogTitle className="text-right">إضافة مستخدم جديد</DialogTitle>
+          <DialogTitle className="text-right">إضافة مستخدم جديد</DialogTitle>
           <DialogDescription className="text-right">
-            قم بملء البيانات التالية لإنشاء مستخدم جديد في النظام
+            قم بملء البيانات التالية لإنشاء مستخدم جديد في النظام.
           </DialogDescription>
         </DialogHeader>
+
         <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col flex-1 min-h-0">
           <div className="flex-1 overflow-y-auto pr-2 space-y-4">
             <div className="space-y-2">
@@ -225,19 +228,19 @@ export function UserForm({ open, onOpenChange, onSuccess }: UserFormProps) {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="municipalityId" className="text-right">البلدية</Label>
+              <Label htmlFor="branchId" className="text-right">{labels.branchLabel}</Label>
               <Select
-                onValueChange={(value) => form.setValue("municipalityId", value)}
-                defaultValue={form.watch("municipalityId")}
-                disabled={submitting || loadingMunicipalities}
+                onValueChange={(value) => form.setValue("branchId", value)}
+                defaultValue={form.watch("branchId")}
+                disabled={submitting || loadingBranches}
               >
-                <SelectTrigger id="municipalityId" className="text-right">
-                  <SelectValue placeholder={loadingMunicipalities ? "جاري التحميل..." : "اختيار بلدية (اختياري)"} />
+                <SelectTrigger id="branchId" className="text-right">
+                  <SelectValue placeholder={loadingBranches ? "جاري التحميل..." : `اختيار ${labels.branchLabel} (اختياري)`} />
                 </SelectTrigger>
                 <SelectContent>
-                  {municipalities.map((municipality) => (
-                    <SelectItem key={municipality._id} value={municipality._id}>
-                      {municipality.name}
+                  {branches.map((branch) => (
+                    <SelectItem key={branch._id} value={branch._id}>
+                      {branch.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -248,7 +251,7 @@ export function UserForm({ open, onOpenChange, onSuccess }: UserFormProps) {
               <div className="space-y-0.5">
                 <Label htmlFor="isActive" className="text-right">المستخدم نشط</Label>
                 <div className="text-sm text-muted-foreground text-right">
-                  المستخدم النشط يمكنه تسجيل الدخول
+                  المستخدم النشط يمكنه تسجيل الدخول.
                 </div>
               </div>
               <Checkbox
@@ -261,17 +264,8 @@ export function UserForm({ open, onOpenChange, onSuccess }: UserFormProps) {
           </div>
 
           <DialogFooter className="flex-shrink-0 flex-row-reverse gap-2 mt-4 pt-4 border-t">
-            <ActionButton
-              action="cancel"
-              onClick={() => onOpenChange(false)}
-              disabled={submitting}
-            />
-            <ActionButton
-              action="save"
-              type="submit"
-              loading={submitting}
-              disabled={submitting}
-            />
+            <ActionButton action="cancel" onClick={() => onOpenChange(false)} disabled={submitting} />
+            <ActionButton action="save" type="submit" loading={submitting} disabled={submitting} />
           </DialogFooter>
         </form>
       </DialogContent>

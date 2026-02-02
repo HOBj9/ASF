@@ -1,4 +1,4 @@
-export function getTimeZoneOffsetMs(date: Date, timeZone: string): number {
+﻿export function getTimeZoneOffsetMs(date: Date, timeZone: string): number {
   const dtf = new Intl.DateTimeFormat('en-US', {
     timeZone,
     hour12: false,

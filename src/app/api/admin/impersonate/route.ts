@@ -39,6 +39,8 @@ export async function POST(request: Request) {
         name: targetUser.name,
         role: targetUser.role,
         avatar: targetUser.avatar || null,
+        organizationId: (targetUser as any).organizationId || null,
+        branchId: (targetUser as any).branchId || null,
         originalAdminId: session.user.id,
         originalAdminName: session.user.name,
         originalAdminEmail: session.user.email,
@@ -82,6 +84,8 @@ export async function DELETE() {
         name: adminUser.name,
         role: adminUser.role,
         avatar: adminUser.avatar || null,
+        organizationId: (adminUser as any).organizationId || null,
+        branchId: (adminUser as any).branchId || null,
       },
     });
   } catch (error: any) {

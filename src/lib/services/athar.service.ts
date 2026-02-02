@@ -1,9 +1,9 @@
-/**
+﻿/**
  * Athar Service
  * Communication layer with Athar GPS platform
  */
 
-import Municipality from '@/models/Municipality';
+import Branch from '@/models/Branch';
 import connectDB from '@/lib/mongodb';
 
 export interface AtharConfig {
@@ -20,16 +20,16 @@ export class AtharService {
     this.config = config;
   }
 
-  static async forMunicipality(municipalityId: string): Promise<AtharService> {
+  static async forBranch(branchId: string): Promise<AtharService> {
     await connectDB();
-    const municipality = await Municipality.findById(municipalityId).select('atharKey').lean();
-    if (!municipality?.atharKey) {
-      throw new Error('Athar API key غير مُعرّف للبلدية');
+    const branch = await Branch.findById(branchId).select('atharKey').lean();
+    if (!branch?.atharKey) {
+      throw new Error('Athar API key غير مُعرّف للفرع');
     }
 
     return new AtharService({
       baseUrl: process.env.ATHAR_BASE_URL || 'https://admin.alather.net/api/api.php',
-      apiKey: municipality.atharKey,
+      apiKey: branch.atharKey,
       api: process.env.ATHAR_API_TYPE || 'user',
       version: process.env.ATHAR_VERSION || '1.0',
     });
@@ -189,3 +189,4 @@ export class AtharService {
     throw new Error('فشل إنشاء حدث المنطقة في Athar');
   }
 }
+

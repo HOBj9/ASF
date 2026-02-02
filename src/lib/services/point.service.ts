@@ -5,10 +5,10 @@
 
 import connectDB from '@/lib/mongodb';
 import Point, { IPoint, PointType } from '@/models/Point';
-import Municipality from '@/models/Municipality';
+import Branch from '@/models/Branch';
 
 export interface CreatePointData {
-  municipalityId: string;
+  branchId: string;
   name: string;
   nameAr?: string;
   nameEn?: string;
@@ -37,13 +37,13 @@ export class PointService {
   async create(data: CreatePointData): Promise<IPoint> {
     await connectDB();
 
-    const municipality = await Municipality.findById(data.municipalityId).lean();
-    if (!municipality) {
-      throw new Error('البلدية غير موجودة');
+    const branch = await Branch.findById(data.branchId).lean();
+    if (!branch) {
+      throw new Error('الفرع غير موجود');
     }
 
     const existing = await Point.findOne({
-      municipalityId: data.municipalityId,
+      branchId: data.branchId,
       name: data.name.trim(),
     }).lean();
     if (existing) {
@@ -51,7 +51,7 @@ export class PointService {
     }
 
     const point = await Point.create({
-      municipalityId: data.municipalityId,
+      branchId: data.branchId,
       name: data.name.trim(),
       nameAr: data.nameAr || null,
       nameEn: data.nameEn || null,
@@ -67,20 +67,20 @@ export class PointService {
     return point;
   }
 
-  async getAll(municipalityId: string): Promise<IPoint[]> {
+  async getAll(branchId: string): Promise<IPoint[]> {
     await connectDB();
-    return Point.find({ municipalityId }).lean().exec();
+    return Point.find({ branchId }).lean().exec();
   }
 
-  async getById(id: string, municipalityId: string): Promise<IPoint | null> {
+  async getById(id: string, branchId: string): Promise<IPoint | null> {
     await connectDB();
-    return Point.findOne({ _id: id, municipalityId }).lean().exec();
+    return Point.findOne({ _id: id, branchId }).lean().exec();
   }
 
-  async update(id: string, municipalityId: string, data: UpdatePointData): Promise<IPoint | null> {
+  async update(id: string, branchId: string, data: UpdatePointData): Promise<IPoint | null> {
     await connectDB();
 
-    const point = await Point.findOne({ _id: id, municipalityId });
+    const point = await Point.findOne({ _id: id, branchId });
     if (!point) {
       throw new Error('الحاوية غير موجودة');
     }
@@ -101,9 +101,89 @@ export class PointService {
     return updated;
   }
 
-  async delete(id: string, municipalityId: string): Promise<boolean> {
+  async delete(id: string, branchId: string): Promise<boolean> {
     await connectDB();
-    const deleted = await Point.findOneAndDelete({ _id: id, municipalityId }).exec();
+    const deleted = await Point.findOneAndDelete({ _id: id, branchId }).exec();
     return !!deleted;
   }
+
+  /**
+   * Compute center (lat, lng) from Athar zone_vertices string (lat1,lng1,lat2,lng2,...)
+   */
+  static zoneVerticesToCenter(zoneVertices: string | undefined): { lat: number; lng: number } | null {
+    if (!zoneVertices || typeof zoneVertices !== 'string') return null;
+    const parts = zoneVertices.split(',').map((s) => parseFloat(s.trim())).filter((n) => !Number.isNaN(n));
+    if (parts.length < 2) return null;
+    const lats: number[] = [];
+    const lngs: number[] = [];
+    for (let i = 0; i < parts.length; i += 2) {
+      lats.push(parts[i]);
+      if (i + 1 < parts.length) lngs.push(parts[i + 1]);
+    }
+    if (lats.length === 0 || lngs.length === 0) return null;
+    const lat = lats.reduce((a, b) => a + b, 0) / lats.length;
+    const lng = lngs.reduce((a, b) => a + b, 0) / lngs.length;
+    return { lat, lng };
+  }
+
+  /**
+   * Sync points from Athar zones: create or update local points for each zone.
+   * Uses branch's atharKey via AtharService; callers pass already-fetched zones.
+   */
+  async syncFromAtharZones(
+    branchId: string,
+    zones: Array<{ zone_id?: string; id?: string; name?: string; zone_vertices?: string }>
+  ): Promise<IPoint[]> {
+    await connectDB();
+
+    const branch = await Branch.findById(branchId).lean();
+    if (!branch) {
+      throw new Error('الفرع غير موجود');
+    }
+
+    const results: IPoint[] = [];
+    for (const z of zones) {
+      const zoneIdRaw = z.zone_id ?? z.id;
+      if (!zoneIdRaw) continue;
+      const zoneId = String(zoneIdRaw).replace(/\?.*$/, '').match(/^(\d+)/)?.[1] ?? String(zoneIdRaw);
+      const name = (z.name ?? '').trim() || `منطقة ${zoneId}`;
+      const center = PointService.zoneVerticesToCenter(z.zone_vertices);
+
+      const existing = await Point.findOne({ branchId, zoneId }).lean().exec();
+      if (existing) {
+        const updateData: any = { name, nameAr: name, nameEn: name };
+        if (center) {
+          updateData.lat = center.lat;
+          updateData.lng = center.lng;
+        }
+        const updated = await Point.findByIdAndUpdate(existing._id, updateData, {
+          new: true,
+          runValidators: true,
+        })
+          .lean()
+          .exec();
+        if (updated) results.push(updated);
+        continue;
+      }
+
+      if (!center) continue;
+
+      const created = await Point.create({
+        branchId,
+        name,
+        nameAr: name,
+        nameEn: name,
+        type: 'container',
+        lat: center.lat,
+        lng: center.lng,
+        radiusMeters: 500,
+        zoneId,
+        isActive: true,
+      });
+      results.push(created);
+    }
+
+    return results;
+  }
 }
+

@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { cn } from "@/lib/utils"
 import { themeConfig } from "@/lib/config/theme.config"
@@ -30,9 +30,9 @@ export function StatusBadge({
   } else if (type === "campaign") {
     config = themeConfig.statusBadges.campaign[status as keyof typeof themeConfig.statusBadges.campaign]
   } else if (type === "user") {
-    const isActive = status === "active" || status === "نشط"
+    const isActive = status === "active" || status === "ظ†ط´ط·"
     config = {
-      label: isActive ? "نشط" : "معطل",
+      label: isActive ? "ظ†ط´ط·" : "ظ…ط¹ط·ظ„",
       className: isActive 
         ? themeConfig.colors.userStatus.active.full
         : themeConfig.colors.userStatus.inactive.full,

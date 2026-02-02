@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Helper functions to use apiClient with useApi hook
  */
 
@@ -20,7 +20,7 @@ export function createApiCall<T = any>(
       })
     } catch (error: any) {
       return new Response(
-        JSON.stringify({ error: error.message || 'حدث خطأ' }),
+        JSON.stringify({ error: error.message || 'ط­ط¯ط« ط®ط·ط£' }),
         {
           status: 400,
           headers: { 'Content-Type': 'application/json' },

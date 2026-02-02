@@ -1,9 +1,9 @@
-import mongoose, { Schema, Document, Model } from 'mongoose';
+﻿import mongoose, { Schema, Document, Model } from 'mongoose';
 
 export type PointType = 'container' | 'station' | 'facility' | 'other';
 
 export interface IPoint extends Document {
-  municipalityId: mongoose.Types.ObjectId;
+  branchId: mongoose.Types.ObjectId;
   name: string;
   nameAr?: string;
   nameEn?: string;
@@ -20,9 +20,9 @@ export interface IPoint extends Document {
 
 const PointSchema: Schema = new Schema(
   {
-    municipalityId: {
+    branchId: {
       type: Schema.Types.ObjectId,
-      ref: 'Municipality',
+      ref: 'Branch',
       required: true,
       index: true,
     },
@@ -83,9 +83,9 @@ const PointSchema: Schema = new Schema(
   }
 );
 
-PointSchema.index({ municipalityId: 1, name: 1 });
-PointSchema.index({ municipalityId: 1, zoneId: 1 });
-PointSchema.index({ municipalityId: 1, lat: 1, lng: 1 });
+PointSchema.index({ branchId: 1, name: 1 });
+PointSchema.index({ branchId: 1, zoneId: 1 });
+PointSchema.index({ branchId: 1, lat: 1, lng: 1 });
 
 let Point: Model<IPoint>;
 

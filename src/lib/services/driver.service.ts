@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Driver Service
  * Business logic for driver management
  */
@@ -6,10 +6,10 @@
 import connectDB from '@/lib/mongodb';
 import Driver, { IDriver } from '@/models/Driver';
 import Vehicle from '@/models/Vehicle';
-import Municipality from '@/models/Municipality';
+import Branch from '@/models/Branch';
 
 export interface CreateDriverData {
-  municipalityId: string;
+  branchId: string;
   name: string;
   phone?: string;
   nationalId?: string;
@@ -29,13 +29,13 @@ export class DriverService {
   async create(data: CreateDriverData): Promise<IDriver> {
     await connectDB();
 
-    const municipality = await Municipality.findById(data.municipalityId).lean();
-    if (!municipality) {
-      throw new Error('البلدية غير موجودة');
+    const branch = await Branch.findById(data.branchId).lean();
+    if (!branch) {
+      throw new Error('الفرع غير موجود');
     }
 
     const driver = await Driver.create({
-      municipalityId: data.municipalityId,
+      branchId: data.branchId,
       name: data.name,
       phone: data.phone || null,
       nationalId: data.nationalId || null,
@@ -52,20 +52,20 @@ export class DriverService {
     return driver;
   }
 
-  async getAll(municipalityId: string): Promise<IDriver[]> {
+  async getAll(branchId: string): Promise<IDriver[]> {
     await connectDB();
-    return Driver.find({ municipalityId }).lean().exec();
+    return Driver.find({ branchId }).lean().exec();
   }
 
-  async getById(id: string, municipalityId: string): Promise<IDriver | null> {
+  async getById(id: string, branchId: string): Promise<IDriver | null> {
     await connectDB();
-    return Driver.findOne({ _id: id, municipalityId }).lean().exec();
+    return Driver.findOne({ _id: id, branchId }).lean().exec();
   }
 
-  async update(id: string, municipalityId: string, data: UpdateDriverData): Promise<IDriver | null> {
+  async update(id: string, branchId: string, data: UpdateDriverData): Promise<IDriver | null> {
     await connectDB();
 
-    const driver = await Driver.findOne({ _id: id, municipalityId });
+    const driver = await Driver.findOne({ _id: id, branchId });
     if (!driver) {
       throw new Error('السائق غير موجود');
     }
@@ -96,9 +96,9 @@ export class DriverService {
     return updated;
   }
 
-  async delete(id: string, municipalityId: string): Promise<boolean> {
+  async delete(id: string, branchId: string): Promise<boolean> {
     await connectDB();
-    const driver = await Driver.findOne({ _id: id, municipalityId }).lean();
+    const driver = await Driver.findOne({ _id: id, branchId }).lean();
     if (!driver) return false;
 
     if (driver.assignedVehicleId) {
@@ -109,3 +109,4 @@ export class DriverService {
     return !!deleted;
   }
 }
+

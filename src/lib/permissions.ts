@@ -1,4 +1,4 @@
-import { IRole } from "@/models/Role"
+﻿import { IRole } from "@/models/Role"
 import { IPermission } from "@/models/Permission"
 
 export function hasPermission(role: IRole | null, resource: string, action: string): boolean {
@@ -27,7 +27,7 @@ export function isAdmin(role: IRole | null): boolean {
   if (!role) return false
   
   // Check by role name (most reliable)
-  if (typeof role === 'object' && 'name' in role && role.name === 'admin') {
+  if (typeof role === 'object' && 'name' in role && role.name === 'super_admin') {
     return true
   }
   

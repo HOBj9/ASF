@@ -1,7 +1,7 @@
-import mongoose, { Schema, Document, Model } from 'mongoose';
+﻿import mongoose, { Schema, Document, Model } from 'mongoose';
 
 export interface IVehicle extends Document {
-  municipalityId: mongoose.Types.ObjectId;
+  branchId: mongoose.Types.ObjectId;
   name: string;
   plateNumber?: string;
   imei: string;
@@ -15,9 +15,9 @@ export interface IVehicle extends Document {
 
 const VehicleSchema: Schema = new Schema(
   {
-    municipalityId: {
+    branchId: {
       type: Schema.Types.ObjectId,
-      ref: 'Municipality',
+      ref: 'Branch',
       required: true,
       index: true,
     },
@@ -61,8 +61,8 @@ const VehicleSchema: Schema = new Schema(
   }
 );
 
-VehicleSchema.index({ municipalityId: 1, imei: 1 }, { unique: true });
-VehicleSchema.index({ municipalityId: 1, name: 1 });
+VehicleSchema.index({ branchId: 1, imei: 1 }, { unique: true });
+VehicleSchema.index({ branchId: 1, name: 1 });
 
 let Vehicle: Model<IVehicle>;
 

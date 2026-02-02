@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requirePermission, handleApiError } from '@/lib/middleware/api-auth.middleware';
 import { RouteService } from '@/lib/services/route.service';
-import { resolveMunicipalityId } from '@/lib/utils/municipality.util';
+import { resolveBranchId } from '@/lib/utils/municipality.util';
 import { permissionActions, permissionResources } from '@/constants/permissions';
 
 const routeService = new RouteService();
@@ -13,9 +13,9 @@ export async function GET(request: Request) {
 
     const { session } = authResult;
     const { searchParams } = new URL(request.url);
-    const municipalityId = resolveMunicipalityId(session, searchParams.get('municipalityId'));
+    const branchId = resolveBranchId(session, searchParams.get('branchId'));
 
-    const routes = await routeService.getAll(municipalityId);
+    const routes = await routeService.getAll(branchId);
     return NextResponse.json({ routes });
   } catch (error: any) {
     return handleApiError(error);
@@ -29,7 +29,7 @@ export async function POST(request: Request) {
 
     const { session } = authResult;
     const body = await request.json();
-    const municipalityId = resolveMunicipalityId(session, body.municipalityId);
+    const branchId = resolveBranchId(session, body.branchId);
 
     const { name, description, isActive } = body;
     if (!name) {
@@ -40,7 +40,7 @@ export async function POST(request: Request) {
     }
 
     const route = await routeService.create({
-      municipalityId,
+      branchId,
       name,
       description,
       isActive: isActive ?? true,

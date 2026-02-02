@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Authentication Service
  * Business logic for authentication
  */
@@ -37,10 +37,10 @@ export class AuthService {
     // Get default user role
     const { RoleService } = await import('./role.service');
     const roleService = new RoleService();
-    const defaultRole = await roleService.getByName('user');
+    const defaultRole = await roleService.getByName('branch_user');
 
     if (!defaultRole) {
-      throw new Error('Default user role not found. Please run seed script first.');
+      throw new Error('لم يتم العثور على دور المستخدم الافتراضي. يرجى تشغيل seed أولاً.');
     }
 
     const user = await this.userService.create({

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Theme Helper Utilities
  * Easy access to theme colors and configurations
  */

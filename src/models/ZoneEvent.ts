@@ -1,9 +1,9 @@
-import mongoose, { Schema, Document, Model } from 'mongoose';
+﻿import mongoose, { Schema, Document, Model } from 'mongoose';
 
 export type ZoneEventType = 'zone_in' | 'zone_out';
 
 export interface IZoneEvent extends Document {
-  municipalityId: mongoose.Types.ObjectId;
+  branchId: mongoose.Types.ObjectId;
   vehicleId?: mongoose.Types.ObjectId;
   driverId?: mongoose.Types.ObjectId;
   pointId?: mongoose.Types.ObjectId;
@@ -22,9 +22,9 @@ export interface IZoneEvent extends Document {
 
 const ZoneEventSchema: Schema = new Schema(
   {
-    municipalityId: {
+    branchId: {
       type: Schema.Types.ObjectId,
-      ref: 'Municipality',
+      ref: 'Branch',
       required: true,
       index: true,
     },
@@ -97,8 +97,8 @@ const ZoneEventSchema: Schema = new Schema(
   }
 );
 
-ZoneEventSchema.index({ municipalityId: 1, atharEventId: 1 });
-ZoneEventSchema.index({ municipalityId: 1, zoneId: 1, imei: 1, eventTimestamp: 1 });
+ZoneEventSchema.index({ branchId: 1, atharEventId: 1 });
+ZoneEventSchema.index({ branchId: 1, zoneId: 1, imei: 1, eventTimestamp: 1 });
 
 let ZoneEvent: Model<IZoneEvent>;
 

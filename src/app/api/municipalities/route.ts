@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
 import { requireAdmin, handleApiError } from '@/lib/middleware/api-auth.middleware';
-import { MunicipalityService } from '@/lib/services/municipality.service';
+import { BranchService } from '@/lib/services/branch.service';
 import { UserService } from '@/lib/services/user.service';
 import { RoleService } from '@/lib/services/role.service';
 
-const municipalityService = new MunicipalityService();
+const branchService = new BranchService();
 const userService = new UserService();
 const roleService = new RoleService();
 
@@ -13,8 +13,8 @@ export async function GET() {
     const authResult = await requireAdmin();
     if (authResult instanceof NextResponse) return authResult;
 
-    const municipalities = await municipalityService.getAll();
-    return NextResponse.json({ municipalities });
+    const branches = await branchService.getAll();
+    return NextResponse.json({ branches });
   } catch (error: any) {
     return handleApiError(error);
   }
@@ -56,7 +56,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const municipality = await municipalityService.create({
+    const branch = await branchService.create({
       name,
       nameAr,
       governorate,
@@ -71,7 +71,7 @@ export async function POST(request: Request) {
 
     try {
       const defaultRole =
-        (await roleService.getByName('municipality_admin')) ||
+        (await roleService.getByName('branch_admin')) ||
         (await roleService.getByName('user'));
       if (!defaultRole) {
         throw new Error('لم يتم العثور على دور المستخدم الافتراضي');
@@ -82,15 +82,15 @@ export async function POST(request: Request) {
         email: adminUserEmail,
         password: adminUserPassword,
         role: defaultRole._id.toString(),
-        municipalityId: municipality._id.toString(),
+        branchId: branch._id.toString(),
         isActive: true,
       });
     } catch (error) {
-      await municipalityService.delete(municipality._id.toString());
+      await branchService.delete(branch._id.toString());
       throw error;
     }
 
-    return NextResponse.json({ municipality }, { status: 201 });
+    return NextResponse.json({ branch }, { status: 201 });
   } catch (error: any) {
     return handleApiError(error);
   }

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requirePermission, handleApiError } from '@/lib/middleware/api-auth.middleware';
 import { RouteService } from '@/lib/services/route.service';
-import { resolveMunicipalityId } from '@/lib/utils/municipality.util';
+import { resolveBranchId } from '@/lib/utils/municipality.util';
 import { permissionActions, permissionResources } from '@/constants/permissions';
 
 const routeService = new RouteService();
@@ -13,9 +13,9 @@ export async function GET(request: Request, { params }: { params: { id: string }
 
     const { session } = authResult;
     const { searchParams } = new URL(request.url);
-    const municipalityId = resolveMunicipalityId(session, searchParams.get('municipalityId'));
+    const branchId = resolveBranchId(session, searchParams.get('branchId'));
 
-    const routePoints = await routeService.getRoutePoints(params.id, municipalityId);
+    const routePoints = await routeService.getRoutePoints(params.id, branchId);
     return NextResponse.json({ routePoints });
   } catch (error: any) {
     return handleApiError(error);
@@ -29,7 +29,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
 
     const { session } = authResult;
     const body = await request.json();
-    const municipalityId = resolveMunicipalityId(session, body.municipalityId);
+    const branchId = resolveBranchId(session, body.branchId);
 
     const points = Array.isArray(body.points) ? body.points : [];
     if (points.length === 0) {
@@ -39,7 +39,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
       );
     }
 
-    const routePoints = await routeService.setRoutePoints(params.id, municipalityId, points);
+    const routePoints = await routeService.setRoutePoints(params.id, branchId, points);
     return NextResponse.json({ routePoints });
   } catch (error: any) {
     return handleApiError(error);

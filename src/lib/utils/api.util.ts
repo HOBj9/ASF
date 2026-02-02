@@ -1,4 +1,4 @@
-/**
+﻿/**
  * API Utilities
  * Helper functions for API responses and error handling
  */

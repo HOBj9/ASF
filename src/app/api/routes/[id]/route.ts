@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requirePermission, handleApiError } from '@/lib/middleware/api-auth.middleware';
 import { RouteService } from '@/lib/services/route.service';
-import { resolveMunicipalityId } from '@/lib/utils/municipality.util';
+import { resolveBranchId } from '@/lib/utils/municipality.util';
 import { permissionActions, permissionResources } from '@/constants/permissions';
 
 const routeService = new RouteService();
@@ -13,9 +13,9 @@ export async function GET(request: Request, { params }: { params: { id: string }
 
     const { session } = authResult;
     const { searchParams } = new URL(request.url);
-    const municipalityId = resolveMunicipalityId(session, searchParams.get('municipalityId'));
+    const branchId = resolveBranchId(session, searchParams.get('branchId'));
 
-    const route = await routeService.getById(params.id, municipalityId);
+    const route = await routeService.getById(params.id, branchId);
     if (!route) {
       return NextResponse.json({ error: 'المسار غير موجود' }, { status: 404 });
     }
@@ -33,9 +33,9 @@ export async function PATCH(request: Request, { params }: { params: { id: string
 
     const { session } = authResult;
     const body = await request.json();
-    const municipalityId = resolveMunicipalityId(session, body.municipalityId);
+    const branchId = resolveBranchId(session, body.branchId);
 
-    const route = await routeService.update(params.id, municipalityId, body);
+    const route = await routeService.update(params.id, branchId, body);
     if (!route) {
       return NextResponse.json({ error: 'المسار غير موجود' }, { status: 404 });
     }
@@ -53,9 +53,9 @@ export async function DELETE(request: Request, { params }: { params: { id: strin
 
     const { session } = authResult;
     const { searchParams } = new URL(request.url);
-    const municipalityId = resolveMunicipalityId(session, searchParams.get('municipalityId'));
+    const branchId = resolveBranchId(session, searchParams.get('branchId'));
 
-    const deleted = await routeService.delete(params.id, municipalityId);
+    const deleted = await routeService.delete(params.id, branchId);
     if (!deleted) {
       return NextResponse.json({ error: 'المسار غير موجود' }, { status: 404 });
     }

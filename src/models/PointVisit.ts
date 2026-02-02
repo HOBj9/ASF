@@ -1,9 +1,9 @@
-import mongoose, { Schema, Document, Model } from 'mongoose';
+﻿import mongoose, { Schema, Document, Model } from 'mongoose';
 
 export type VisitStatus = 'open' | 'closed';
 
 export interface IPointVisit extends Document {
-  municipalityId: mongoose.Types.ObjectId;
+  branchId: mongoose.Types.ObjectId;
   vehicleId: mongoose.Types.ObjectId;
   pointId: mongoose.Types.ObjectId;
   zoneId?: string;
@@ -19,9 +19,9 @@ export interface IPointVisit extends Document {
 
 const PointVisitSchema: Schema = new Schema(
   {
-    municipalityId: {
+    branchId: {
       type: Schema.Types.ObjectId,
-      ref: 'Municipality',
+      ref: 'Branch',
       required: true,
       index: true,
     },
@@ -78,8 +78,8 @@ const PointVisitSchema: Schema = new Schema(
   }
 );
 
-PointVisitSchema.index({ municipalityId: 1, vehicleId: 1, pointId: 1, entryTime: 1 });
-PointVisitSchema.index({ municipalityId: 1, status: 1 });
+PointVisitSchema.index({ branchId: 1, vehicleId: 1, pointId: 1, entryTime: 1 });
+PointVisitSchema.index({ branchId: 1, status: 1 });
 
 let PointVisit: Model<IPointVisit>;
 

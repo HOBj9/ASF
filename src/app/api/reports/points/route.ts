@@ -1,7 +1,8 @@
-import { NextResponse } from 'next/server';
+﻿import { NextResponse } from 'next/server';
 import { requirePermission, handleApiError } from '@/lib/middleware/api-auth.middleware';
-import { resolveMunicipalityId } from '@/lib/utils/municipality.util';
-import Municipality from '@/models/Municipality';
+import { resolveBranchId } from '@/lib/utils/municipality.util';
+import Branch from '@/models/Branch';
+import Organization from '@/models/Organization';
 import PointVisit from '@/models/PointVisit';
 import { getZonedDayRange } from '@/lib/utils/timezone.util';
 import { toCsv } from '@/lib/utils/csv.util';
@@ -34,13 +35,22 @@ export async function GET(request: Request) {
 
     const { session } = authResult;
     const { searchParams } = new URL(request.url);
-    const municipalityId = resolveMunicipalityId(session, searchParams.get('municipalityId'));
+    const branchId = resolveBranchId(session, searchParams.get('branchId'));
     const pointId = searchParams.get('pointId');
     const from = parseDate(searchParams.get('from'));
     const to = parseDate(searchParams.get('to'));
 
-    const municipality = await Municipality.findById(municipalityId).select('timezone').lean();
-    const timezone = municipality?.timezone || 'Asia/Damascus';
+    const branch = await Branch.findById(branchId).select('timezone organizationId').lean();
+    const timezone = branch?.timezone || 'Asia/Damascus';
+
+    const organization = branch?.organizationId
+      ? await Organization.findById(branch.organizationId).select('labels').lean()
+      : null;
+
+    const labels = organization?.labels || {
+      pointLabel: 'نقاط',
+      vehicleLabel: 'مركبات',
+    };
 
     let start = from;
     let end = to;
@@ -55,7 +65,7 @@ export async function GET(request: Request) {
     }
 
     const query: any = {
-      municipalityId,
+      branchId,
       status: 'closed',
       exitTime: { $gte: start, $lte: end },
     };
@@ -67,8 +77,8 @@ export async function GET(request: Request) {
       .lean();
 
     const headers = [
-      'اسم الحاوية',
-      'اسم الشاحنة/المركبة',
+      `اسم ${labels.pointLabel}`,
+      `اسم ${labels.vehicleLabel}`,
       'رقم اللوحة',
       'وقت الدخول',
       'وقت الخروج',
@@ -76,8 +86,8 @@ export async function GET(request: Request) {
     ];
 
     const rows = visits.map((visit: any) => ({
-      'اسم الحاوية': visit.pointId?.nameAr || visit.pointId?.name || '',
-      'اسم الشاحنة/المركبة': visit.vehicleId?.name || '',
+      [`اسم ${labels.pointLabel}`]: visit.pointId?.nameAr || visit.pointId?.name || '',
+      [`اسم ${labels.vehicleLabel}`]: visit.vehicleId?.name || '',
       'رقم اللوحة': visit.vehicleId?.plateNumber || '',
       'وقت الدخول': formatDateTime(visit.entryTime, timezone),
       'وقت الخروج': formatDateTime(visit.exitTime, timezone),
@@ -98,3 +108,4 @@ export async function GET(request: Request) {
     return handleApiError(error);
   }
 }
+

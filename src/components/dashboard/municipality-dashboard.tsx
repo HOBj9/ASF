@@ -20,8 +20,9 @@ import {
   Area,
   CartesianGrid,
 } from "recharts";
+import { useLabels } from "@/hooks/use-labels";
 
-type Municipality = {
+type BranchInfo = {
   _id: string;
   name: string;
   addressText?: string;
@@ -105,7 +106,7 @@ function StatCard({
 }
 
 export function MunicipalityDashboard() {
-  const [municipality, setMunicipality] = useState<Municipality | null>(null);
+  const [branch, setBranch] = useState<BranchInfo | null>(null);
   const [points, setPoints] = useState<Point[]>([]);
   const [routes, setRoutes] = useState<Route[]>([]);
   const [routePoints, setRoutePoints] = useState<Record<string, RoutePoint[]>>({});
@@ -113,6 +114,7 @@ export function MunicipalityDashboard() {
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
   const [events, setEvents] = useState<EventItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const { labels } = useLabels();
 
   const chartPalette = ["#22c55e", "#0ea5e9", "#f97316", "#a855f7", "#facc15", "#14b8a6"];
 
@@ -121,7 +123,7 @@ export function MunicipalityDashboard() {
 
     async function loadInitial() {
       try {
-        const [municipalityRes, pointsRes, routesRes, statsRes, eventsRes, analyticsRes] = await Promise.all([
+        const [branchRes, pointsRes, routesRes, statsRes, eventsRes, analyticsRes] = await Promise.all([
           fetch("/api/municipality"),
           fetch("/api/points"),
           fetch("/api/routes"),
@@ -132,9 +134,9 @@ export function MunicipalityDashboard() {
 
         if (!active) return;
 
-        if (municipalityRes.ok) {
-          const data = await municipalityRes.json();
-          setMunicipality(data.municipality || null);
+        if (branchRes.ok) {
+          const data = await branchRes.json();
+          setBranch(data.branch || data.municipality || null);
         }
         if (pointsRes.ok) {
           const data = await pointsRes.json();
@@ -249,31 +251,29 @@ export function MunicipalityDashboard() {
   return (
     <div className="space-y-6">
       <div className="rounded-2xl border bg-gradient-to-br from-emerald-50 via-sky-50 to-violet-50 p-6 shadow-sm text-right">
-        <div className="text-sm text-muted-foreground">لوحة البلدية</div>
-        <h2 className="text-2xl font-semibold mt-2">
-          {municipality?.name || "لوحة التحكم"}
-        </h2>
-        {municipality?.addressText && (
-          <p className="text-sm text-muted-foreground mt-1">{municipality.addressText}</p>
+        <div className="text-sm text-muted-foreground">لوحة {labels.branchLabel}</div>
+        <h2 className="text-2xl font-semibold mt-2">{branch?.name || "لوحة التحكم"}</h2>
+        {branch?.addressText && (
+          <p className="text-sm text-muted-foreground mt-1">{branch.addressText}</p>
         )}
       </div>
 
       <div className="grid gap-4 md:grid-cols-4">
-        <StatCard label="الشاحنات والمركبات العاملة الآن" value={stats?.activeVehicles ?? "--"} tone="emerald" />
-        <StatCard label="الحاويات النشطة الآن" value={stats?.activePoints ?? "--"} tone="sky" />
-        <StatCard label="الحاويات المُنجزة اليوم" value={stats?.visitedPointsToday ?? "--"} tone="amber" />
+        <StatCard label={`${labels.vehicleLabel} العاملة الآن`} value={stats?.activeVehicles ?? "--"} tone="emerald" />
+        <StatCard label={`${labels.pointLabel} النشطة الآن`} value={stats?.activePoints ?? "--"} tone="sky" />
+        <StatCard label={`${labels.pointLabel} المنجزة اليوم`} value={stats?.visitedPointsToday ?? "--"} tone="amber" />
         <StatCard label="نسبة الإنجاز اليومي" value={`${stats?.dailyCompletionPercent ?? 0}%`} tone="violet" />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
         <div className={cn("space-y-4", loading && "opacity-70")}>
           <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-right">الخريطة ومسارات الجمع</h3>
+            <h3 className="text-lg font-semibold text-right">الخريطة و{labels.routeLabel}</h3>
             <div className="text-sm text-muted-foreground">
-              {points.length} حاوية • {routes.length} مسار
+              {points.length} {labels.pointLabel} • {routes.length} {labels.routeLabel}
             </div>
           </div>
-          <MunicipalityMap municipality={municipality} points={points} routes={routeLines} />
+          <MunicipalityMap municipality={branch} points={points} routes={routeLines} />
         </div>
 
         <div className="rounded-2xl border bg-card p-4 text-right shadow-sm">
@@ -282,26 +282,22 @@ export function MunicipalityDashboard() {
             <span className="text-xs text-muted-foreground">آخر 8 أحداث</span>
           </div>
           <div className="space-y-3">
-            {events.length === 0 && (
-              <div className="text-sm text-muted-foreground">لا توجد أحداث بعد.</div>
-            )}
+            {events.length === 0 && <div className="text-sm text-muted-foreground">لا توجد أحداث بعد.</div>}
             {events.map((event) => (
               <div key={event._id} className="rounded-lg border p-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">
-                    {event.type === "zone_in" ? "دخول" : "خروج"}
-                  </span>
+                  <span className="text-xs text-muted-foreground">{event.type === "zone_in" ? "دخول" : "خروج"}</span>
                   <span className="text-xs text-muted-foreground">{event.eventTimestamp || ""}</span>
                 </div>
                 <div className="font-semibold mt-1">
-                  {event.name || event.pointName || "حاوية غير معروفة"}
+                  {event.name || event.pointName || `${labels.pointLabel} غير معروفة`}
                 </div>
                 <div className="text-xs text-muted-foreground mt-1">
                   {event.vehicleName || event.imei || ""}
                 </div>
                 {event.driverName && (
                   <div className="text-xs text-muted-foreground mt-1">
-                    السائق: {event.driverName}
+                    {labels.driverLabel}: {event.driverName}
                   </div>
                 )}
               </div>
@@ -312,7 +308,7 @@ export function MunicipalityDashboard() {
 
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="rounded-2xl border bg-gradient-to-br from-sky-50 to-emerald-50 p-4 shadow-sm text-right">
-          <h3 className="text-lg font-semibold mb-3">الحاويات المُنجزة يوميًا</h3>
+          <h3 className="text-lg font-semibold mb-3">{labels.pointLabel} المنجزة يوميا</h3>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={analytics?.daily || []}>
@@ -343,7 +339,7 @@ export function MunicipalityDashboard() {
       </div>
 
       <div className="rounded-2xl border bg-gradient-to-br from-emerald-50 to-sky-50 p-4 shadow-sm text-right">
-        <h3 className="text-lg font-semibold mb-3">الحاويات المُنجزة شهريًا</h3>
+        <h3 className="text-lg font-semibold mb-3">{labels.pointLabel} المنجزة شهريا</h3>
         <div className="h-64">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={analytics?.monthly || []}>
@@ -374,7 +370,7 @@ export function MunicipalityDashboard() {
         </div>
 
         <div className="rounded-2xl border bg-gradient-to-br from-emerald-50 to-lime-50 p-4 shadow-sm text-right">
-          <h3 className="text-lg font-semibold mb-3">حالة الشاحنات والمركبات</h3>
+          <h3 className="text-lg font-semibold mb-3">حالة {labels.vehicleLabel}</h3>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={vehicleStatusData}>
@@ -391,7 +387,7 @@ export function MunicipalityDashboard() {
 
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="rounded-2xl border bg-gradient-to-br from-sky-50 to-indigo-50 p-4 shadow-sm text-right">
-          <h3 className="text-lg font-semibold mb-3">توزيع أنواع الحاويات</h3>
+          <h3 className="text-lg font-semibold mb-3">توزيع أنواع {labels.pointLabel}</h3>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
@@ -428,17 +424,11 @@ export function MunicipalityDashboard() {
       <div className="rounded-2xl border bg-card p-4 text-right shadow-sm">
         <h3 className="text-lg font-semibold mb-3">تقارير CSV السريعة</h3>
         <div className="flex flex-wrap gap-3">
-          <a
-            className="rounded-lg border px-4 py-2 text-sm hover:bg-muted"
-            href="/api/reports/vehicles"
-          >
-            تحميل تقرير الشاحنات والمركبات (اليوم)
+          <a className="rounded-lg border px-4 py-2 text-sm hover:bg-muted" href="/api/reports/vehicles">
+            تحميل تقرير {labels.vehicleLabel} (اليوم)
           </a>
-          <a
-            className="rounded-lg border px-4 py-2 text-sm hover:bg-muted"
-            href="/api/reports/points"
-          >
-            تحميل تقرير الحاويات (اليوم)
+          <a className="rounded-lg border px-4 py-2 text-sm hover:bg-muted" href="/api/reports/points">
+            تحميل تقرير {labels.pointLabel} (اليوم)
           </a>
         </div>
       </div>

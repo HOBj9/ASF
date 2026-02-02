@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { useEffect, useState } from "react"
 import { apiClient } from "@/lib/api/client"
@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import toast from "react-hot-toast"
+import { useLabels } from "@/hooks/use-labels"
 
 type Point = { _id: string; name: string; nameAr?: string }
 type RoutePoint = { pointId: string; order: number }
@@ -14,6 +15,7 @@ export function RoutePointsManager({ routeId }: { routeId: string }) {
   const [points, setPoints] = useState<Point[]>([])
   const [routePoints, setRoutePoints] = useState<RoutePoint[]>([])
   const [loading, setLoading] = useState(false)
+  const { labels } = useLabels()
 
   const load = async () => {
     setLoading(true)
@@ -25,7 +27,7 @@ export function RoutePointsManager({ routeId }: { routeId: string }) {
       setPoints(pointsRes.points || pointsRes.data?.points || [])
       setRoutePoints(routePointsRes.routePoints || routePointsRes.data?.routePoints || [])
     } catch (error: any) {
-      toast.error(error.message || "فشل تحميل بيانات المسار")
+      toast.error(error.message || `فشل تحميل بيانات ${labels.routeLabel}`)
     } finally {
       setLoading(false)
     }
@@ -52,12 +54,12 @@ export function RoutePointsManager({ routeId }: { routeId: string }) {
 
   const save = async () => {
     if (routePoints.length === 0) {
-      toast.error("اختر حاويات المسار أولاً")
+      toast.error(`اختر ${labels.pointLabel} أولاً`)
       return
     }
     try {
       await apiClient.post(`/routes/${routeId}/points`, { points: routePoints })
-      toast.success("تم حفظ حاويات المسار")
+      toast.success(`تم حفظ ${labels.pointLabel}`)
     } catch (error: any) {
       toast.error(error.message || "حدث خطأ")
     }
@@ -66,7 +68,7 @@ export function RoutePointsManager({ routeId }: { routeId: string }) {
   return (
     <Card className="text-right">
       <CardHeader>
-        <CardTitle>حاويات المسار</CardTitle>
+        <CardTitle>{labels.pointLabel}</CardTitle>
       </CardHeader>
       <CardContent>
         {loading ? (
@@ -99,7 +101,7 @@ export function RoutePointsManager({ routeId }: { routeId: string }) {
               })}
             </div>
             <div className="mt-4">
-              <Button onClick={save}>حفظ ترتيب المسار</Button>
+              <Button onClick={save}>حفظ ترتيب {labels.pointLabel}</Button>
             </div>
           </>
         )}
@@ -107,3 +109,4 @@ export function RoutePointsManager({ routeId }: { routeId: string }) {
     </Card>
   )
 }
+

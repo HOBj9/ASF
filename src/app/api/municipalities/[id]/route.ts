@@ -1,20 +1,20 @@
 import { NextResponse } from 'next/server';
 import { requireAdmin, handleApiError } from '@/lib/middleware/api-auth.middleware';
-import { MunicipalityService } from '@/lib/services/municipality.service';
+import { BranchService } from '@/lib/services/branch.service';
 
-const municipalityService = new MunicipalityService();
+const branchService = new BranchService();
 
 export async function GET(_: Request, { params }: { params: { id: string } }) {
   try {
     const authResult = await requireAdmin();
     if (authResult instanceof NextResponse) return authResult;
 
-    const municipality = await municipalityService.getById(params.id);
-    if (!municipality) {
+    const branch = await branchService.getById(params.id);
+    if (!branch) {
       return NextResponse.json({ error: 'البلدية غير موجودة' }, { status: 404 });
     }
 
-    return NextResponse.json({ municipality });
+    return NextResponse.json({ branch });
   } catch (error: any) {
     return handleApiError(error);
   }
@@ -26,12 +26,12 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     if (authResult instanceof NextResponse) return authResult;
 
     const body = await request.json();
-    const municipality = await municipalityService.update(params.id, body);
-    if (!municipality) {
+    const branch = await branchService.update(params.id, body);
+    if (!branch) {
       return NextResponse.json({ error: 'البلدية غير موجودة' }, { status: 404 });
     }
 
-    return NextResponse.json({ municipality });
+    return NextResponse.json({ branch });
   } catch (error: any) {
     return handleApiError(error);
   }
@@ -42,7 +42,7 @@ export async function DELETE(_: Request, { params }: { params: { id: string } })
     const authResult = await requireAdmin();
     if (authResult instanceof NextResponse) return authResult;
 
-    const deleted = await municipalityService.delete(params.id);
+    const deleted = await branchService.delete(params.id);
     if (!deleted) {
       return NextResponse.json({ error: 'البلدية غير موجودة' }, { status: 404 });
     }

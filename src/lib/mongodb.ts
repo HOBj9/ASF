@@ -1,4 +1,4 @@
-import mongoose from 'mongoose';
+﻿import mongoose from 'mongoose';
 import { dbConfig } from '@/lib/config/db.config';
 // Import all models to ensure they are registered before any queries
 import '@/models';

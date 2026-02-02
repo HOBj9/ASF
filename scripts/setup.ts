@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Setup Script
  * Interactive setup wizard for initializing the template
  */
@@ -19,45 +19,45 @@ function question(query: string): Promise<string> {
 }
 
 async function setup() {
-  console.log('🚀 Welcome to the Next.js Admin Dashboard Template Setup!\n');
+  console.log('ًںڑ€ Welcome to the Next.js Admin Dashboard Template Setup!\n');
 
   // App Information
   const appName = await question('App Name (default: Admin Dashboard): ') || 'Admin Dashboard';
-  const appNameAr = await question('App Name (Arabic) (default: لوحة التحكم): ') || 'لوحة التحكم';
+  const appNameAr = await question('App Name (Arabic) (default: ظ„ظˆط­ط© ط§ظ„طھط­ظƒظ…): ') || 'ظ„ظˆط­ط© ط§ظ„طھط­ظƒظ…';
   const appDescription = await question('App Description: ') || '';
 
   // Database Configuration
-  console.log('\n📦 Database Configuration:');
+  console.log('\nًں“¦ Database Configuration:');
   const dbUri = await question('MongoDB URI (default: mongodb://localhost:27017/admin-dashboard): ') || 
     'mongodb://localhost:27017/admin-dashboard';
 
   // Authentication Configuration
-  console.log('\n🔐 Authentication Configuration:');
+  console.log('\nًں”گ Authentication Configuration:');
   const nextAuthSecret = await question('NextAuth Secret (leave empty to generate): ') || 
     generateSecret();
   const nextAuthUrl = await question('NextAuth URL (default: http://localhost:3000): ') || 
     'http://localhost:3000';
 
   // Default Admin
-  console.log('\n👤 Default Admin Account:');
+  console.log('\nًں‘¤ Default Admin Account:');
   const adminEmail = await question('Admin Email (default: admin@example.com): ') || 
     'admin@example.com';
   const adminPassword = await question('Admin Password (default: admin123): ') || 
     'admin123';
-  const adminName = await question('Admin Name (default: مدير النظام): ') || 
-    'مدير النظام';
+  const adminName = await question('Admin Name (default: ظ…ط¯ظٹط± ط§ظ„ظ†ط¸ط§ظ…): ') || 
+    'ظ…ط¯ظٹط± ط§ظ„ظ†ط¸ط§ظ…';
 
   // Default User
-  console.log('\n👥 Default User Account:');
+  console.log('\nًں‘¥ Default User Account:');
   const userEmail = await question('User Email (default: user@example.com): ') || 
     'user@example.com';
   const userPassword = await question('User Password (default: user123): ') || 
     'user123';
-  const userName = await question('User Name (default: مستخدم عادي): ') || 
-    'مستخدم عادي';
+  const userName = await question('User Name (default: ظ…ط³طھط®ط¯ظ… ط¹ط§ط¯ظٹ): ') || 
+    'ظ…ط³طھط®ط¯ظ… ط¹ط§ط¯ظٹ';
 
   // Features
-  console.log('\n⚙️  Features:');
+  console.log('\nâڑ™ï¸ڈ  Features:');
   const enableRegistration = await question('Enable Registration? (y/n, default: y): ') || 'y';
   const enableDarkMode = await question('Enable Dark Mode? (y/n, default: y): ') || 'y';
   const enableRTL = await question('Enable RTL? (y/n, default: y): ') || 'y';
@@ -95,13 +95,13 @@ ENABLE_RTL=${enableRTL === 'y' ? 'true' : 'false'}
   const envPath = path.join(process.cwd(), '.env.local');
   fs.writeFileSync(envPath, envContent);
 
-  console.log('\n✅ Configuration saved to .env.local');
-  console.log('\n📝 Next Steps:');
+  console.log('\nâœ… Configuration saved to .env.local');
+  console.log('\nًں“‌ Next Steps:');
   console.log('1. Review .env.local and adjust if needed');
   console.log('2. Run: npm install');
   console.log('3. Run: npm run seed');
   console.log('4. Run: npm run dev');
-  console.log('\n🎉 Setup complete!');
+  console.log('\nًںژ‰ Setup complete!');
 
   rl.close();
 }

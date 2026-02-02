@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 export function WaveBackground({ className = "", opacity = "opacity-15 dark:opacity-8" }: { className?: string; opacity?: string }) {
   return (

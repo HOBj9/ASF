@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Session Error Detector Utility
  * Detects if an error is related to session issues (disconnected, terminated, not found, etc.)
  */

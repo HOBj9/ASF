@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Validation Utilities
  * Helper functions for input validation and sanitization
  */

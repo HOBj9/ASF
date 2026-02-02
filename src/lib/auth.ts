@@ -1,4 +1,4 @@
-import { NextAuthOptions } from "next-auth"
+﻿import { NextAuthOptions } from "next-auth"
 import CredentialsProvider from "next-auth/providers/credentials"
 import { authConfig } from "@/lib/config/auth.config"
 import { messages } from "@/constants/messages"
@@ -32,7 +32,8 @@ export const authOptions: NextAuthOptions = {
             name: user.name,
             role: user.role as any,
             avatar: user.avatar || null,
-            municipalityId: (user as any).municipalityId || null,
+            organizationId: (user as any).organizationId || null,
+            branchId: (user as any).branchId || null,
           }
         } catch (error: any) {
           throw new Error(error.message || messages.auth.login.error)
@@ -49,7 +50,8 @@ export const authOptions: NextAuthOptions = {
         token.avatar = (user as any).avatar || null
         token.name = (user as any).name
         token.email = (user as any).email
-        token.municipalityId = (user as any).municipalityId || null
+        token.branchId = (user as any).branchId || null
+        token.organizationId = (user as any).organizationId || null
         // Preserve original admin info when impersonating
         if ((user as any).originalAdminId) {
           token.originalAdminId = (user as any).originalAdminId
@@ -71,7 +73,8 @@ export const authOptions: NextAuthOptions = {
           if (sessionData.avatar !== undefined) token.avatar = sessionData.avatar
           if (sessionData.name) token.name = sessionData.name
           if (sessionData.email) token.email = sessionData.email
-          if (sessionData.municipalityId !== undefined) token.municipalityId = sessionData.municipalityId
+          if (sessionData.branchId !== undefined) token.branchId = sessionData.branchId
+          if (sessionData.organizationId !== undefined) token.organizationId = sessionData.organizationId
           
           // Handle impersonation info
           if (sessionData.originalAdminId) {
@@ -91,7 +94,7 @@ export const authOptions: NextAuthOptions = {
             const connectDB = (await import("@/lib/mongodb")).default
             await connectDB()
             const dbUser = await User.findById(token.id)
-              .select("avatar name email role municipalityId")
+              .select("avatar name email role branchId organizationId")
               .populate({ path: "role", populate: { path: "permissions" } })
               .lean()
             if (dbUser) {
@@ -99,7 +102,8 @@ export const authOptions: NextAuthOptions = {
               token.name = dbUser.name
               token.email = dbUser.email
               token.role = dbUser.role
-              token.municipalityId = (dbUser as any).municipalityId || null
+              token.branchId = (dbUser as any).branchId || null
+              token.organizationId = (dbUser as any).organizationId || null
             }
           } catch (error) {
             // Ignore errors - don't log in production
@@ -117,7 +121,8 @@ export const authOptions: NextAuthOptions = {
         session.user.avatar = (token.avatar as string) || null
         session.user.name = (token.name as string) || session.user.name
         session.user.email = (token.email as string) || session.user.email
-        session.user.municipalityId = (token.municipalityId as string) || null
+        session.user.branchId = (token.branchId as string) || null
+        session.user.organizationId = (token.organizationId as string) || null
         // Include impersonation info if present
         if (token.originalAdminId) {
           session.user.originalAdminId = token.originalAdminId as string

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Centralized TypeScript Types
  * Single source of truth for all type definitions
  */
@@ -108,7 +108,8 @@ export interface User {
     name: string
     nameAr: string
   }
-  municipalityId?: string
+  organizationId?: string
+  branchId?: string
   isActive: boolean
   avatar?: string
   createdAt: string
@@ -174,12 +175,32 @@ export interface UserApiKey {
   updatedAt: string
 }
 
-// Municipality Types
-export interface Municipality {
+// Organization Types
+export interface Organization {
   _id: string
   name: string
+  slug: string
+  type?: string
+  labels: {
+    branchLabel: string
+    pointLabel: string
+    vehicleLabel: string
+    driverLabel: string
+    routeLabel: string
+  }
+  isActive: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+// Branch Types
+export interface Branch {
+  _id: string
+  organizationId: string
+  name: string
   nameAr?: string
-  governorate: string
+  branchTypeLabel?: string
+  governorate?: string
   areaName?: string
   addressText?: string
   centerLat: number
@@ -194,7 +215,7 @@ export interface Municipality {
 // Driver Types
 export interface Driver {
   _id: string
-  municipalityId: string
+  branchId: string
   name: string
   phone?: string
   nationalId?: string
@@ -207,7 +228,7 @@ export interface Driver {
 // Vehicle Types
 export interface Vehicle {
   _id: string
-  municipalityId: string
+  branchId: string
   name: string
   plateNumber?: string
   imei: string
@@ -224,7 +245,7 @@ export type PointType = 'container' | 'station' | 'facility' | 'other'
 
 export interface Point {
   _id: string
-  municipalityId: string
+  branchId: string
   name: string
   nameAr?: string
   nameEn?: string
@@ -242,7 +263,7 @@ export interface Point {
 // Route Types
 export interface Route {
   _id: string
-  municipalityId: string
+  branchId: string
   name: string
   description?: string
   path?: {
@@ -269,7 +290,7 @@ export type ZoneEventType = 'zone_in' | 'zone_out'
 
 export interface ZoneEvent {
   _id: string
-  municipalityId: string
+  branchId: string
   vehicleId?: string
   driverId?: string
   pointId?: string
@@ -290,7 +311,7 @@ export type VisitStatus = 'open' | 'closed'
 
 export interface PointVisit {
   _id: string
-  municipalityId: string
+  branchId: string
   vehicleId: string
   pointId: string
   zoneId?: string

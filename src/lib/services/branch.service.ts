@@ -1,15 +1,17 @@
 /**
- * Municipality Service
- * Business logic for municipality management
+ * Branch Service
+ * Business logic for branch management
  */
 
 import connectDB from '@/lib/mongodb';
-import Municipality, { IMunicipality } from '@/models/Municipality';
+import Branch, { IBranch } from '@/models/Branch';
 
-export interface CreateMunicipalityData {
+export interface CreateBranchData {
+  organizationId: string;
   name: string;
   nameAr?: string;
-  governorate: string;
+  branchTypeLabel?: string;
+  governorate?: string;
   areaName?: string;
   addressText?: string;
   centerLat: number;
@@ -19,9 +21,10 @@ export interface CreateMunicipalityData {
   isActive?: boolean;
 }
 
-export interface UpdateMunicipalityData {
+export interface UpdateBranchData {
   name?: string;
   nameAr?: string;
+  branchTypeLabel?: string;
   governorate?: string;
   areaName?: string;
   addressText?: string;
@@ -32,13 +35,15 @@ export interface UpdateMunicipalityData {
   isActive?: boolean;
 }
 
-export class MunicipalityService {
-  async create(data: CreateMunicipalityData): Promise<IMunicipality> {
+export class BranchService {
+  async create(data: CreateBranchData): Promise<IBranch> {
     await connectDB();
-    const municipality = await Municipality.create({
+    const branch = await Branch.create({
+      organizationId: data.organizationId,
       name: data.name,
       nameAr: data.nameAr || null,
-      governorate: data.governorate,
+      branchTypeLabel: data.branchTypeLabel || null,
+      governorate: data.governorate || null,
       areaName: data.areaName || null,
       addressText: data.addressText || null,
       centerLat: data.centerLat,
@@ -48,28 +53,30 @@ export class MunicipalityService {
       isActive: data.isActive ?? true,
     });
 
-    return municipality;
+    return branch;
   }
 
-  async getAll(): Promise<IMunicipality[]> {
+  async getAll(organizationId?: string): Promise<IBranch[]> {
     await connectDB();
-    return Municipality.find({}).lean().exec();
+    const query = organizationId ? { organizationId } : {};
+    return Branch.find(query).lean().exec();
   }
 
-  async getById(id: string): Promise<IMunicipality | null> {
+  async getById(id: string): Promise<IBranch | null> {
     await connectDB();
-    return Municipality.findById(id).lean().exec();
+    return Branch.findById(id).lean().exec();
   }
 
-  async update(id: string, data: UpdateMunicipalityData): Promise<IMunicipality | null> {
+  async update(id: string, data: UpdateBranchData): Promise<IBranch | null> {
     await connectDB();
     const updateData: any = { ...data };
     if (data.nameAr !== undefined && data.nameAr === '') updateData.nameAr = null;
+    if (data.branchTypeLabel !== undefined && data.branchTypeLabel === '') updateData.branchTypeLabel = null;
     if (data.areaName !== undefined && data.areaName === '') updateData.areaName = null;
     if (data.addressText !== undefined && data.addressText === '') updateData.addressText = null;
     if (data.atharKey !== undefined && data.atharKey === '') updateData.atharKey = null;
 
-    return Municipality.findByIdAndUpdate(id, updateData, {
+    return Branch.findByIdAndUpdate(id, updateData, {
       new: true,
       runValidators: true,
     })
@@ -79,7 +86,7 @@ export class MunicipalityService {
 
   async delete(id: string): Promise<boolean> {
     await connectDB();
-    const doc = await Municipality.findByIdAndDelete(id);
+    const doc = await Branch.findByIdAndDelete(id);
     return !!doc;
   }
 }

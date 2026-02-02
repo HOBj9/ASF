@@ -1,8 +1,8 @@
-import { NextResponse } from 'next/server';
+﻿import { NextResponse } from 'next/server';
 import { requirePermission, handleApiError } from '@/lib/middleware/api-auth.middleware';
-import { resolveMunicipalityId } from '@/lib/utils/municipality.util';
+import { resolveBranchId } from '@/lib/utils/municipality.util';
 import ZoneEvent from '@/models/ZoneEvent';
-import Municipality from '@/models/Municipality';
+import Branch from '@/models/Branch';
 import { permissionActions, permissionResources } from '@/constants/permissions';
 
 function formatDateTime(date: Date | null | undefined, timeZone: string): string {
@@ -26,13 +26,16 @@ export async function GET(request: Request) {
 
     const { session } = authResult;
     const { searchParams } = new URL(request.url);
-    const municipalityId = resolveMunicipalityId(session, searchParams.get('municipalityId'));
+    const branchId = resolveBranchId(session, searchParams.get('branchId'));
     const limit = Math.min(Number(searchParams.get('limit') || 10), 50);
 
-    const municipality = await Municipality.findById(municipalityId).select('timezone').lean();
-    const timezone = municipality?.timezone || 'Asia/Damascus';
+    const branch = await Branch.findById(branchId).select('timezone').lean();
+    if (!branch) {
+      return NextResponse.json({ error: 'الفرع غير موجود' }, { status: 404 });
+    }
+    const timezone = branch.timezone || 'Asia/Damascus';
 
-    const events = await ZoneEvent.find({ municipalityId })
+    const events = await ZoneEvent.find({ branchId })
       .sort({ eventTimestamp: -1, createdAt: -1 })
       .limit(limit)
       .populate('pointId', 'name nameAr')
@@ -56,3 +59,5 @@ export async function GET(request: Request) {
     return handleApiError(error);
   }
 }
+
+

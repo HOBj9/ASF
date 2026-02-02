@@ -5,14 +5,14 @@
 
 export const templateConfig = {
   // Template metadata
-  name: 'Next.js Admin Dashboard Template',
+  name: 'قالب لوحة تحكم Next.js',
   version: '1.0.0',
-  description: 'A reusable Next.js admin dashboard template with authentication, roles, and permissions',
+  description: 'قالب لوحة تحكم مبني على Next.js مع نظام المصادقة والأدوار والصلاحيات',
   
   // Customization points
   customization: {
     // Branding
-    appName: 'Admin Dashboard',
+    appName: 'لوحة التحكم',
     appNameAr: 'لوحة التحكم',
     
     // Colors (can be customized in tailwind.config.ts)

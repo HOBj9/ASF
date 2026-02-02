@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requirePermission, handleApiError } from '@/lib/middleware/api-auth.middleware';
 import { PointService } from '@/lib/services/point.service';
-import { resolveMunicipalityId } from '@/lib/utils/municipality.util';
+import { resolveBranchId } from '@/lib/utils/municipality.util';
 import { AtharService } from '@/lib/services/athar.service';
 import Vehicle from '@/models/Vehicle';
 import { permissionActions, permissionResources } from '@/constants/permissions';
@@ -15,9 +15,9 @@ export async function GET(request: Request) {
 
     const { session } = authResult;
     const { searchParams } = new URL(request.url);
-    const municipalityId = resolveMunicipalityId(session, searchParams.get('municipalityId'));
+    const branchId = resolveBranchId(session, searchParams.get('branchId'));
 
-    const points = await pointService.getAll(municipalityId);
+    const points = await pointService.getAll(branchId);
     return NextResponse.json({ points });
   } catch (error: any) {
     return handleApiError(error);
@@ -31,7 +31,7 @@ export async function POST(request: Request) {
 
     const { session } = authResult;
     const body = await request.json();
-    const municipalityId = resolveMunicipalityId(session, body.municipalityId);
+    const branchId = resolveBranchId(session, body.branchId);
 
     const { name, nameAr, nameEn, type, lat, lng, radiusMeters, addressText, isActive } = body;
     if (!name || lat === undefined || lng === undefined) {
@@ -44,7 +44,7 @@ export async function POST(request: Request) {
     const pointName = nameAr || nameEn || name;
     const radius = radiusMeters !== undefined ? Number(radiusMeters) : 500;
 
-    const atharService = await AtharService.forMunicipality(municipalityId);
+    const atharService = await AtharService.forBranch(branchId);
     const zoneId = await atharService.ensureZone(
       pointName,
       { lat: Number(lat), lng: Number(lng) },
@@ -52,7 +52,7 @@ export async function POST(request: Request) {
     );
 
     const point = await pointService.create({
-      municipalityId,
+      branchId,
       name,
       nameAr,
       nameEn,
@@ -66,7 +66,7 @@ export async function POST(request: Request) {
     });
 
     const vehicles = await Vehicle.find({
-      municipalityId,
+      branchId,
       imei: { $ne: null },
       isActive: true,
     })

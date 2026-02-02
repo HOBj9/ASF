@@ -55,7 +55,7 @@ export function UsersTable({ users: initialUsers }: { users: User[] }) {
   const handleToggleActiveClick = useCallback((user: User) => {
     // Prevent admin from disabling themselves
     if (currentUserId && String(user._id) === String(currentUserId)) {
-      const isUserAdmin = user.role?.name === 'admin' || user.role?.nameAr === 'مدير'
+      const isUserAdmin = user.role?.name === 'super_admin' || user.role?.nameAr === 'مدير'
       if (isUserAdmin) {
         toast.error('لا يمكنك تعطيل حسابك الخاص كمدير')
         return
@@ -232,7 +232,7 @@ export function UsersTable({ users: initialUsers }: { users: User[] }) {
                       tooltipSide="top"
                     />
                     {/* Hide disable button for admin's own account */}
-                    {!(currentUserId && String(user._id) === String(currentUserId) && (user.role?.name === 'admin' || user.role?.nameAr === 'مدير') && user.isActive) && (
+                    {!(currentUserId && String(user._id) === String(currentUserId) && (user.role?.name === 'super_admin' || user.role?.nameAr === 'مدير') && user.isActive) && (
                       <IconButton
                         icon={user.isActive ? UserX : UserCheck}
                         label={user.isActive ? "تعطيل المستخدم - لن يتمكن المستخدم من تسجيل الدخول" : "تفعيل المستخدم - سيتمكن المستخدم من تسجيل الدخول"}

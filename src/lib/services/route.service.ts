@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Route Service
  * Business logic for route management
  */
@@ -7,10 +7,10 @@ import connectDB from '@/lib/mongodb';
 import Route, { IRoute } from '@/models/Route';
 import RoutePoint, { IRoutePoint } from '@/models/RoutePoint';
 import Point from '@/models/Point';
-import Municipality from '@/models/Municipality';
+import Branch from '@/models/Branch';
 
 export interface CreateRouteData {
-  municipalityId: string;
+  branchId: string;
   name: string;
   description?: string;
   isActive?: boolean;
@@ -31,13 +31,13 @@ export class RouteService {
   async create(data: CreateRouteData): Promise<IRoute> {
     await connectDB();
 
-    const municipality = await Municipality.findById(data.municipalityId).lean();
-    if (!municipality) {
-      throw new Error('البلدية غير موجودة');
+    const branch = await Branch.findById(data.branchId).lean();
+    if (!branch) {
+      throw new Error('الفرع غير موجود');
     }
 
     const route = await Route.create({
-      municipalityId: data.municipalityId,
+      branchId: data.branchId,
       name: data.name.trim(),
       description: data.description || null,
       isActive: data.isActive ?? true,
@@ -46,19 +46,19 @@ export class RouteService {
     return route;
   }
 
-  async getAll(municipalityId: string): Promise<IRoute[]> {
+  async getAll(branchId: string): Promise<IRoute[]> {
     await connectDB();
-    return Route.find({ municipalityId }).lean().exec();
+    return Route.find({ branchId }).lean().exec();
   }
 
-  async getById(id: string, municipalityId: string): Promise<IRoute | null> {
+  async getById(id: string, branchId: string): Promise<IRoute | null> {
     await connectDB();
-    return Route.findOne({ _id: id, municipalityId }).lean().exec();
+    return Route.findOne({ _id: id, branchId }).lean().exec();
   }
 
-  async update(id: string, municipalityId: string, data: UpdateRouteData): Promise<IRoute | null> {
+  async update(id: string, branchId: string, data: UpdateRouteData): Promise<IRoute | null> {
     await connectDB();
-    const route = await Route.findOne({ _id: id, municipalityId });
+    const route = await Route.findOne({ _id: id, branchId });
     if (!route) {
       throw new Error('المسار غير موجود');
     }
@@ -77,16 +77,16 @@ export class RouteService {
     return updated;
   }
 
-  async delete(id: string, municipalityId: string): Promise<boolean> {
+  async delete(id: string, branchId: string): Promise<boolean> {
     await connectDB();
     await RoutePoint.deleteMany({ routeId: id }).exec();
-    const deleted = await Route.findOneAndDelete({ _id: id, municipalityId }).exec();
+    const deleted = await Route.findOneAndDelete({ _id: id, branchId }).exec();
     return !!deleted;
   }
 
-  async getRoutePoints(routeId: string, municipalityId: string): Promise<IRoutePoint[]> {
+  async getRoutePoints(routeId: string, branchId: string): Promise<IRoutePoint[]> {
     await connectDB();
-    const route = await Route.findOne({ _id: routeId, municipalityId }).lean();
+    const route = await Route.findOne({ _id: routeId, branchId }).lean();
     if (!route) {
       throw new Error('المسار غير موجود');
     }
@@ -96,11 +96,11 @@ export class RouteService {
 
   async setRoutePoints(
     routeId: string,
-    municipalityId: string,
+    branchId: string,
     points: RoutePointInput[]
   ): Promise<IRoutePoint[]> {
     await connectDB();
-    const route = await Route.findOne({ _id: routeId, municipalityId }).lean();
+    const route = await Route.findOne({ _id: routeId, branchId }).lean();
     if (!route) {
       throw new Error('المسار غير موجود');
     }
@@ -108,10 +108,10 @@ export class RouteService {
     const pointIds = points.map((p) => p.pointId);
     const count = await Point.countDocuments({
       _id: { $in: pointIds },
-      municipalityId,
+      branchId,
     });
     if (count !== pointIds.length) {
-      throw new Error('يوجد حاويات غير تابعة للبلدية');
+      throw new Error('يوجد حاويات غير تابعة للفرع');
     }
 
     await RoutePoint.deleteMany({ routeId }).exec();
@@ -160,3 +160,4 @@ export class RouteService {
     return created.map((doc) => doc.toObject());
   }
 }
+

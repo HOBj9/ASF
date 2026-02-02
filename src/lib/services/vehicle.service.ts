@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Vehicle Service
  * Business logic for vehicle management
  */
@@ -6,11 +6,11 @@
 import connectDB from '@/lib/mongodb';
 import Vehicle, { IVehicle } from '@/models/Vehicle';
 import Driver from '@/models/Driver';
-import Municipality from '@/models/Municipality';
+import Branch from '@/models/Branch';
 import Route from '@/models/Route';
 
 export interface CreateVehicleData {
-  municipalityId: string;
+  branchId: string;
   name: string;
   plateNumber?: string;
   imei: string;
@@ -34,20 +34,20 @@ export class VehicleService {
   async create(data: CreateVehicleData): Promise<IVehicle> {
     await connectDB();
 
-    const municipality = await Municipality.findById(data.municipalityId).lean();
-    if (!municipality) {
-      throw new Error('البلدية غير موجودة');
+    const branch = await Branch.findById(data.branchId).lean();
+    if (!branch) {
+      throw new Error('الفرع غير موجود');
     }
 
     if (data.routeId) {
-      const route = await Route.findOne({ _id: data.routeId, municipalityId: data.municipalityId }).lean();
+      const route = await Route.findOne({ _id: data.routeId, branchId: data.branchId }).lean();
       if (!route) {
-        throw new Error('المسار غير موجود أو غير تابع للبلدية');
+        throw new Error('المسار غير موجود أو غير تابع للفرع');
       }
     }
 
     const vehicle = await Vehicle.create({
-      municipalityId: data.municipalityId,
+      branchId: data.branchId,
       name: data.name,
       plateNumber: data.plateNumber || null,
       imei: data.imei,
@@ -64,20 +64,20 @@ export class VehicleService {
     return vehicle;
   }
 
-  async getAll(municipalityId: string): Promise<IVehicle[]> {
+  async getAll(branchId: string): Promise<IVehicle[]> {
     await connectDB();
-    return Vehicle.find({ municipalityId }).lean().exec();
+    return Vehicle.find({ branchId }).lean().exec();
   }
 
-  async getById(id: string, municipalityId: string): Promise<IVehicle | null> {
+  async getById(id: string, branchId: string): Promise<IVehicle | null> {
     await connectDB();
-    return Vehicle.findOne({ _id: id, municipalityId }).lean().exec();
+    return Vehicle.findOne({ _id: id, branchId }).lean().exec();
   }
 
-  async update(id: string, municipalityId: string, data: UpdateVehicleData): Promise<IVehicle | null> {
+  async update(id: string, branchId: string, data: UpdateVehicleData): Promise<IVehicle | null> {
     await connectDB();
 
-    const vehicle = await Vehicle.findOne({ _id: id, municipalityId });
+    const vehicle = await Vehicle.findOne({ _id: id, branchId });
     if (!vehicle) {
       throw new Error('المركبة غير موجودة');
     }
@@ -100,9 +100,9 @@ export class VehicleService {
     if (data.routeId !== undefined && data.routeId === '') updateData.routeId = null;
 
     if (data.routeId) {
-      const route = await Route.findOne({ _id: data.routeId, municipalityId }).lean();
+      const route = await Route.findOne({ _id: data.routeId, branchId }).lean();
       if (!route) {
-        throw new Error('المسار غير موجود أو غير تابع للبلدية');
+        throw new Error('المسار غير موجود أو غير تابع للفرع');
       }
     }
 
@@ -116,9 +116,9 @@ export class VehicleService {
     return updated;
   }
 
-  async delete(id: string, municipalityId: string): Promise<boolean> {
+  async delete(id: string, branchId: string): Promise<boolean> {
     await connectDB();
-    const vehicle = await Vehicle.findOne({ _id: id, municipalityId }).lean();
+    const vehicle = await Vehicle.findOne({ _id: id, branchId }).lean();
     if (!vehicle) return false;
 
     if (vehicle.driverId) {
@@ -129,3 +129,4 @@ export class VehicleService {
     return !!deleted;
   }
 }
+

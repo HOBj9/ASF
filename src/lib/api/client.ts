@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Unified API Client
  * Centralized API client with interceptors and error handling
  */
@@ -39,7 +39,7 @@ class ApiClient {
   private async handleResponse<T>(response: Response): Promise<ApiResponse<T>> {
     // Check if response is valid
     if (!response || typeof response.json !== 'function') {
-      const error = new Error('Invalid response object')
+      const error = new Error('استجابة غير صالحة')
       ;(error as any).status = 500
       throw error
     }
@@ -55,7 +55,7 @@ class ApiClient {
         
         if (!response.ok) {
           // Create error object with more details
-          const error = new Error(data.error || data.message || `HTTP error! status: ${response.status}`)
+          const error = new Error(data.error || data.message || `خطأ في الاتصال، الحالة: ${response.status}`)
           ;(error as any).status = response.status
           ;(error as any).data = data
           throw error
@@ -68,11 +68,11 @@ class ApiClient {
           try {
             const clonedResponse = response.clone()
             const text = await clonedResponse.text()
-            const errorObj = new Error(text || `HTTP error! status: ${response.status}`)
+            const errorObj = new Error(text || `خطأ في الاتصال، الحالة: ${response.status}`)
             ;(errorObj as any).status = response.status
             throw errorObj
           } catch (textError) {
-            const errorObj = new Error(`Failed to parse response: ${error.message}`)
+            const errorObj = new Error(`فشل في تحليل الاستجابة: ${error.message}`)
             ;(errorObj as any).status = response.status
             throw errorObj
           }
@@ -85,7 +85,7 @@ class ApiClient {
     } else {
       const text = await response.text()
       if (!response.ok) {
-        const error = new Error(text || `HTTP error! status: ${response.status}`)
+        const error = new Error(text || `خطأ في الاتصال، الحالة: ${response.status}`)
         ;(error as any).status = response.status
         throw error
       }
@@ -112,7 +112,7 @@ class ApiClient {
       if (error instanceof Error) {
         throw error
       }
-      throw new Error('Network error occurred')
+      throw new Error('حدث خطأ في الشبكة')
     }
   }
 
@@ -138,7 +138,7 @@ class ApiClient {
       if (error instanceof Error) {
         throw error
       }
-      throw new Error('Network error occurred')
+      throw new Error('حدث خطأ في الشبكة')
     }
   }
 
@@ -163,7 +163,7 @@ class ApiClient {
       if (error instanceof Error) {
         throw error
       }
-      throw new Error('Network error occurred')
+      throw new Error('حدث خطأ في الشبكة')
     }
   }
 
@@ -188,7 +188,7 @@ class ApiClient {
       if (error instanceof Error) {
         throw error
       }
-      throw new Error('Network error occurred')
+      throw new Error('حدث خطأ في الشبكة')
     }
   }
 
@@ -212,7 +212,7 @@ class ApiClient {
       if (error instanceof Error) {
         throw error
       }
-      throw new Error('Network error occurred')
+      throw new Error('حدث خطأ في الشبكة')
     }
   }
 }

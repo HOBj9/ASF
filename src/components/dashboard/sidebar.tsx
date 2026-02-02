@@ -11,6 +11,7 @@ import {
   User,
   Settings,
   Building2,
+  Building,
   Truck,
   Users,
   MapPin,
@@ -24,72 +25,7 @@ import { useSidebarStore } from "@/store/sidebar-store"
 import { useEffect, useState, useMemo } from "react"
 import { hasAnyPermission, isAdmin } from "@/lib/permissions"
 import { permissionActions, permissionResources } from "@/constants/permissions"
-
-const menuItems = [
-  {
-    title: "لوحة التحكم",
-    href: "/dashboard",
-    icon: LayoutDashboard,
-  },
-  {
-    title: "البلديات",
-    href: "/dashboard/admin/municipalities",
-    icon: Building2,
-    adminOnly: true,
-  },
-  {
-    title: "الشاحنات والمركبات",
-    href: "/dashboard/vehicles",
-    icon: Truck,
-    permissions: [{ resource: permissionResources.VEHICLES, action: permissionActions.READ }],
-  },
-  {
-    title: "السائقون",
-    href: "/dashboard/drivers",
-    icon: Users,
-    permissions: [{ resource: permissionResources.DRIVERS, action: permissionActions.READ }],
-  },
-  {
-    title: "الحاويات",
-    href: "/dashboard/points",
-    icon: MapPin,
-    permissions: [{ resource: permissionResources.POINTS, action: permissionActions.READ }],
-  },
-  {
-    title: "المسارات",
-    href: "/dashboard/routes",
-    icon: Route,
-    permissions: [{ resource: permissionResources.ROUTES, action: permissionActions.READ }],
-  },
-  {
-    title: "التقارير",
-    href: "/dashboard/reports",
-    icon: FileText,
-    permissions: [{ resource: permissionResources.REPORTS, action: permissionActions.READ }],
-  },
-  {
-    title: "المستخدمون",
-    href: "/dashboard/admin/users",
-    icon: UserCog,
-    adminOnly: true,
-  },
-  {
-    title: "إدارة الأدوار",
-    href: "/dashboard/admin/roles",
-    icon: KeyRound,
-    adminOnly: true,
-  },
-  {
-    title: "الملف الشخصي",
-    href: "/dashboard/profile",
-    icon: User,
-  },
-  {
-    title: "الإعدادات",
-    href: "/dashboard/settings",
-    icon: Settings,
-  },
-]
+import { useLabels } from "@/hooks/use-labels"
 
 interface SidebarProps {
   isAdmin: boolean
@@ -106,6 +42,7 @@ export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarP
   const { isOpen, toggle, close } = useSidebarStore()
   const { data: session } = useSession()
   const [roleName, setRoleName] = useState<string | null>(initialUser.roleName || null)
+  const { labels } = useLabels()
 
   // Get user data from session (updated when impersonation changes)
   const currentUser = useMemo(() => {
@@ -126,6 +63,13 @@ export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarP
     }
     return initialIsAdmin
   }, [session?.user?.role, initialIsAdmin])
+
+  const userIsSuperAdmin = useMemo(() => {
+    const role = session?.user?.role as any
+    if (!role) return false
+    if (typeof role === "string") return role === "super_admin"
+    return role?.name === "super_admin"
+  }, [session?.user?.role])
 
   // Fetch role name when role changes
   useEffect(() => {
@@ -167,10 +111,78 @@ export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarP
     fetchRoleName()
   }, [session?.user?.role, initialUser.roleName])
 
+  const menuItems = useMemo(() => ([
+    {
+      title: "لوحة التحكم",
+      href: "/dashboard",
+      icon: LayoutDashboard,
+    },
+    {
+      title: "المؤسسات",
+      href: "/dashboard/admin/organizations",
+      icon: Building,
+      superAdminOnly: true,
+    },
+    {
+      title: labels.branchLabel || "الفروع",
+      href: "/dashboard/admin/municipalities",
+      icon: Building2,
+      permissions: [{ resource: permissionResources.BRANCHES, action: permissionActions.READ }],
+    },
+    {
+      title: labels.vehicleLabel || "المركبات",
+      href: "/dashboard/vehicles",
+      icon: Truck,
+      permissions: [{ resource: permissionResources.VEHICLES, action: permissionActions.READ }],
+    },
+    {
+      title: labels.driverLabel || "السائقون",
+      href: "/dashboard/drivers",
+      icon: Users,
+      permissions: [{ resource: permissionResources.DRIVERS, action: permissionActions.READ }],
+    },
+    {
+      title: labels.pointLabel || "النقاط",
+      href: "/dashboard/points",
+      icon: MapPin,
+      permissions: [{ resource: permissionResources.POINTS, action: permissionActions.READ }],
+    },
+    {
+      title: labels.routeLabel || "المسارات",
+      href: "/dashboard/routes",
+      icon: Route,
+      permissions: [{ resource: permissionResources.ROUTES, action: permissionActions.READ }],
+    },
+    {
+      title: "التقارير",
+      href: "/dashboard/reports",
+      icon: FileText,
+      permissions: [{ resource: permissionResources.REPORTS, action: permissionActions.READ }],
+    },
+    {
+      title: "المستخدمون",
+      href: "/dashboard/admin/users",
+      icon: UserCog,
+      adminOnly: true,
+    },
+    {
+      title: "إدارة الأدوار",
+      href: "/dashboard/admin/roles",
+      icon: KeyRound,
+      adminOnly: true,
+    },
+    {
+      title: "الإعدادات",
+      href: "/dashboard/settings",
+      icon: Settings,
+    },
+  ]), [labels.branchLabel, labels.driverLabel, labels.pointLabel, labels.routeLabel, labels.vehicleLabel])
+
   const filteredMenuItems = menuItems.filter(
     (item) => {
       // Show admin-only items only for admin
       if (item.adminOnly && !userIsAdmin) return false
+      if ((item as any).superAdminOnly && !userIsSuperAdmin) return false
       if (userIsAdmin) return true
       if (item.permissions && item.permissions.length > 0) {
         const role = session?.user?.role || null

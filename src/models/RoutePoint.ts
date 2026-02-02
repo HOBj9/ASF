@@ -1,4 +1,4 @@
-import mongoose, { Schema, Document, Model } from 'mongoose';
+﻿import mongoose, { Schema, Document, Model } from 'mongoose';
 
 export interface IRoutePoint extends Document {
   routeId: mongoose.Types.ObjectId;

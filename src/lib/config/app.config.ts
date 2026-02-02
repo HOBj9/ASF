@@ -6,7 +6,7 @@
 
 export const appConfig = {
   // Application Metadata
-  name: process.env.APP_NAME || 'Admin Dashboard',
+  name: process.env.APP_NAME || 'لوحة التحكم',
   nameAr: process.env.APP_NAME_AR || 'لوحة التحكم',
   description: process.env.APP_DESCRIPTION || 'نظام إدارة شامل مع نظام المصادقة والأدوار والصلاحيات',
   version: process.env.APP_VERSION || '1.0.0',

@@ -11,7 +11,7 @@ const cairo = Cairo({
 
 export const metadata: Metadata = {
   title: "لوحة التحكم",
-  description: "نظام إدارة مع المصادقة والأدوار والصلاحيات",
+  description: "نظام إدارة شامل مع نظام المصادقة والأدوار والصلاحيات",
 }
 
 export default function RootLayout({

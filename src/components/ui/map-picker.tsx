@@ -70,7 +70,7 @@ export function MapPicker({
         )}
       </MapContainer>
       <p className="text-xs text-muted-foreground text-right mt-1 px-1">
-        انقر على الخريطة لتحديد موقع البلدية
+        انقر على الخريطة لتحديد الموقع
       </p>
     </div>
   );

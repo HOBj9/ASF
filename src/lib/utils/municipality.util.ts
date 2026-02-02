@@ -1,23 +1,24 @@
-import { isAdmin } from '@/lib/permissions';
+﻿import { isAdmin } from '@/lib/permissions';
 
-export function resolveMunicipalityId(
+export function resolveBranchId(
   session: any,
-  providedMunicipalityId?: string | null
+  providedBranchId?: string | null
 ): string {
-  const sessionMunicipalityId = session?.user?.municipalityId || null;
+  const sessionBranchId = session?.user?.branchId || null;
   const role = session?.user?.role || null;
 
   if (isAdmin(role)) {
-    const resolved = providedMunicipalityId || sessionMunicipalityId;
+    const resolved = providedBranchId || sessionBranchId;
     if (!resolved) {
-      throw new Error('يرجى تحديد البلدية');
+      throw new Error('يرجى تحديد الفرع');
     }
     return resolved;
   }
 
-  if (!sessionMunicipalityId) {
-    throw new Error('لا يوجد بلدية مرتبطة بالحساب');
+  if (!sessionBranchId) {
+    throw new Error('لا يوجد فرع مرتبط بالحساب');
   }
 
-  return sessionMunicipalityId;
+  return sessionBranchId;
 }
+

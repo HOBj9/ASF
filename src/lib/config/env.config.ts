@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Environment Variables Validation
  * Validates and provides type-safe access to environment variables
  */
@@ -68,7 +68,7 @@ export function validateEnv(): EnvConfig {
     if (error instanceof z.ZodError) {
       const missingVars = error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join('\n')
       throw new Error(
-        `❌ Invalid environment variables:\n${missingVars}\n\n` +
+        `â‌Œ Invalid environment variables:\n${missingVars}\n\n` +
         `Please check your .env.local file and ensure all required variables are set.`
       )
     }

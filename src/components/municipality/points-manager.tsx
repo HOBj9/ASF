@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import toast from "react-hot-toast"
+import { useLabels } from "@/hooks/use-labels"
 
 type Point = {
   _id: string
@@ -36,12 +37,20 @@ const emptyForm: Partial<Point> = {
   isActive: true,
 }
 
+const pointTypeLabels: Record<string, string> = {
+  container: "حاوية",
+  station: "محطة",
+  facility: "منشأة",
+  other: "أخرى",
+}
+
 export function PointsManager() {
   const [items, setItems] = useState<Point[]>([])
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState<Point | null>(null)
   const [form, setForm] = useState<Partial<Point>>(emptyForm)
   const [loading, setLoading] = useState(false)
+  const { labels } = useLabels()
 
   const load = async () => {
     setLoading(true)
@@ -49,7 +58,7 @@ export function PointsManager() {
       const res = await apiClient.get("/points")
       setItems(res.points || res.data?.points || [])
     } catch (error: any) {
-      toast.error(error.message || "فشل تحميل الحاويات")
+      toast.error(error.message || `فشل تحميل ${labels.pointLabel}`)
     } finally {
       setLoading(false)
     }
@@ -78,16 +87,16 @@ export function PointsManager() {
 
   const submit = async () => {
     if (!form.name || form.lat === undefined || form.lng === undefined) {
-      toast.error("الاسم والإحداثيات مطلوبة")
+      toast.error("يرجى إدخال الاسم والإحداثيات")
       return
     }
     try {
       if (editing) {
         await apiClient.patch(`/points/${editing._id}`, form)
-        toast.success("تم تحديث الحاوية")
+        toast.success(`تم تحديث ${labels.pointLabel}`)
       } else {
         await apiClient.post("/points", form)
-        toast.success("تم إضافة الحاوية")
+        toast.success(`تم إضافة ${labels.pointLabel}`)
       }
       setOpen(false)
       await load()
@@ -97,11 +106,11 @@ export function PointsManager() {
   }
 
   const remove = async (item: Point) => {
-    if (!confirm(`حذف الحاوية ${item.name}?`)) return
+    if (!confirm(`حذف ${labels.pointLabel} ${item.name}?`)) return
     try {
       await apiClient.delete(`/points/${item._id}`)
       setItems((prev) => prev.filter((i) => i._id !== item._id))
-      toast.success("تم حذف الحاوية")
+      toast.success(`تم حذف ${labels.pointLabel}`)
     } catch (error: any) {
       toast.error(error.message || "حدث خطأ")
     }
@@ -111,8 +120,8 @@ export function PointsManager() {
     <Card className="text-right">
       <CardHeader>
         <div className="flex items-center justify-between flex-row-reverse">
-          <CardTitle>الحاويات</CardTitle>
-          <Button onClick={openCreate}>إضافة حاوية</Button>
+          <CardTitle>{labels.pointLabel}</CardTitle>
+          <Button onClick={openCreate}>إضافة {labels.pointLabel}</Button>
         </div>
       </CardHeader>
       <CardContent>
@@ -123,10 +132,10 @@ export function PointsManager() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b text-right">
-                  <th className="p-2">اسم الحاوية</th>
+                  <th className="p-2">اسم {labels.pointLabel}</th>
                   <th className="p-2">النوع</th>
-                  <th className="p-2">Lat</th>
-                  <th className="p-2">Lng</th>
+                  <th className="p-2">خط العرض</th>
+                  <th className="p-2">خط الطول</th>
                   <th className="p-2">نصف القطر</th>
                   <th className="p-2">الحالة</th>
                   <th className="p-2">الإجراءات</th>
@@ -136,11 +145,11 @@ export function PointsManager() {
                 {items.map((item) => (
                   <tr key={item._id} className="border-b">
                     <td className="p-2">{item.nameAr || item.name}</td>
-                    <td className="p-2">{item.type}</td>
+                    <td className="p-2">{pointTypeLabels[item.type] || item.type}</td>
                     <td className="p-2">{item.lat}</td>
                     <td className="p-2">{item.lng}</td>
                     <td className="p-2">{item.radiusMeters}</td>
-                    <td className="p-2">{item.isActive ? "مفعلة" : "معطلة"}</td>
+                    <td className="p-2">{item.isActive ? "مفعّل" : "معطل"}</td>
                     <td className="p-2 space-x-2 space-x-reverse">
                       <Button variant="outline" onClick={() => openEdit(item)}>تعديل</Button>
                       <Button variant="destructive" onClick={() => remove(item)}>حذف</Button>
@@ -150,7 +159,7 @@ export function PointsManager() {
                 {items.length === 0 && (
                   <tr>
                     <td className="p-4 text-center text-muted-foreground" colSpan={7}>
-                      لا توجد حاويات
+                      لا توجد {labels.pointLabel}
                     </td>
                   </tr>
                 )}
@@ -163,7 +172,7 @@ export function PointsManager() {
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="text-right">
           <DialogHeader>
-            <DialogTitle>{editing ? "تعديل حاوية" : "إضافة حاوية"}</DialogTitle>
+            <DialogTitle>{editing ? `تعديل ${labels.pointLabel}` : `إضافة ${labels.pointLabel}`}</DialogTitle>
           </DialogHeader>
           <div className="grid gap-3">
             <div>
@@ -171,11 +180,11 @@ export function PointsManager() {
               <Input value={form.name || ""} onChange={(e) => setForm({ ...form, name: e.target.value })} />
             </div>
             <div>
-              <Label>الاسم العربي</Label>
+              <Label>الاسم بالعربية</Label>
               <Input value={form.nameAr || ""} onChange={(e) => setForm({ ...form, nameAr: e.target.value })} />
             </div>
             <div>
-              <Label>الاسم الانجليزي</Label>
+              <Label>الاسم بالإنجليزية</Label>
               <Input value={form.nameEn || ""} onChange={(e) => setForm({ ...form, nameEn: e.target.value })} />
             </div>
             <div>
@@ -194,16 +203,16 @@ export function PointsManager() {
             </div>
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <Label>Lat</Label>
+                <Label>خط العرض</Label>
                 <Input type="number" value={form.lat ?? 0} onChange={(e) => setForm({ ...form, lat: Number(e.target.value) })} />
               </div>
               <div>
-                <Label>Lng</Label>
+                <Label>خط الطول</Label>
                 <Input type="number" value={form.lng ?? 0} onChange={(e) => setForm({ ...form, lng: Number(e.target.value) })} />
               </div>
             </div>
             <div>
-              <Label>نصف القطر (متر)</Label>
+              <Label>نصف القطر (م)</Label>
               <Input type="number" value={form.radiusMeters ?? 500} onChange={(e) => setForm({ ...form, radiusMeters: Number(e.target.value) })} />
             </div>
             <div>
@@ -211,7 +220,7 @@ export function PointsManager() {
               <Input value={form.addressText || ""} onChange={(e) => setForm({ ...form, addressText: e.target.value })} />
             </div>
             <div className="flex items-center justify-between border rounded-lg p-2">
-              <span>مفعلة</span>
+              <span>مفعّل</span>
               <Switch checked={!!form.isActive} onCheckedChange={(checked) => setForm({ ...form, isActive: checked })} />
             </div>
           </div>

@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { useEffect, useState } from "react"
 import { apiClient } from "@/lib/api/client"
@@ -10,26 +10,28 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Switch } from "@/components/ui/switch"
 import toast from "react-hot-toast"
 import Link from "next/link"
+import { useLabels } from "@/hooks/use-labels"
 
-type Route = {
+type RouteItem = {
   _id: string
   name: string
   description?: string
   isActive: boolean
 }
 
-const emptyForm: Partial<Route> = {
+const emptyForm: Partial<RouteItem> = {
   name: "",
   description: "",
   isActive: true,
 }
 
 export function RoutesManager() {
-  const [items, setItems] = useState<Route[]>([])
+  const [items, setItems] = useState<RouteItem[]>([])
   const [open, setOpen] = useState(false)
-  const [editing, setEditing] = useState<Route | null>(null)
-  const [form, setForm] = useState<Partial<Route>>(emptyForm)
+  const [editing, setEditing] = useState<RouteItem | null>(null)
+  const [form, setForm] = useState<Partial<RouteItem>>(emptyForm)
   const [loading, setLoading] = useState(false)
+  const { labels } = useLabels()
 
   const load = async () => {
     setLoading(true)
@@ -37,7 +39,7 @@ export function RoutesManager() {
       const res = await apiClient.get("/routes")
       setItems(res.routes || res.data?.routes || [])
     } catch (error: any) {
-      toast.error(error.message || "فشل تحميل المسارات")
+      toast.error(error.message || `فشل تحميل ${labels.routeLabel}`)
     } finally {
       setLoading(false)
     }
@@ -53,7 +55,7 @@ export function RoutesManager() {
     setOpen(true)
   }
 
-  const openEdit = (item: Route) => {
+  const openEdit = (item: RouteItem) => {
     setEditing(item)
     setForm({
       ...item,
@@ -64,16 +66,16 @@ export function RoutesManager() {
 
   const submit = async () => {
     if (!form.name) {
-      toast.error("اسم المسار مطلوب")
+      toast.error(`اسم ${labels.routeLabel} مطلوب`)
       return
     }
     try {
       if (editing) {
         await apiClient.patch(`/routes/${editing._id}`, form)
-        toast.success("تم تحديث المسار")
+        toast.success(`تم تحديث ${labels.routeLabel}`)
       } else {
         await apiClient.post("/routes", form)
-        toast.success("تم إضافة المسار")
+        toast.success(`تم إضافة ${labels.routeLabel}`)
       }
       setOpen(false)
       await load()
@@ -82,12 +84,12 @@ export function RoutesManager() {
     }
   }
 
-  const remove = async (item: Route) => {
-    if (!confirm(`حذف المسار ${item.name}?`)) return
+  const remove = async (item: RouteItem) => {
+    if (!confirm(`حذف ${labels.routeLabel} ${item.name}?`)) return
     try {
       await apiClient.delete(`/routes/${item._id}`)
       setItems((prev) => prev.filter((i) => i._id !== item._id))
-      toast.success("تم حذف المسار")
+      toast.success(`تم حذف ${labels.routeLabel}`)
     } catch (error: any) {
       toast.error(error.message || "حدث خطأ")
     }
@@ -97,8 +99,8 @@ export function RoutesManager() {
     <Card className="text-right">
       <CardHeader>
         <div className="flex items-center justify-between flex-row-reverse">
-          <CardTitle>مسارات الجمع</CardTitle>
-          <Button onClick={openCreate}>إضافة مسار</Button>
+          <CardTitle>{labels.routeLabel}</CardTitle>
+          <Button onClick={openCreate}>إضافة {labels.routeLabel}</Button>
         </div>
       </CardHeader>
       <CardContent>
@@ -112,7 +114,7 @@ export function RoutesManager() {
                   <th className="p-2">الاسم</th>
                   <th className="p-2">الوصف</th>
                   <th className="p-2">الحالة</th>
-                  <th className="p-2">الحاويات</th>
+                  <th className="p-2">{labels.pointLabel}</th>
                   <th className="p-2">الإجراءات</th>
                 </tr>
               </thead>
@@ -121,10 +123,10 @@ export function RoutesManager() {
                   <tr key={item._id} className="border-b">
                     <td className="p-2">{item.name}</td>
                     <td className="p-2">{item.description || "-"}</td>
-                    <td className="p-2">{item.isActive ? "مفعّل" : "معطّل"}</td>
+                    <td className="p-2">{item.isActive ? "مفعّل" : "معطل"}</td>
                     <td className="p-2">
                       <Link className="text-primary underline" href={`/dashboard/routes/${item._id}/points`}>
-                        ضبط الحاويات
+                        ضبط {labels.pointLabel}
                       </Link>
                     </td>
                     <td className="p-2 space-x-2 space-x-reverse">
@@ -136,7 +138,7 @@ export function RoutesManager() {
                 {items.length === 0 && (
                   <tr>
                     <td className="p-4 text-center text-muted-foreground" colSpan={5}>
-                      لا توجد مسارات
+                      لا توجد {labels.routeLabel}
                     </td>
                   </tr>
                 )}
@@ -149,7 +151,7 @@ export function RoutesManager() {
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="text-right">
           <DialogHeader>
-            <DialogTitle>{editing ? "تعديل مسار" : "إضافة مسار"}</DialogTitle>
+            <DialogTitle>{editing ? `تعديل ${labels.routeLabel}` : `إضافة ${labels.routeLabel}`}</DialogTitle>
           </DialogHeader>
           <div className="grid gap-3">
             <div>
@@ -174,3 +176,4 @@ export function RoutesManager() {
     </Card>
   )
 }
+

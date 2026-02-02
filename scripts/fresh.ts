@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Fresh Database Script
  *
  * Syncs indexes and ensures default values without deleting data.
@@ -14,7 +14,8 @@ import "../src/models"
 import Permission from "../src/models/Permission"
 import Role from "../src/models/Role"
 import User from "../src/models/User"
-import Municipality from "../src/models/Municipality"
+import Organization from "../src/models/Organization"
+import Branch from "../src/models/Branch"
 import Driver from "../src/models/Driver"
 import Vehicle from "../src/models/Vehicle"
 import Point from "../src/models/Point"
@@ -35,7 +36,8 @@ const models: ModelInfo[] = [
   { name: "Permission", model: Permission, collection: "permissions" },
   { name: "Role", model: Role, collection: "roles" },
   { name: "User", model: User, collection: "users" },
-  { name: "Municipality", model: Municipality, collection: "municipalities" },
+  { name: "Organization", model: Organization, collection: "organizations" },
+  { name: "Branch", model: Branch, collection: "branches" },
   { name: "Driver", model: Driver, collection: "drivers" },
   { name: "Vehicle", model: Vehicle, collection: "vehicles" },
   { name: "Point", model: Point, collection: "points" },
@@ -128,7 +130,7 @@ async function syncRoles(): Promise<number> {
     const role = await Role.findOne({ name: roleDef.name })
     if (!role) continue
 
-    if (roleDef.name === defaultRoles.admin.name) {
+    if (roleDef.name === defaultRoles.superAdmin.name) {
       const manageAllPerm = permissionsMap.get("manage_all")
       if (manageAllPerm) {
         const currentPerms = (role.permissions || []).map((p: any) => p.toString())

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useMemo } from "react";
 import { MapContainer, TileLayer, Marker, Popup, Circle, Polyline } from "react-leaflet";
@@ -35,6 +35,12 @@ type MunicipalityInfo = {
 };
 
 const defaultCenter: [number, number] = [33.5138, 36.2765];
+const pointTypeLabels: Record<string, string> = {
+  container: "حاوية",
+  station: "محطة",
+  facility: "منشأة",
+  other: "أخرى",
+};
 
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -89,7 +95,7 @@ export function MunicipalityMap({
               <div className="text-right">
                 <div className="font-semibold">{point.nameAr || point.name}</div>
                 <div className="text-xs text-muted-foreground">
-                  {point.type === "container" ? "حاوية" : point.type}
+                  {pointTypeLabels[point.type] || point.type}
                 </div>
                 <div className="text-xs text-muted-foreground">
                   نصف القطر: {point.radiusMeters} م

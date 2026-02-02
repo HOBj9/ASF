@@ -1,8 +1,8 @@
-import { NextResponse } from 'next/server';
+﻿import { NextResponse } from 'next/server';
 import { requirePermission, handleApiError } from '@/lib/middleware/api-auth.middleware';
-import { resolveMunicipalityId } from '@/lib/utils/municipality.util';
+import { resolveBranchId } from '@/lib/utils/municipality.util';
 import { getZonedDayRange, getZonedMonthStart } from '@/lib/utils/timezone.util';
-import Municipality from '@/models/Municipality';
+import Branch from '@/models/Branch';
 import PointVisit from '@/models/PointVisit';
 import ZoneEvent from '@/models/ZoneEvent';
 import Vehicle from '@/models/Vehicle';
@@ -24,10 +24,13 @@ export async function GET(request: Request) {
 
     const { session } = authResult;
     const { searchParams } = new URL(request.url);
-    const municipalityId = resolveMunicipalityId(session, searchParams.get('municipalityId'));
+    const branchId = resolveBranchId(session, searchParams.get('branchId'));
 
-    const municipality = await Municipality.findById(municipalityId).select('timezone').lean();
-    const timezone = municipality?.timezone || 'Asia/Damascus';
+    const branch = await Branch.findById(branchId).select('timezone').lean();
+    if (!branch) {
+      return NextResponse.json({ error: 'الفرع غير موجود' }, { status: 404 });
+    }
+    const timezone = branch.timezone || 'Asia/Damascus';
 
     const { start: todayStart, end: todayEnd } = getZonedDayRange(timezone);
     const dailyStart = new Date(todayStart.getTime() - 13 * 24 * 60 * 60 * 1000);
@@ -35,7 +38,7 @@ export async function GET(request: Request) {
     const dailyContainersAgg = await PointVisit.aggregate([
       {
         $match: {
-          municipalityId: municipality._id,
+          branchId: branch._id,
           status: 'closed',
           exitTime: { $gte: dailyStart, $lte: todayEnd },
         },
@@ -53,7 +56,7 @@ export async function GET(request: Request) {
     const dailyDwellAgg = await PointVisit.aggregate([
       {
         $match: {
-          municipalityId: municipality._id,
+          branchId: branch._id,
           status: 'closed',
           exitTime: { $gte: dailyStart, $lte: todayEnd },
           durationSeconds: { $gt: 0 },
@@ -72,7 +75,7 @@ export async function GET(request: Request) {
     const dailyEventsAgg = await ZoneEvent.aggregate([
       {
         $match: {
-          municipalityId: municipality._id,
+          branchId: branch._id,
           eventTimestamp: { $gte: dailyStart, $lte: todayEnd },
         },
       },
@@ -113,7 +116,7 @@ export async function GET(request: Request) {
     const monthlyAgg = await PointVisit.aggregate([
       {
         $match: {
-          municipalityId: municipality._id,
+          branchId: branch._id,
           status: 'closed',
           exitTime: { $gte: monthStart, $lte: monthEnd },
         },
@@ -140,16 +143,16 @@ export async function GET(request: Request) {
     }
 
     const [activeVehicles, inactiveVehicles, pointTypesAgg, eventTypesAgg] = await Promise.all([
-      Vehicle.countDocuments({ municipalityId, isActive: true }),
-      Vehicle.countDocuments({ municipalityId, isActive: false }),
+      Vehicle.countDocuments({ branchId, isActive: true }),
+      Vehicle.countDocuments({ branchId, isActive: false }),
       Point.aggregate([
-        { $match: { municipalityId, isActive: true } },
+        { $match: { branchId, isActive: true } },
         { $group: { _id: '$type', count: { $sum: 1 } } },
       ]),
       ZoneEvent.aggregate([
         {
           $match: {
-            municipalityId: municipality._id,
+            branchId: branch._id,
             eventTimestamp: { $gte: dailyStart, $lte: todayEnd },
           },
         },
@@ -192,3 +195,5 @@ export async function GET(request: Request) {
     return handleApiError(error);
   }
 }
+
+

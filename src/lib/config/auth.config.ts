@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Authentication Configuration
  * NextAuth.js and authentication settings
  */

@@ -81,19 +81,19 @@ async function handleWebhook(request: Request, method: 'GET' | 'POST') {
   }
 
   const point = await Point.findOne({ zoneId }).lean();
-  let municipalityId = point?.municipalityId || null;
+  let branchId = point?.branchId || null;
   let vehicle = null;
   let driver = null;
 
-  if (municipalityId) {
-    vehicle = await Vehicle.findOne({ municipalityId, imei }).lean();
+  if (branchId) {
+    vehicle = await Vehicle.findOne({ branchId, imei }).lean();
   } else {
     vehicle = await Vehicle.findOne({ imei }).lean();
-    municipalityId = vehicle?.municipalityId || null;
+    branchId = vehicle?.branchId || null;
   }
 
-  if (!municipalityId) {
-    return NextResponse.json({ error: 'لم يتم العثور على البلدية' }, { status: 404 });
+  if (!branchId) {
+    return NextResponse.json({ error: 'لم يتم العثور على الفرع' }, { status: 404 });
   }
 
   const eventTimestamp = parseEventTimestamp(timestamp);
@@ -103,7 +103,7 @@ async function handleWebhook(request: Request, method: 'GET' | 'POST') {
   const eventName = `${point?.nameAr || point?.name || 'حاوية'} - ${type === 'zone_in' ? 'دخول' : 'خروج'}`;
 
   const zoneEvent = await ZoneEvent.create({
-    municipalityId,
+    branchId,
     vehicleId: vehicle?._id || null,
     driverId: vehicle?.driverId || null,
     pointId: point?._id || null,
@@ -117,9 +117,9 @@ async function handleWebhook(request: Request, method: 'GET' | 'POST') {
     rawPayload,
   });
 
-  if (type === 'zone_in' && point?._id && vehicle?._id && municipalityId) {
+  if (type === 'zone_in' && point?._id && vehicle?._id && branchId) {
     const existingVisit = await PointVisit.findOne({
-      municipalityId,
+      branchId,
       vehicleId: vehicle._id,
       pointId: point._id,
       status: 'open',
@@ -127,7 +127,7 @@ async function handleWebhook(request: Request, method: 'GET' | 'POST') {
 
     if (!existingVisit) {
       await PointVisit.create({
-        municipalityId,
+        branchId,
         vehicleId: vehicle._id,
         pointId: point._id,
         zoneId,
@@ -138,9 +138,9 @@ async function handleWebhook(request: Request, method: 'GET' | 'POST') {
     }
   }
 
-  if (type === 'zone_out' && point?._id && vehicle?._id && municipalityId) {
+  if (type === 'zone_out' && point?._id && vehicle?._id && branchId) {
     const openVisit = await PointVisit.findOne({
-      municipalityId,
+      branchId,
       vehicleId: vehicle._id,
       pointId: point._id,
       status: 'open',

@@ -1,7 +1,7 @@
-import mongoose, { Schema, Document, Model } from 'mongoose';
+﻿import mongoose, { Schema, Document, Model } from 'mongoose';
 
 export interface IDriver extends Document {
-  municipalityId: mongoose.Types.ObjectId;
+  branchId: mongoose.Types.ObjectId;
   name: string;
   phone?: string;
   nationalId?: string;
@@ -13,9 +13,9 @@ export interface IDriver extends Document {
 
 const DriverSchema: Schema = new Schema(
   {
-    municipalityId: {
+    branchId: {
       type: Schema.Types.ObjectId,
-      ref: 'Municipality',
+      ref: 'Branch',
       required: true,
       index: true,
     },
@@ -49,7 +49,7 @@ const DriverSchema: Schema = new Schema(
   }
 );
 
-DriverSchema.index({ municipalityId: 1, name: 1 });
+DriverSchema.index({ branchId: 1, name: 1 });
 
 let Driver: Model<IDriver>;
 

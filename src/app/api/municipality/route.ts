@@ -1,7 +1,7 @@
-import { NextResponse } from 'next/server';
+﻿import { NextResponse } from 'next/server';
 import { requireAuth, handleApiError } from '@/lib/middleware/api-auth.middleware';
-import { resolveMunicipalityId } from '@/lib/utils/municipality.util';
-import Municipality from '@/models/Municipality';
+import { resolveBranchId } from '@/lib/utils/municipality.util';
+import Branch from '@/models/Branch';
 
 export async function GET(request: Request) {
   try {
@@ -10,15 +10,16 @@ export async function GET(request: Request) {
 
     const { session } = authResult;
     const { searchParams } = new URL(request.url);
-    const municipalityId = resolveMunicipalityId(session, searchParams.get('municipalityId'));
+    const branchId = resolveBranchId(session, searchParams.get('branchId'));
 
-    const municipality = await Municipality.findById(municipalityId).lean();
-    if (!municipality) {
-      return NextResponse.json({ error: 'البلدية غير موجودة' }, { status: 404 });
+    const branch = await Branch.findById(branchId).lean();
+    if (!branch) {
+      return NextResponse.json({ error: 'الفرع غير موجود' }, { status: 404 });
     }
 
-    return NextResponse.json({ municipality });
+    return NextResponse.json({ branch });
   } catch (error: any) {
     return handleApiError(error);
   }
 }
+
