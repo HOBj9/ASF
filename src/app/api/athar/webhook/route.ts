@@ -23,6 +23,7 @@ function parseEventTimestamp(timestamp?: string | null): Date | null {
 }
 
 async function handleWebhook(request: Request, method: 'GET' | 'POST') {
+  console.log('[Athar Webhook] handleWebhook method=', method);
   await connectDB();
 
   let eventId: string | null = null;
@@ -65,10 +66,14 @@ async function handleWebhook(request: Request, method: 'GET' | 'POST') {
     }
   }
 
+  console.log('[Athar Webhook] parsed: eventId=', eventId, 'zoneId=', zoneId, 'imei=', imei, 'type=', type);
+
   if (!zoneId || !imei || !type) {
+    console.log('[Athar Webhook] missing required fields');
     return NextResponse.json({ error: 'بيانات ناقصة' }, { status: 400 });
   }
   if (type !== 'zone_in' && type !== 'zone_out') {
+    console.log('[Athar Webhook] unsupported type=', type);
     return NextResponse.json({ error: 'نوع حدث غير مدعوم' }, { status: 400 });
   }
 
@@ -77,10 +82,12 @@ async function handleWebhook(request: Request, method: 'GET' | 'POST') {
     zoneId,
   }).lean();
   if (existing) {
+    console.log('[Athar Webhook] event already processed, skipping');
     return NextResponse.json({ success: true, message: 'event already processed' });
   }
 
   const point = await Point.findOne({ zoneId }).lean();
+  console.log('[Athar Webhook] point=', point?._id, 'name=', point?.name);
   let branchId = point?.branchId || null;
   let vehicle = null;
   let driver = null;
@@ -116,6 +123,7 @@ async function handleWebhook(request: Request, method: 'GET' | 'POST') {
     eventTimestamp,
     rawPayload,
   });
+  console.log('[Athar Webhook] ZoneEvent created _id=', zoneEvent._id);
 
   if (type === 'zone_in' && point?._id && vehicle?._id && branchId) {
     const existingVisit = await PointVisit.findOne({
@@ -160,9 +168,11 @@ async function handleWebhook(request: Request, method: 'GET' | 'POST') {
       openVisit.durationSeconds = durationSeconds;
       openVisit.status = 'closed';
       await openVisit.save();
+      console.log('[Athar Webhook] PointVisit closed (zone_out) durationSeconds=', durationSeconds);
     }
   }
 
+  console.log('[Athar Webhook] done success=true');
   return NextResponse.json({ success: true });
 }
 

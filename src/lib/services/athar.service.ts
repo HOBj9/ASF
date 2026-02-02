@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Athar Service
  * Communication layer with Athar GPS platform
  */
@@ -21,11 +21,14 @@ export class AtharService {
   }
 
   static async forBranch(branchId: string): Promise<AtharService> {
+    console.log('[Athar] forBranch: branchId=', branchId);
     await connectDB();
     const branch = await Branch.findById(branchId).select('atharKey').lean();
     if (!branch?.atharKey) {
-      throw new Error('Athar API key غير مُعرّف للفرع');
+      console.log('[Athar] forBranch: no atharKey for branch', branchId);
+      throw new Error('مفتاح Athar API غير معرّف للفرع');
     }
+    console.log('[Athar] forBranch: OK, instance created for branch', branchId);
 
     return new AtharService({
       baseUrl: process.env.ATHAR_BASE_URL || 'https://admin.alather.net/api/api.php',
@@ -48,7 +51,11 @@ export class AtharService {
     url.searchParams.append('ver', this.config.version);
     url.searchParams.append('key', this.config.apiKey);
 
-    const response = await fetch(url.toString(), {
+    const urlStr = url.toString();
+    const safeUrl = urlStr.replace(/key=[^&]+/, 'key=***');
+    console.log('[Athar] makeRequest: cmd=', params.cmd, 'url=', safeUrl);
+
+    const response = await fetch(urlStr, {
       method: 'GET',
       headers: {
         Accept: 'application/json',
@@ -57,10 +64,28 @@ export class AtharService {
     });
 
     if (!response.ok) {
+      console.log('[Athar] makeRequest: error', response.status, response.statusText);
       throw new Error(`Athar API error: ${response.status} ${response.statusText}`);
     }
 
-    return response.json();
+    const text = await response.text();
+    if (!text || !text.trim()) {
+      console.log('[Athar] makeRequest: empty response body');
+      return {};
+    }
+
+    let data: any;
+    try {
+      data = JSON.parse(text);
+    } catch (parseError) {
+      console.log('[Athar] makeRequest: invalid JSON, raw (first 500 chars)=', text.slice(0, 500));
+      throw new Error(
+        `Athar API returned invalid JSON: ${parseError instanceof Error ? parseError.message : 'Unknown'}`
+      );
+    }
+
+    console.log('[Athar] makeRequest: response keys=', Object.keys(data || {}));
+    return data;
   }
 
   private getZoneVertices(
@@ -101,21 +126,83 @@ export class AtharService {
   }
 
   async getZones(): Promise<any[]> {
-    const response = await this.makeRequest({ cmd: 'GET_ZONES' });
-    if (!response) return [];
-    if (Array.isArray(response.zones)) return response.zones;
-    if (Array.isArray(response.data)) return response.data;
-    if (Array.isArray(response)) return response;
-    return [];
+    console.log('[Athar] getZones: calling USER_GET_ZONES');
+    const response = await this.makeRequest({ cmd: 'USER_GET_ZONES' });
+    if (!response) {
+      console.log('[Athar] getZones: empty response');
+      return [];
+    }
+    const zonesSource =
+      response.zones ??
+      response.data?.zones ??
+      response.data ??
+      response;
+
+    let zones: any[] = [];
+    if (Array.isArray(zonesSource)) {
+      zones = zonesSource;
+    } else if (zonesSource && typeof zonesSource === 'object') {
+      // Some Athar accounts return zones as keyed object:
+      // { "69167": { name, vertices, ... }, ... }
+      zones = Object.entries(zonesSource).map(([key, value]) => {
+        const zone = (value && typeof value === 'object' ? value : {}) as Record<string, any>;
+        return {
+          ...zone,
+          zone_id: zone.zone_id ?? zone.id ?? key,
+          id: zone.id ?? zone.zone_id ?? key,
+          zone_vertices: zone.zone_vertices ?? zone.zoneVertices ?? zone.vertices,
+        };
+      });
+    }
+    console.log('[Athar] getZones: count=', zones.length, 'sample keys=', zones[0] ? Object.keys(zones[0]) : []);
+    return zones;
+  }
+
+  /** Normalized marker shape for map display */
+  static normalizeMarker(m: any): { id: string; lat: number; lng: number; name?: string } | null {
+    const lat = Number(m.lat ?? m.latitude ?? m.y);
+    const lng = Number(m.lng ?? m.longitude ?? m.x);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+    const id = String(m.id ?? m.marker_id ?? m._id ?? `${lat}-${lng}`);
+    const name = m.name ?? m.nameAr ?? m.title ?? '';
+    return { id, lat, lng, name };
+  }
+
+  async getMarkers(): Promise<Array<{ id: string; lat: number; lng: number; name?: string }>> {
+    console.log('[Athar] getMarkers: calling USER_GET_MARKERS');
+    const response = await this.makeRequest({ cmd: 'USER_GET_MARKERS' });
+    if (!response) {
+      console.log('[Athar] getMarkers: empty response');
+      return [];
+    }
+    const raw = Array.isArray(response.markers)
+      ? response.markers
+      : Array.isArray(response.data)
+        ? response.data
+        : Array.isArray(response)
+          ? response
+          : [];
+    type NormMarker = { id: string; lat: number; lng: number; name?: string };
+    const markers = raw
+      .map((m: any) => AtharService.normalizeMarker(m))
+      .filter((m: NormMarker | null): m is NormMarker => m != null);
+    console.log('[Athar] getMarkers: count=', markers.length);
+    return markers;
   }
 
   async findZoneIdByName(name: string): Promise<string | null> {
+    console.log('[Athar] findZoneIdByName: name=', name);
     const zones = await this.getZones();
     const found = zones.find((z: any) => String(z.name).trim() === name.trim());
-    if (!found) return null;
+    if (!found) {
+      console.log('[Athar] findZoneIdByName: not found');
+      return null;
+    }
     const zoneIdStr = String(found.zone_id || found.id || '');
     const match = zoneIdStr.match(/^(\d+)/);
-    return match ? match[1] : zoneIdStr || null;
+    const result = match ? match[1] : zoneIdStr || null;
+    console.log('[Athar] findZoneIdByName: found zoneId=', result);
+    return result;
   }
 
   async createZone(
@@ -123,6 +210,7 @@ export class AtharService {
     centerPoint: { lat: number; lng: number },
     radiusMeters: number = 500
   ): Promise<string | null> {
+    console.log('[Athar] createZone: name=', pointName, 'center=', centerPoint, 'radius=', radiusMeters);
     const zoneVertices = this.getZoneVertices(centerPoint.lat, centerPoint.lng, radiusMeters);
 
     const response = await this.makeRequest({
@@ -136,9 +224,12 @@ export class AtharService {
     if (response && response.zone_id) {
       const zoneIdStr = String(response.zone_id);
       const match = zoneIdStr.match(/^(\d+)/);
-      return match ? match[1] : zoneIdStr;
+      const zoneId = match ? match[1] : zoneIdStr;
+      console.log('[Athar] createZone: created zoneId=', zoneId);
+      return zoneId;
     }
 
+    console.log('[Athar] createZone: failed, response=', response);
     throw new Error('فشل إنشاء المنطقة في Athar');
   }
 
@@ -147,8 +238,12 @@ export class AtharService {
     centerPoint: { lat: number; lng: number },
     radiusMeters: number = 500
   ): Promise<string> {
+    console.log('[Athar] ensureZone: name=', pointName);
     const existingId = await this.findZoneIdByName(pointName);
-    if (existingId) return existingId;
+    if (existingId) {
+      console.log('[Athar] ensureZone: using existing zoneId=', existingId);
+      return existingId;
+    }
     const zoneId = await this.createZone(pointName, centerPoint, radiusMeters);
     if (!zoneId) {
       throw new Error('Athar لم يُرجع zoneId');
@@ -163,6 +258,7 @@ export class AtharService {
     zoneType: 'zone_in' | 'zone_out',
     webhookUrl: string
   ): Promise<string | null> {
+    console.log('[Athar] createZoneEvent: pointName=', pointName, 'zoneId=', zoneId, 'imei=', imei, 'type=', zoneType);
     const eventName = `${pointName}_${zoneType}`;
     const secret = process.env.ATHAR_WEBHOOK_SECRET || '';
     const webhookWithZoneId =
@@ -183,10 +279,11 @@ export class AtharService {
     });
 
     if (response && response.event_id) {
+      console.log('[Athar] createZoneEvent: created event_id=', response.event_id);
       return String(response.event_id);
     }
 
+    console.log('[Athar] createZoneEvent: failed, response=', response);
     throw new Error('فشل إنشاء حدث المنطقة في Athar');
   }
 }
-

@@ -1,12 +1,13 @@
-﻿"use client"
+"use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { apiClient } from "@/lib/api/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import toast from "react-hot-toast"
 import Link from "next/link"
@@ -26,7 +27,13 @@ const emptyForm: Partial<RouteItem> = {
 }
 
 export function RoutesManager() {
+  const PAGE_SIZE = 10
+
   const [items, setItems] = useState<RouteItem[]>([])
+  const [search, setSearch] = useState("")
+  const [statusFilter, setStatusFilter] = useState("all")
+  const [page, setPage] = useState(1)
+
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState<RouteItem | null>(null)
   const [form, setForm] = useState<Partial<RouteItem>>(emptyForm)
@@ -48,6 +55,30 @@ export function RoutesManager() {
   useEffect(() => {
     load()
   }, [])
+
+  const filteredItems = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    return items.filter((item) => {
+      if (statusFilter === "active" && !item.isActive) return false
+      if (statusFilter === "inactive" && item.isActive) return false
+      if (!q) return true
+      return `${item.name} ${item.description || ""}`.toLowerCase().includes(q)
+    })
+  }, [items, search, statusFilter])
+
+  const totalPages = Math.max(1, Math.ceil(filteredItems.length / PAGE_SIZE))
+  const paginatedItems = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE
+    return filteredItems.slice(start, start + PAGE_SIZE)
+  }, [filteredItems, page])
+
+  useEffect(() => {
+    setPage(1)
+  }, [search, statusFilter])
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages)
+  }, [page, totalPages])
 
   const openCreate = () => {
     setEditing(null)
@@ -85,7 +116,7 @@ export function RoutesManager() {
   }
 
   const remove = async (item: RouteItem) => {
-    if (!confirm(`حذف ${labels.routeLabel} ${item.name}?`)) return
+    if (!confirm(`حذف ${labels.routeLabel} ${item.name}؟`)) return
     try {
       await apiClient.delete(`/routes/${item._id}`)
       setItems((prev) => prev.filter((i) => i._id !== item._id))
@@ -103,7 +134,23 @@ export function RoutesManager() {
           <Button onClick={openCreate}>إضافة {labels.routeLabel}</Button>
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-3">
+        <div className="grid gap-3 md:grid-cols-2">
+          <Input
+            placeholder={`بحث في ${labels.routeLabel}...`}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="text-right"><SelectValue placeholder="الحالة" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">كل الحالات</SelectItem>
+              <SelectItem value="active">مفعّل</SelectItem>
+              <SelectItem value="inactive">معطّل</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
         {loading ? (
           <div className="text-sm text-muted-foreground">جاري التحميل...</div>
         ) : (
@@ -119,11 +166,11 @@ export function RoutesManager() {
                 </tr>
               </thead>
               <tbody>
-                {items.map((item) => (
+                {paginatedItems.map((item) => (
                   <tr key={item._id} className="border-b">
                     <td className="p-2">{item.name}</td>
                     <td className="p-2">{item.description || "-"}</td>
-                    <td className="p-2">{item.isActive ? "مفعّل" : "معطل"}</td>
+                    <td className="p-2">{item.isActive ? "مفعّل" : "معطّل"}</td>
                     <td className="p-2">
                       <Link className="text-primary underline" href={`/dashboard/routes/${item._id}/points`}>
                         ضبط {labels.pointLabel}
@@ -135,10 +182,10 @@ export function RoutesManager() {
                     </td>
                   </tr>
                 ))}
-                {items.length === 0 && (
+                {paginatedItems.length === 0 && (
                   <tr>
                     <td className="p-4 text-center text-muted-foreground" colSpan={5}>
-                      لا توجد {labels.routeLabel}
+                      لا توجد نتائج
                     </td>
                   </tr>
                 )}
@@ -146,6 +193,19 @@ export function RoutesManager() {
             </table>
           </div>
         )}
+        <div className="flex items-center justify-between border rounded-lg p-2">
+          <span className="text-sm text-muted-foreground">
+            صفحة {page} من {totalPages}
+          </span>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => setPage((p) => p + 1)} disabled={page >= totalPages}>
+              التالي
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setPage((p) => p - 1)} disabled={page <= 1}>
+              السابق
+            </Button>
+          </div>
+        </div>
       </CardContent>
 
       <Dialog open={open} onOpenChange={setOpen}>
@@ -176,4 +236,3 @@ export function RoutesManager() {
     </Card>
   )
 }
-

@@ -36,7 +36,7 @@ export async function POST(request: Request) {
     const { name, nameAr, nameEn, type, lat, lng, radiusMeters, addressText, isActive } = body;
     if (!name || lat === undefined || lng === undefined) {
       return NextResponse.json(
-        { error: 'الاسم والاحداثيات مطلوبة' },
+        { error: 'الاسم والإحداثيات مطلوبة' },
         { status: 400 }
       );
     }
@@ -44,12 +44,14 @@ export async function POST(request: Request) {
     const pointName = nameAr || nameEn || name;
     const radius = radiusMeters !== undefined ? Number(radiusMeters) : 500;
 
+    console.log('[Athar API] POST /api/points: creating zone via Athar branchId=', branchId, 'name=', pointName);
     const atharService = await AtharService.forBranch(branchId);
     const zoneId = await atharService.ensureZone(
       pointName,
       { lat: Number(lat), lng: Number(lng) },
       radius
     );
+    console.log('[Athar API] POST /api/points: zoneId=', zoneId);
 
     const point = await pointService.create({
       branchId,
@@ -75,11 +77,13 @@ export async function POST(request: Request) {
 
     if (vehicles.length > 0) {
       const webhookUrl = `${process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || 'http://localhost:3000'}/api/athar/webhook`;
+      console.log('[Athar API] POST /api/points: creating zone events for', vehicles.length, 'vehicles');
       for (const vehicle of vehicles) {
         if (!vehicle.imei) continue;
         await atharService.createZoneEvent(pointName, zoneId, vehicle.imei, 'zone_in', webhookUrl);
         await atharService.createZoneEvent(pointName, zoneId, vehicle.imei, 'zone_out', webhookUrl);
       }
+      console.log('[Athar API] POST /api/points: zone events created');
     }
 
     return NextResponse.json({ point }, { status: 201 });

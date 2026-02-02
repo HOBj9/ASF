@@ -1,6 +1,6 @@
-﻿"use client"
+"use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { apiClient } from "@/lib/api/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -32,8 +32,16 @@ const emptyForm: Partial<Driver> = {
 }
 
 export function DriversManager() {
+  const PAGE_SIZE = 10
+
   const [items, setItems] = useState<Driver[]>([])
   const [vehicles, setVehicles] = useState<Vehicle[]>([])
+
+  const [search, setSearch] = useState("")
+  const [statusFilter, setStatusFilter] = useState("all")
+  const [assignmentFilter, setAssignmentFilter] = useState("all")
+  const [page, setPage] = useState(1)
+
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState<Driver | null>(null)
   const [form, setForm] = useState<Partial<Driver>>(emptyForm)
@@ -59,6 +67,37 @@ export function DriversManager() {
   useEffect(() => {
     load()
   }, [])
+
+  const filteredItems = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    return items.filter((item) => {
+      if (statusFilter === "active" && !item.isActive) return false
+      if (statusFilter === "inactive" && item.isActive) return false
+
+      if (assignmentFilter === "with" && !item.assignedVehicleId) return false
+      if (assignmentFilter === "without" && item.assignedVehicleId) return false
+
+      if (!q) return true
+      const vehicleName = vehicles.find((v) => v._id === item.assignedVehicleId)?.name || ""
+      return `${item.name} ${item.phone || ""} ${item.nationalId || ""} ${vehicleName}`
+        .toLowerCase()
+        .includes(q)
+    })
+  }, [items, vehicles, search, statusFilter, assignmentFilter])
+
+  const totalPages = Math.max(1, Math.ceil(filteredItems.length / PAGE_SIZE))
+  const paginatedItems = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE
+    return filteredItems.slice(start, start + PAGE_SIZE)
+  }, [filteredItems, page])
+
+  useEffect(() => {
+    setPage(1)
+  }, [search, statusFilter, assignmentFilter])
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages)
+  }, [page, totalPages])
 
   const openCreate = () => {
     setEditing(null)
@@ -98,7 +137,7 @@ export function DriversManager() {
   }
 
   const remove = async (item: Driver) => {
-    if (!confirm(`حذف ${labels.driverLabel} ${item.name}?`)) return
+    if (!confirm(`حذف ${labels.driverLabel} ${item.name}؟`)) return
     try {
       await apiClient.delete(`/drivers/${item._id}`)
       setItems((prev) => prev.filter((i) => i._id !== item._id))
@@ -116,7 +155,31 @@ export function DriversManager() {
           <Button onClick={openCreate}>إضافة {labels.driverLabel}</Button>
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-3">
+        <div className="grid gap-3 md:grid-cols-3">
+          <Input
+            placeholder={`بحث في ${labels.driverLabel}...`}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="text-right"><SelectValue placeholder="الحالة" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">كل الحالات</SelectItem>
+              <SelectItem value="active">مفعّل</SelectItem>
+              <SelectItem value="inactive">معطّل</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={assignmentFilter} onValueChange={setAssignmentFilter}>
+            <SelectTrigger className="text-right"><SelectValue placeholder={labels.vehicleLabel} /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">كل الحالات</SelectItem>
+              <SelectItem value="with">مرتبط بمركبة</SelectItem>
+              <SelectItem value="without">غير مرتبط بمركبة</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
         {loading ? (
           <div className="text-sm text-muted-foreground">جاري التحميل...</div>
         ) : (
@@ -133,25 +196,23 @@ export function DriversManager() {
                 </tr>
               </thead>
               <tbody>
-                {items.map((item) => (
+                {paginatedItems.map((item) => (
                   <tr key={item._id} className="border-b">
                     <td className="p-2">{item.name}</td>
                     <td className="p-2">{item.phone || "-"}</td>
                     <td className="p-2">{item.nationalId || "-"}</td>
-                    <td className="p-2">
-                      {vehicles.find((v) => v._id === item.assignedVehicleId)?.name || "-"}
-                    </td>
-                    <td className="p-2">{item.isActive ? "مفعّل" : "معطل"}</td>
+                    <td className="p-2">{vehicles.find((v) => v._id === item.assignedVehicleId)?.name || "-"}</td>
+                    <td className="p-2">{item.isActive ? "مفعّل" : "معطّل"}</td>
                     <td className="p-2 space-x-2 space-x-reverse">
                       <Button variant="outline" onClick={() => openEdit(item)}>تعديل</Button>
                       <Button variant="destructive" onClick={() => remove(item)}>حذف</Button>
                     </td>
                   </tr>
                 ))}
-                {items.length === 0 && (
+                {paginatedItems.length === 0 && (
                   <tr>
                     <td className="p-4 text-center text-muted-foreground" colSpan={6}>
-                      لا توجد {labels.driverLabel}
+                      لا توجد نتائج
                     </td>
                   </tr>
                 )}
@@ -159,6 +220,19 @@ export function DriversManager() {
             </table>
           </div>
         )}
+        <div className="flex items-center justify-between border rounded-lg p-2">
+          <span className="text-sm text-muted-foreground">
+            صفحة {page} من {totalPages}
+          </span>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => setPage((p) => p + 1)} disabled={page >= totalPages}>
+              التالي
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setPage((p) => p - 1)} disabled={page <= 1}>
+              السابق
+            </Button>
+          </div>
+        </div>
       </CardContent>
 
       <Dialog open={open} onOpenChange={setOpen}>
@@ -207,4 +281,3 @@ export function DriversManager() {
     </Card>
   )
 }
-

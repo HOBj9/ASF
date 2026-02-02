@@ -47,7 +47,7 @@ export class PointService {
       name: data.name.trim(),
     }).lean();
     if (existing) {
-      throw new Error('الحاوية موجودة مسبقًا');
+      throw new Error('الحاوية موجودة مسبقاً');
     }
 
     const point = await Point.create({
@@ -127,13 +127,28 @@ export class PointService {
   }
 
   /**
+   * Extract center (lat, lng) from a zone object using common Athar/API field names.
+   */
+  static zoneToCenter(z: Record<string, any>): { lat: number; lng: number } | null {
+    const lat = z.lat ?? z.latitude ?? z.center_lat ?? z.centerLat ?? z.y;
+    const lng = z.lng ?? z.longitude ?? z.center_lng ?? z.centerLng ?? z.x;
+    if (typeof lat === 'number' && typeof lng === 'number' && Number.isFinite(lat) && Number.isFinite(lng)) {
+      return { lat, lng };
+    }
+    const latN = Number(lat);
+    const lngN = Number(lng);
+    if (Number.isFinite(latN) && Number.isFinite(lngN)) return { lat: latN, lng: lngN };
+    return PointService.zoneVerticesToCenter(z.zone_vertices ?? z.zoneVertices ?? z.vertices);
+  }
+
+  /**
    * Sync points from Athar zones: create or update local points for each zone.
-   * Uses branch's atharKey via AtharService; callers pass already-fetched zones.
    */
   async syncFromAtharZones(
     branchId: string,
-    zones: Array<{ zone_id?: string; id?: string; name?: string; zone_vertices?: string }>
+    zones: Array<Record<string, any>>
   ): Promise<IPoint[]> {
+    console.log('[Athar] syncFromAtharZones: branchId=', branchId, 'zones count=', zones.length);
     await connectDB();
 
     const branch = await Branch.findById(branchId).lean();
@@ -143,11 +158,11 @@ export class PointService {
 
     const results: IPoint[] = [];
     for (const z of zones) {
-      const zoneIdRaw = z.zone_id ?? z.id;
-      if (!zoneIdRaw) continue;
+      const zoneIdRaw = z.zone_id ?? z.id ?? z._id;
+      if (zoneIdRaw == null || zoneIdRaw === '') continue;
       const zoneId = String(zoneIdRaw).replace(/\?.*$/, '').match(/^(\d+)/)?.[1] ?? String(zoneIdRaw);
-      const name = (z.name ?? '').trim() || `منطقة ${zoneId}`;
-      const center = PointService.zoneVerticesToCenter(z.zone_vertices);
+      const name = (z.name ?? z.nameAr ?? z.title ?? '').trim() || `منطقة ${zoneId}`;
+      const center = PointService.zoneToCenter(z);
 
       const existing = await Point.findOne({ branchId, zoneId }).lean().exec();
       if (existing) {
@@ -183,7 +198,7 @@ export class PointService {
       results.push(created);
     }
 
+    console.log('[Athar] syncFromAtharZones: done, points count=', results.length);
     return results;
   }
 }
-

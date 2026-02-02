@@ -65,9 +65,7 @@ export function MapPicker({
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
         <MapClickHandler onSelect={handleSelect} />
-        {(lat !== 0 || lng !== 0) && (
-          <Marker position={[lat, lng]} />
-        )}
+        {(lat !== 0 || lng !== 0) && <Marker position={[lat, lng]} />}
       </MapContainer>
       <p className="text-xs text-muted-foreground text-right mt-1 px-1">
         انقر على الخريطة لتحديد الموقع

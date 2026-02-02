@@ -41,6 +41,21 @@ type Point = {
   type: string;
 };
 
+type AtharMarker = {
+  id: string;
+  lat: number;
+  lng: number;
+  name?: string;
+};
+
+type AtharZone = {
+  id: string;
+  name: string;
+  color?: string;
+  center: { lat: number; lng: number } | null;
+  vertices: Array<{ lat: number; lng: number }>;
+};
+
 type Route = {
   _id: string;
   name: string;
@@ -107,6 +122,8 @@ function StatCard({
 
 export function MunicipalityDashboard() {
   const [branch, setBranch] = useState<BranchInfo | null>(null);
+  const [markers, setMarkers] = useState<AtharMarker[]>([]);
+  const [zones, setZones] = useState<AtharZone[]>([]);
   const [points, setPoints] = useState<Point[]>([]);
   const [routes, setRoutes] = useState<Route[]>([]);
   const [routePoints, setRoutePoints] = useState<Record<string, RoutePoint[]>>({});
@@ -123,14 +140,18 @@ export function MunicipalityDashboard() {
 
     async function loadInitial() {
       try {
-        const [branchRes, pointsRes, routesRes, statsRes, eventsRes, analyticsRes] = await Promise.all([
-          fetch("/api/municipality"),
-          fetch("/api/points"),
-          fetch("/api/routes"),
-          fetch("/api/dashboard/stats"),
-          fetch("/api/events?limit=8"),
-          fetch("/api/dashboard/analytics"),
-        ]);
+        const atharMarkersPromise = fetch("/api/athar/markers").then((r) => (r.ok ? r : null));
+        const atharZonesPromise = fetch("/api/athar/zones").then((r) => (r.ok ? r : fetch("/api/points")));
+        const [branchRes, markersRes, pointsRes, routesRes, statsRes, eventsRes, analyticsRes] =
+          await Promise.all([
+            fetch("/api/municipality"),
+            atharMarkersPromise,
+            atharZonesPromise,
+            fetch("/api/routes"),
+            fetch("/api/dashboard/stats"),
+            fetch("/api/events?limit=8"),
+            fetch("/api/dashboard/analytics"),
+          ]);
 
         if (!active) return;
 
@@ -138,9 +159,16 @@ export function MunicipalityDashboard() {
           const data = await branchRes.json();
           setBranch(data.branch || data.municipality || null);
         }
+        if (markersRes?.ok) {
+          const data = await markersRes.json();
+          setMarkers(data.markers || []);
+        } else {
+          setMarkers([]);
+        }
         if (pointsRes.ok) {
           const data = await pointsRes.json();
           setPoints(data.points || []);
+          setZones(data.zones || []);
         }
         if (routesRes.ok) {
           const data = await routesRes.json();
@@ -240,8 +268,8 @@ export function MunicipalityDashboard() {
 
   const pointTypeData = analytics?.pointTypes || [];
   const vehicleStatusData = [
-    { name: "مفعلة", value: analytics?.vehicleStatus?.active || 0 },
-    { name: "غير مفعلة", value: analytics?.vehicleStatus?.inactive || 0 },
+    { name: "نشطة", value: analytics?.vehicleStatus?.active || 0 },
+    { name: "غير نشطة", value: analytics?.vehicleStatus?.inactive || 0 },
   ];
   const eventTypeData = [
     { name: "دخول", value: analytics?.eventsByType?.zone_in || 0 },
@@ -251,8 +279,8 @@ export function MunicipalityDashboard() {
   return (
     <div className="space-y-6">
       <div className="rounded-2xl border bg-gradient-to-br from-emerald-50 via-sky-50 to-violet-50 p-6 shadow-sm text-right">
-        <div className="text-sm text-muted-foreground">لوحة {labels.branchLabel}</div>
-        <h2 className="text-2xl font-semibold mt-2">{branch?.name || "لوحة التحكم"}</h2>
+        <div className="text-sm text-muted-foreground">إدارة {labels.branchLabel}</div>
+        <h2 className="text-2xl font-semibold mt-2">{branch?.name || "غير محدد بعد"}</h2>
         {branch?.addressText && (
           <p className="text-sm text-muted-foreground mt-1">{branch.addressText}</p>
         )}
@@ -261,28 +289,28 @@ export function MunicipalityDashboard() {
       <div className="grid gap-4 md:grid-cols-4">
         <StatCard label={`${labels.vehicleLabel} العاملة الآن`} value={stats?.activeVehicles ?? "--"} tone="emerald" />
         <StatCard label={`${labels.pointLabel} النشطة الآن`} value={stats?.activePoints ?? "--"} tone="sky" />
-        <StatCard label={`${labels.pointLabel} المنجزة اليوم`} value={stats?.visitedPointsToday ?? "--"} tone="amber" />
-        <StatCard label="نسبة الإنجاز اليومي" value={`${stats?.dailyCompletionPercent ?? 0}%`} tone="violet" />
+        <StatCard label={`${labels.pointLabel} المزارة اليوم`} value={stats?.visitedPointsToday ?? "--"} tone="amber" />
+        <StatCard label="نسبة الإنجاز اليومية" value={`${stats?.dailyCompletionPercent ?? 0}%`} tone="violet" />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
         <div className={cn("space-y-4", loading && "opacity-70")}>
           <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-right">الخريطة و{labels.routeLabel}</h3>
+            <h3 className="text-lg font-semibold text-right">الخريطة التشغيلية</h3>
             <div className="text-sm text-muted-foreground">
-              {points.length} {labels.pointLabel} • {routes.length} {labels.routeLabel}
+              {points.length} {labels.pointLabel} • {zones.length} مناطق • {routes.length} {labels.routeLabel}
             </div>
           </div>
-          <MunicipalityMap municipality={branch} points={points} routes={routeLines} />
+          <MunicipalityMap municipality={branch} markers={markers} zones={zones} points={points} routes={routeLines} />
         </div>
 
         <div className="rounded-2xl border bg-card p-4 text-right shadow-sm">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-lg font-semibold">أحدث الأحداث</h3>
+            <h3 className="text-lg font-semibold">آخر الأحداث</h3>
             <span className="text-xs text-muted-foreground">آخر 8 أحداث</span>
           </div>
           <div className="space-y-3">
-            {events.length === 0 && <div className="text-sm text-muted-foreground">لا توجد أحداث بعد.</div>}
+            {events.length === 0 && <div className="text-sm text-muted-foreground">لا توجد أحداث حالياً.</div>}
             {events.map((event) => (
               <div key={event._id} className="rounded-lg border p-3">
                 <div className="flex items-center justify-between">
@@ -290,7 +318,7 @@ export function MunicipalityDashboard() {
                   <span className="text-xs text-muted-foreground">{event.eventTimestamp || ""}</span>
                 </div>
                 <div className="font-semibold mt-1">
-                  {event.name || event.pointName || `${labels.pointLabel} غير معروفة`}
+                  {event.name || event.pointName || `${labels.pointLabel} بدون اسم`}
                 </div>
                 <div className="text-xs text-muted-foreground mt-1">
                   {event.vehicleName || event.imei || ""}
@@ -308,7 +336,7 @@ export function MunicipalityDashboard() {
 
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="rounded-2xl border bg-gradient-to-br from-sky-50 to-emerald-50 p-4 shadow-sm text-right">
-          <h3 className="text-lg font-semibold mb-3">{labels.pointLabel} المنجزة يوميا</h3>
+          <h3 className="text-lg font-semibold mb-3">{labels.pointLabel} المزارة يومياً</h3>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={analytics?.daily || []}>
@@ -323,7 +351,7 @@ export function MunicipalityDashboard() {
         </div>
 
         <div className="rounded-2xl border bg-gradient-to-br from-violet-50 to-amber-50 p-4 shadow-sm text-right">
-          <h3 className="text-lg font-semibold mb-3">أحداث التشغيل اليومية</h3>
+          <h3 className="text-lg font-semibold mb-3">الأحداث اليومية</h3>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={analytics?.daily || []}>
@@ -339,7 +367,7 @@ export function MunicipalityDashboard() {
       </div>
 
       <div className="rounded-2xl border bg-gradient-to-br from-emerald-50 to-sky-50 p-4 shadow-sm text-right">
-        <h3 className="text-lg font-semibold mb-3">{labels.pointLabel} المنجزة شهريا</h3>
+        <h3 className="text-lg font-semibold mb-3">{labels.pointLabel} الشهرية</h3>
         <div className="h-64">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={analytics?.monthly || []}>
@@ -355,7 +383,7 @@ export function MunicipalityDashboard() {
 
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="rounded-2xl border bg-gradient-to-br from-amber-50 to-rose-50 p-4 shadow-sm text-right">
-          <h3 className="text-lg font-semibold mb-3">متوسط زمن التفريغ اليومي (دقيقة)</h3>
+          <h3 className="text-lg font-semibold mb-3">متوسط زمن الخدمة (دقائق)</h3>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={analytics?.daily || []}>
@@ -404,7 +432,7 @@ export function MunicipalityDashboard() {
         </div>
 
         <div className="rounded-2xl border bg-gradient-to-br from-violet-50 to-slate-50 p-4 shadow-sm text-right">
-          <h3 className="text-lg font-semibold mb-3">توزيع أحداث الدخول والخروج</h3>
+          <h3 className="text-lg font-semibold mb-3">توزيع أنواع أحداث المناطق</h3>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
@@ -422,13 +450,13 @@ export function MunicipalityDashboard() {
       </div>
 
       <div className="rounded-2xl border bg-card p-4 text-right shadow-sm">
-        <h3 className="text-lg font-semibold mb-3">تقارير CSV السريعة</h3>
+        <h3 className="text-lg font-semibold mb-3">تصدير CSV</h3>
         <div className="flex flex-wrap gap-3">
           <a className="rounded-lg border px-4 py-2 text-sm hover:bg-muted" href="/api/reports/vehicles">
-            تحميل تقرير {labels.vehicleLabel} (اليوم)
+            تحميل تقرير {labels.vehicleLabel} (CSV)
           </a>
           <a className="rounded-lg border px-4 py-2 text-sm hover:bg-muted" href="/api/reports/points">
-            تحميل تقرير {labels.pointLabel} (اليوم)
+            تحميل تقرير {labels.pointLabel} (CSV)
           </a>
         </div>
       </div>

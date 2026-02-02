@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 
 import { useEffect, useState } from "react"
 import { apiClient } from "@/lib/api/client"
@@ -20,10 +20,13 @@ export function RoutePointsManager({ routeId }: { routeId: string }) {
   const load = async () => {
     setLoading(true)
     try {
-      const [pointsRes, routePointsRes] = await Promise.all([
-        apiClient.get("/points"),
-        apiClient.get(`/routes/${routeId}/points`),
-      ])
+      let pointsRes: any
+      try {
+        pointsRes = await apiClient.get("/athar/zones")
+      } catch {
+        pointsRes = await apiClient.get("/points")
+      }
+      const routePointsRes = await apiClient.get(`/routes/${routeId}/points`)
       setPoints(pointsRes.points || pointsRes.data?.points || [])
       setRoutePoints(routePointsRes.routePoints || routePointsRes.data?.routePoints || [])
     } catch (error: any) {
@@ -109,4 +112,3 @@ export function RoutePointsManager({ routeId }: { routeId: string }) {
     </Card>
   )
 }
-
