@@ -1,17 +1,22 @@
 "use client"
 
+import dynamic from "next/dynamic"
 import { useEffect, useMemo, useState } from "react"
+import toast from "react-hot-toast"
 import { apiClient } from "@/lib/api/client"
+import { useLabels } from "@/hooks/use-labels"
 import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
-import toast from "react-hot-toast"
-import Link from "next/link"
-import { useLabels } from "@/hooks/use-labels"
+
+const RoutePreviewMap = dynamic(
+  () => import("@/components/municipality/route-preview-map").then((m) => m.RoutePreviewMap),
+  { ssr: false }
+)
 
 type RouteItem = {
   _id: string
@@ -20,6 +25,30 @@ type RouteItem = {
   isActive: boolean
 }
 
+type PointItem = {
+  _id: string
+  name: string
+  nameAr?: string
+  lat: number
+  lng: number
+}
+
+type RoutePointItem = {
+  pointId: string
+  order: number
+}
+
+type PreviewResponse = {
+  geometry: {
+    type: "LineString"
+    coordinates: number[][]
+  }
+  source: "osrm" | "fallback"
+  points: PointItem[]
+}
+
+const PAGE_SIZE = 10
+
 const emptyForm: Partial<RouteItem> = {
   name: "",
   description: "",
@@ -27,9 +56,11 @@ const emptyForm: Partial<RouteItem> = {
 }
 
 export function RoutesManager() {
-  const PAGE_SIZE = 10
+  const { labels } = useLabels()
 
   const [items, setItems] = useState<RouteItem[]>([])
+  const [loading, setLoading] = useState(false)
+
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
   const [page, setPage] = useState(1)
@@ -37,8 +68,17 @@ export function RoutesManager() {
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState<RouteItem | null>(null)
   const [form, setForm] = useState<Partial<RouteItem>>(emptyForm)
-  const [loading, setLoading] = useState(false)
-  const { labels } = useLabels()
+
+  const [points, setPoints] = useState<PointItem[]>([])
+  const [pointsLoading, setPointsLoading] = useState(false)
+  const [pointSearch, setPointSearch] = useState("")
+  const [routePoints, setRoutePoints] = useState<RoutePointItem[]>([])
+
+  const [previewOpen, setPreviewOpen] = useState(false)
+  const [previewLoading, setPreviewLoading] = useState(false)
+  const [previewData, setPreviewData] = useState<PreviewResponse | null>(null)
+
+  const pointMap = useMemo(() => new Map(points.map((p) => [p._id, p])), [points])
 
   const load = async () => {
     setLoading(true)
@@ -49,6 +89,18 @@ export function RoutesManager() {
       toast.error(error.message || `فشل تحميل ${labels.routeLabel}`)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const loadPoints = async () => {
+    setPointsLoading(true)
+    try {
+      const res: any = await apiClient.get("/points")
+      setPoints(res.points || res.data?.points || [])
+    } catch (error: any) {
+      toast.error(error.message || `فشل تحميل ${labels.pointLabel}`)
+    } finally {
+      setPointsLoading(false)
     }
   }
 
@@ -80,19 +132,125 @@ export function RoutesManager() {
     if (page > totalPages) setPage(totalPages)
   }, [page, totalPages])
 
-  const openCreate = () => {
+  const selectedPointIds = useMemo(() => new Set(routePoints.map((rp) => rp.pointId)), [routePoints])
+
+  const availablePoints = useMemo(() => {
+    const q = pointSearch.trim().toLowerCase()
+    return points.filter((point) => {
+      if (selectedPointIds.has(point._id)) return false
+      if (!q) return true
+      return `${point.name} ${point.nameAr || ""}`.toLowerCase().includes(q)
+    })
+  }, [points, selectedPointIds, pointSearch])
+
+  const orderedRoutePoints = useMemo(
+    () => routePoints.slice().sort((a, b) => a.order - b.order),
+    [routePoints]
+  )
+
+  const openCreate = async () => {
     setEditing(null)
     setForm({ ...emptyForm })
+    setRoutePoints([])
+    setPointSearch("")
+    setPreviewData(null)
+    setPreviewOpen(false)
     setOpen(true)
+    await loadPoints()
   }
 
-  const openEdit = (item: RouteItem) => {
+  const openEdit = async (item: RouteItem) => {
     setEditing(item)
     setForm({
       ...item,
       description: item.description || "",
     })
+    setRoutePoints([])
+    setPointSearch("")
+    setPreviewData(null)
+    setPreviewOpen(false)
     setOpen(true)
+
+    await Promise.all([
+      loadPoints(),
+      (async () => {
+        try {
+          const res: any = await apiClient.get(`/routes/${item._id}/points`)
+          const list = (res.routePoints || res.data?.routePoints || []) as RoutePointItem[]
+          const sorted = list.slice().sort((a, b) => a.order - b.order)
+          setRoutePoints(sorted.map((rp, index) => ({ pointId: rp.pointId, order: index })))
+        } catch (error: any) {
+          toast.error(error.message || `فشل تحميل ${labels.pointLabel} للمسار`)
+        }
+      })(),
+    ])
+  }
+
+  const addPointToRoute = (pointId: string) => {
+    if (routePoints.some((rp) => rp.pointId === pointId)) return
+    setRoutePoints((prev) => [...prev, { pointId, order: prev.length }])
+  }
+
+  const removePointFromRoute = (pointId: string) => {
+    setRoutePoints((prev) =>
+      prev
+        .filter((rp) => rp.pointId !== pointId)
+        .map((rp, index) => ({ ...rp, order: index }))
+    )
+  }
+
+  const movePoint = (pointId: string, direction: "up" | "down") => {
+    setRoutePoints((prev) => {
+      const sorted = prev.slice().sort((a, b) => a.order - b.order)
+      const index = sorted.findIndex((rp) => rp.pointId === pointId)
+      if (index < 0) return prev
+
+      const target = direction === "up" ? index - 1 : index + 1
+      if (target < 0 || target >= sorted.length) return prev
+
+      const temp = sorted[index]
+      sorted[index] = sorted[target]
+      sorted[target] = temp
+
+      return sorted.map((rp, idx) => ({ ...rp, order: idx }))
+    })
+  }
+
+  const openPreviewByPointIds = async (pointIds: string[]) => {
+    if (pointIds.length < 2) {
+      toast.error(`\u064a\u062c\u0628 \u0627\u062e\u062a\u064a\u0627\u0631 \u0646\u0642\u0637\u062a\u064a\u0646 \u0639\u0644\u0649 \u0627\u0644\u0623\u0642\u0644 \u0636\u0645\u0646 ${labels.pointLabel}`)
+      return
+    }
+
+    setPreviewLoading(true)
+    setPreviewOpen(true)
+    try {
+      const res: any = await apiClient.post("/routes/preview", { pointIds })
+      const data = (res.data || res) as PreviewResponse
+      setPreviewData(data)
+      if (data.source === "fallback") {
+        toast("\u062a\u0645 \u0639\u0631\u0636 \u062e\u0637 \u0645\u0628\u0627\u0634\u0631 \u0644\u0623\u0646 \u062a\u0648\u0644\u064a\u062f \u0627\u0644\u0645\u0633\u0627\u0631 \u0639\u0644\u0649 \u0627\u0644\u0637\u0631\u0642 \u0644\u0645 \u064a\u0646\u062c\u062d \u062d\u0627\u0644\u064a\u0627\u064b")
+      }
+    } catch (error: any) {
+      setPreviewData(null)
+      toast.error(error.message || "\u0641\u0634\u0644 \u062a\u0648\u0644\u064a\u062f \u0645\u0639\u0627\u064a\u0646\u0629 \u0627\u0644\u0645\u0633\u0627\u0631")
+    } finally {
+      setPreviewLoading(false)
+    }
+  }
+
+  const openPreviewForRoute = async (routeId: string) => {
+    try {
+      const res: any = await apiClient.get(`/routes/${routeId}/points`)
+      const list = (res.routePoints || res.data?.routePoints || []) as RoutePointItem[]
+      const pointIds = list
+        .slice()
+        .sort((a, b) => a.order - b.order)
+        .map((rp) => rp.pointId)
+      await openPreviewByPointIds(pointIds)
+    } catch (error: any) {
+      toast.error(error.message || "\u0641\u0634\u0644 \u062a\u062d\u0645\u064a\u0644 \u0646\u0642\u0627\u0637 \u0627\u0644\u0645\u0633\u0627\u0631")
+    }
   }
 
   const submit = async () => {
@@ -100,12 +258,25 @@ export function RoutesManager() {
       toast.error(`اسم ${labels.routeLabel} مطلوب`)
       return
     }
+
+    if (routePoints.length < 2) {
+      toast.error(`يجب اختيار نقطتين على الأقل ضمن ${labels.pointLabel}`)
+      return
+    }
+
     try {
       if (editing) {
         await apiClient.patch(`/routes/${editing._id}`, form)
+        await apiClient.post(`/routes/${editing._id}/points`, { points: routePoints })
         toast.success(`تم تحديث ${labels.routeLabel}`)
       } else {
-        await apiClient.post("/routes", form)
+        const createRes: any = await apiClient.post("/routes", form)
+        const createdRoute = createRes.route || createRes.data?.route
+        const routeId = createdRoute?._id
+        if (!routeId) {
+          throw new Error("تعذر الحصول على معرف المسار بعد الإنشاء")
+        }
+        await apiClient.post(`/routes/${routeId}/points`, { points: routePoints })
         toast.success(`تم إضافة ${labels.routeLabel}`)
       }
       setOpen(false)
@@ -134,6 +305,7 @@ export function RoutesManager() {
           <Button onClick={openCreate}>إضافة {labels.routeLabel}</Button>
         </div>
       </CardHeader>
+
       <CardContent className="space-y-3">
         <div className="grid gap-3 md:grid-cols-2">
           <Input
@@ -161,7 +333,6 @@ export function RoutesManager() {
                   <th className="p-2">الاسم</th>
                   <th className="p-2">الوصف</th>
                   <th className="p-2">الحالة</th>
-                  <th className="p-2">{labels.pointLabel}</th>
                   <th className="p-2">الإجراءات</th>
                 </tr>
               </thead>
@@ -171,20 +342,16 @@ export function RoutesManager() {
                     <td className="p-2">{item.name}</td>
                     <td className="p-2">{item.description || "-"}</td>
                     <td className="p-2">{item.isActive ? "مفعّل" : "معطّل"}</td>
-                    <td className="p-2">
-                      <Link className="text-primary underline" href={`/dashboard/routes/${item._id}/points`}>
-                        ضبط {labels.pointLabel}
-                      </Link>
-                    </td>
                     <td className="p-2 space-x-2 space-x-reverse">
-                      <Button variant="outline" onClick={() => openEdit(item)}>تعديل</Button>
-                      <Button variant="destructive" onClick={() => remove(item)}>حذف</Button>
+                      <Button variant="outline" onClick={() => openPreviewForRoute(item._id)}>{"\u0639\u0631\u0636 \u0627\u0644\u0645\u0633\u0627\u0631"}</Button>
+                      <Button variant="outline" onClick={() => openEdit(item)}>{"\u062a\u0639\u062f\u064a\u0644"}</Button>
+                      <Button variant="destructive" onClick={() => remove(item)}>{"\u062d\u0630\u0641"}</Button>
                     </td>
                   </tr>
                 ))}
                 {paginatedItems.length === 0 && (
                   <tr>
-                    <td className="p-4 text-center text-muted-foreground" colSpan={5}>
+                    <td className="p-4 text-center text-muted-foreground" colSpan={4}>
                       لا توجد نتائج
                     </td>
                   </tr>
@@ -193,43 +360,118 @@ export function RoutesManager() {
             </table>
           </div>
         )}
+
         <div className="flex items-center justify-between border rounded-lg p-2">
-          <span className="text-sm text-muted-foreground">
-            صفحة {page} من {totalPages}
-          </span>
+          <span className="text-sm text-muted-foreground">صفحة {page} من {totalPages}</span>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => setPage((p) => p + 1)} disabled={page >= totalPages}>
-              التالي
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => setPage((p) => p - 1)} disabled={page <= 1}>
-              السابق
-            </Button>
+            <Button variant="outline" size="sm" onClick={() => setPage((p) => p + 1)} disabled={page >= totalPages}>التالي</Button>
+            <Button variant="outline" size="sm" onClick={() => setPage((p) => p - 1)} disabled={page <= 1}>السابق</Button>
           </div>
         </div>
       </CardContent>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="text-right">
+        <DialogContent className="text-right w-[95vw] max-w-6xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editing ? `تعديل ${labels.routeLabel}` : `إضافة ${labels.routeLabel}`}</DialogTitle>
           </DialogHeader>
-          <div className="grid gap-3">
-            <div>
-              <Label>الاسم</Label>
-              <Input value={form.name || ""} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+
+          <div className="grid gap-4">
+            <div className="grid gap-3 md:grid-cols-2">
+              <div>
+                <Label>الاسم</Label>
+                <Input value={form.name || ""} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+              </div>
+              <div>
+                <Label>الوصف</Label>
+                <Input value={form.description || ""} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+              </div>
             </div>
-            <div>
-              <Label>الوصف</Label>
-              <Input value={form.description || ""} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+
+            <div className="grid gap-4 lg:grid-cols-2">
+              <div className="border rounded-lg p-3 space-y-3">
+                <div className="font-medium">النقاط المتاحة</div>
+                <Input
+                  placeholder={`بحث في ${labels.pointLabel}...`}
+                  value={pointSearch}
+                  onChange={(e) => setPointSearch(e.target.value)}
+                />
+
+                {pointsLoading ? (
+                  <div className="text-sm text-muted-foreground">جاري تحميل {labels.pointLabel}...</div>
+                ) : (
+                  <div className="max-h-[320px] overflow-y-auto border rounded-lg">
+                    {availablePoints.map((point) => (
+                      <div key={point._id} className="flex items-center justify-between p-2 border-b last:border-b-0">
+                        <span className="text-sm">{point.nameAr || point.name}</span>
+                        <Button type="button" size="sm" variant="outline" onClick={() => addPointToRoute(point._id)}>
+                          إضافة
+                        </Button>
+                      </div>
+                    ))}
+                    {availablePoints.length === 0 && (
+                      <div className="p-3 text-sm text-muted-foreground">لا توجد نقاط مطابقة.</div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="border rounded-lg p-3 space-y-3">
+                <div className="font-medium">تسلسل المسار ({orderedRoutePoints.length})</div>
+                <div className="max-h-[320px] overflow-y-auto space-y-2">
+                  {orderedRoutePoints.map((rp, index) => (
+                    <div key={rp.pointId} className="flex items-center justify-between border rounded-lg p-2">
+                      <div className="text-sm font-medium">
+                        {index + 1}. {pointMap.get(rp.pointId)?.nameAr || pointMap.get(rp.pointId)?.name || rp.pointId}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button type="button" size="sm" variant="outline" onClick={() => movePoint(rp.pointId, "up")} disabled={index === 0}>↑</Button>
+                        <Button type="button" size="sm" variant="outline" onClick={() => movePoint(rp.pointId, "down")} disabled={index === orderedRoutePoints.length - 1}>↓</Button>
+                        <Button type="button" size="sm" variant="destructive" onClick={() => removePointFromRoute(rp.pointId)}>إزالة</Button>
+                      </div>
+                    </div>
+                  ))}
+                  {orderedRoutePoints.length === 0 && (
+                    <div className="text-sm text-muted-foreground">لم يتم اختيار نقاط بعد.</div>
+                  )}
+                </div>
+              </div>
             </div>
+
             <div className="flex items-center justify-between border rounded-lg p-2">
               <span>مفعّل</span>
               <Switch checked={!!form.isActive} onCheckedChange={(checked) => setForm({ ...form, isActive: checked })} />
             </div>
           </div>
+
           <DialogFooter className="flex-row-reverse gap-2">
             <Button variant="outline" onClick={() => setOpen(false)}>إلغاء</Button>
             <Button onClick={submit}>{editing ? "تحديث" : "إضافة"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className="text-right w-[95vw] max-w-6xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>معاينة المسار على الخريطة</DialogTitle>
+          </DialogHeader>
+
+          {previewLoading ? (
+            <div className="text-sm text-muted-foreground">جاري توليد المسار...</div>
+          ) : previewData ? (
+            <div className="space-y-3">
+              <div className="text-sm text-muted-foreground">
+                مصدر المسار: {previewData.source === "osrm" ? "حسب الطرق" : "خط مباشر"}
+              </div>
+              <RoutePreviewMap points={previewData.points} geometry={previewData.geometry} />
+            </div>
+          ) : (
+            <div className="text-sm text-muted-foreground">لا توجد بيانات للمعاينة.</div>
+          )}
+
+          <DialogFooter className="flex-row-reverse">
+            <Button variant="outline" onClick={() => setPreviewOpen(false)}>إغلاق</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
