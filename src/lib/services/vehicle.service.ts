@@ -8,6 +8,9 @@ import Vehicle, { IVehicle } from '@/models/Vehicle';
 import Driver from '@/models/Driver';
 import Branch from '@/models/Branch';
 import Route from '@/models/Route';
+import RoutePoint from '@/models/RoutePoint';
+import Point from '@/models/Point';
+import { AtharService } from '@/lib/services/athar.service';
 
 export interface CreateVehicleData {
   branchId: string;
@@ -31,6 +34,47 @@ export interface UpdateVehicleData {
 }
 
 export class VehicleService {
+  private getWebhookUrl(): string {
+    const base = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || 'http://localhost:3000';
+    return `${base}/api/athar/webhook`;
+  }
+
+  private async createAtharRouteEventsForVehicle(
+    branchId: string,
+    routeId: string,
+    imei: string
+  ): Promise<void> {
+    const routePoints = await RoutePoint.find({ routeId })
+      .sort({ order: 1 })
+      .select('pointId order')
+      .lean();
+
+    if (!routePoints.length) return;
+
+    const pointIds = routePoints.map((rp) => rp.pointId);
+    const points = await Point.find({
+      _id: { $in: pointIds },
+      branchId,
+      zoneId: { $ne: null },
+      isActive: true,
+    })
+      .select('name nameAr nameEn zoneId')
+      .lean();
+
+    const pointById = new Map(points.map((p) => [String(p._id), p]));
+    const atharService = await AtharService.forBranch(branchId);
+    const webhookUrl = this.getWebhookUrl();
+
+    for (const rp of routePoints) {
+      const point = pointById.get(String(rp.pointId));
+      if (!point?.zoneId) continue;
+
+      const pointName = point.nameAr || point.nameEn || point.name || 'Point';
+      await atharService.createZoneEvent(pointName, point.zoneId, imei, 'zone_in', webhookUrl);
+      await atharService.createZoneEvent(pointName, point.zoneId, imei, 'zone_out', webhookUrl);
+    }
+  }
+
   async create(data: CreateVehicleData): Promise<IVehicle> {
     await connectDB();
 
@@ -44,6 +88,8 @@ export class VehicleService {
       if (!route) {
         throw new Error('المسار غير موجود أو غير تابع للفرع');
       }
+
+      await this.createAtharRouteEventsForVehicle(data.branchId, data.routeId, data.imei);
     }
 
     const vehicle = await Vehicle.create({
@@ -104,6 +150,17 @@ export class VehicleService {
       if (!route) {
         throw new Error('المسار غير موجود أو غير تابع للفرع');
       }
+
+      const nextRouteId = String(data.routeId);
+      const prevRouteId = vehicle.routeId ? String(vehicle.routeId) : null;
+      const nextImei = data.imei || vehicle.imei;
+      if (prevRouteId !== nextRouteId) {
+        await this.createAtharRouteEventsForVehicle(branchId, nextRouteId, nextImei);
+      }
+    }
+
+    if (data.routeId === undefined && data.imei && vehicle.routeId && data.imei !== vehicle.imei) {
+      await this.createAtharRouteEventsForVehicle(branchId, String(vehicle.routeId), data.imei);
     }
 
     const updated = await Vehicle.findByIdAndUpdate(vehicle._id, updateData, {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { MunicipalityMap } from "./municipality-map";
 import { cn } from "@/lib/utils";
 import {
@@ -41,11 +41,15 @@ type Point = {
   type: string;
 };
 
-type AtharMarker = {
+type LiveVehicle = {
   id: string;
-  lat: number;
-  lng: number;
-  name?: string;
+  busNumber: string;
+  driverName: string;
+  status: "moving" | "stopped" | "offline";
+  lastUpdate: string;
+  speed: number;
+  coordinates: [number, number] | null;
+  imei?: string;
 };
 
 type AtharZone = {
@@ -63,11 +67,6 @@ type Route = {
     type: "LineString";
     coordinates: number[][];
   };
-};
-
-type RoutePoint = {
-  pointId: string;
-  order: number;
 };
 
 type Stats = {
@@ -122,11 +121,10 @@ function StatCard({
 
 export function MunicipalityDashboard() {
   const [branch, setBranch] = useState<BranchInfo | null>(null);
-  const [markers, setMarkers] = useState<AtharMarker[]>([]);
+  const [liveVehicles, setLiveVehicles] = useState<LiveVehicle[]>([]);
   const [zones, setZones] = useState<AtharZone[]>([]);
   const [points, setPoints] = useState<Point[]>([]);
   const [routes, setRoutes] = useState<Route[]>([]);
-  const [routePoints, setRoutePoints] = useState<Record<string, RoutePoint[]>>({});
   const [stats, setStats] = useState<Stats | null>(null);
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
   const [events, setEvents] = useState<EventItem[]>([]);
@@ -140,12 +138,12 @@ export function MunicipalityDashboard() {
 
     async function loadInitial() {
       try {
-        const atharMarkersPromise = fetch("/api/athar/markers").then((r) => (r.ok ? r : null));
+        const liveVehiclesPromise = fetch("/api/vehicles/locations").then((r) => (r.ok ? r : null));
         const atharZonesPromise = fetch("/api/athar/zones").then((r) => (r.ok ? r : fetch("/api/points")));
-        const [branchRes, markersRes, pointsRes, routesRes, statsRes, eventsRes, analyticsRes] =
+        const [branchRes, liveVehiclesRes, pointsRes, routesRes, statsRes, eventsRes, analyticsRes] =
           await Promise.all([
             fetch("/api/municipality"),
-            atharMarkersPromise,
+            liveVehiclesPromise,
             atharZonesPromise,
             fetch("/api/routes"),
             fetch("/api/dashboard/stats"),
@@ -159,11 +157,11 @@ export function MunicipalityDashboard() {
           const data = await branchRes.json();
           setBranch(data.branch || data.municipality || null);
         }
-        if (markersRes?.ok) {
-          const data = await markersRes.json();
-          setMarkers(data.markers || []);
+        if (liveVehiclesRes?.ok) {
+          const data = await liveVehiclesRes.json();
+          setLiveVehicles(data.data || []);
         } else {
-          setMarkers([]);
+          setLiveVehicles([]);
         }
         if (pointsRes.ok) {
           const data = await pointsRes.json();
@@ -193,6 +191,10 @@ export function MunicipalityDashboard() {
 
     loadInitial();
     const interval = setInterval(() => {
+      fetch("/api/vehicles/locations")
+        .then((res) => res.json())
+        .then((data) => setLiveVehicles(data.data || []))
+        .catch(() => null);
       fetch("/api/dashboard/stats")
         .then((res) => res.json())
         .then((data) => setStats(data))
@@ -214,57 +216,24 @@ export function MunicipalityDashboard() {
   }, []);
 
   useEffect(() => {
-    let active = true;
-
-    async function loadRoutePoints() {
-      if (routes.length === 0) return;
-      const entries = await Promise.all(
-        routes.map(async (route) => {
-          const res = await fetch(`/api/routes/${route._id}/points`);
-          if (!res.ok) return [route._id, []] as [string, RoutePoint[]];
-          const data = await res.json();
-          return [route._id, data.routePoints || []] as [string, RoutePoint[]];
-        })
-      );
-
-      if (!active) return;
-      const map: Record<string, RoutePoint[]> = {};
-      for (const [routeId, pointsList] of entries) {
-        map[routeId] = pointsList;
+    const source = new EventSource("/api/vehicles/locations/websocket");
+    source.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(event.data);
+        if (payload?.type === "bus_locations" && Array.isArray(payload?.data)) {
+          setLiveVehicles(payload.data);
+        }
+      } catch {
+        // ignore malformed events
       }
-      setRoutePoints(map);
-    }
-
-    loadRoutePoints();
-
-    return () => {
-      active = false;
     };
-  }, [routes]);
 
-  const routeLines = useMemo(() => {
-    if (!routes.length || !points.length) return [];
-    const pointMap = new Map(points.map((p) => [p._id, p]));
+    source.onerror = () => {
+      source.close();
+    };
 
-    return routes.map((route) => {
-      const list = (routePoints[route._id] || [])
-        .slice()
-        .sort((a, b) => a.order - b.order)
-        .map((rp) => {
-          const point = pointMap.get(rp.pointId);
-          if (!point) return null;
-          return { lat: point.lat, lng: point.lng, label: point.nameAr || point.name };
-        })
-        .filter(Boolean) as Array<{ lat: number; lng: number; label: string }>;
-
-      return {
-        _id: route._id,
-        name: route.name,
-        path: route.path,
-        points: list,
-      };
-    });
-  }, [routes, routePoints, points]);
+    return () => source.close();
+  }, []);
 
   const pointTypeData = analytics?.pointTypes || [];
   const vehicleStatusData = [
@@ -301,7 +270,7 @@ export function MunicipalityDashboard() {
               {points.length} {labels.pointLabel} • {zones.length} مناطق • {routes.length} {labels.routeLabel}
             </div>
           </div>
-          <MunicipalityMap municipality={branch} markers={markers} zones={zones} points={points} routes={routeLines} />
+          <MunicipalityMap municipality={branch} liveVehicles={liveVehicles} zones={zones} points={points} />
         </div>
 
         <div className="rounded-2xl border bg-card p-4 text-right shadow-sm">

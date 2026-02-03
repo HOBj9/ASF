@@ -1,7 +1,9 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import toast from "react-hot-toast"
 import { apiClient } from "@/lib/api/client"
+import { useLabels } from "@/hooks/use-labels"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -9,8 +11,6 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
-import toast from "react-hot-toast"
-import { useLabels } from "@/hooks/use-labels"
 
 type Vehicle = {
   _id: string
@@ -23,7 +23,6 @@ type Vehicle = {
 }
 
 type Driver = { _id: string; name: string }
-
 type RouteItem = { _id: string; name: string }
 
 const emptyForm: Partial<Vehicle> = {
@@ -37,6 +36,7 @@ const emptyForm: Partial<Vehicle> = {
 
 export function VehiclesManager() {
   const PAGE_SIZE = 10
+  const { labels } = useLabels()
 
   const [items, setItems] = useState<Vehicle[]>([])
   const [drivers, setDrivers] = useState<Driver[]>([])
@@ -51,8 +51,12 @@ export function VehiclesManager() {
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState<Vehicle | null>(null)
   const [form, setForm] = useState<Partial<Vehicle>>(emptyForm)
+
+  const [assignOpen, setAssignOpen] = useState(false)
+  const [assigning, setAssigning] = useState<Vehicle | null>(null)
+  const [assignRouteId, setAssignRouteId] = useState("")
+
   const [loading, setLoading] = useState(false)
-  const { labels } = useLabels()
 
   const load = async () => {
     setLoading(true)
@@ -92,6 +96,7 @@ export function VehiclesManager() {
 
       const driverName = drivers.find((d) => d._id === item.driverId)?.name || ""
       const routeName = routes.find((r) => r._id === item.routeId)?.name || ""
+
       return `${item.name} ${item.plateNumber || ""} ${item.imei} ${driverName} ${routeName}`
         .toLowerCase()
         .includes(q)
@@ -130,22 +135,54 @@ export function VehiclesManager() {
   }
 
   const submit = async () => {
-    if (!form.name || !form.imei) {
+    const payload: Partial<Vehicle> = {
+      ...form,
+      driverId: form.driverId === "none" ? "" : form.driverId,
+      routeId: form.routeId === "none" ? "" : form.routeId,
+    }
+
+    if (!payload.name || !payload.imei) {
       toast.error("الاسم ورقم IMEI مطلوبان")
       return
     }
+
     try {
       if (editing) {
-        await apiClient.patch(`/vehicles/${editing._id}`, form)
+        await apiClient.patch(`/vehicles/${editing._id}`, payload)
         toast.success(`تم تحديث ${labels.vehicleLabel}`)
       } else {
-        await apiClient.post("/vehicles", form)
+        await apiClient.post("/vehicles", payload)
         toast.success(`تم إضافة ${labels.vehicleLabel}`)
       }
       setOpen(false)
       await load()
     } catch (error: any) {
       toast.error(error.message || "حدث خطأ")
+    }
+  }
+
+  const openAssignRoute = (item: Vehicle) => {
+    setAssigning(item)
+    setAssignRouteId(item.routeId || "")
+    setAssignOpen(true)
+  }
+
+  const submitAssignRoute = async () => {
+    if (!assigning) return
+    if (!assignRouteId) {
+      toast.error(`يرجى اختيار ${labels.routeLabel}`)
+      return
+    }
+
+    try {
+      await apiClient.patch(`/vehicles/${assigning._id}`, { routeId: assignRouteId })
+      toast.success(`تم ربط ${labels.vehicleLabel} بـ ${labels.routeLabel} وإنشاء أحداث Athar`)
+      setAssignOpen(false)
+      setAssigning(null)
+      setAssignRouteId("")
+      await load()
+    } catch (error: any) {
+      toast.error(error.message || "حدث خطأ أثناء ربط المركبة بالمسار")
     }
   }
 
@@ -163,11 +200,12 @@ export function VehiclesManager() {
   return (
     <Card className="text-right">
       <CardHeader>
-        <div className="flex items-center justify-between flex-row-reverse">
+        <div className="flex flex-row-reverse items-center justify-between">
           <CardTitle>{labels.vehicleLabel}</CardTitle>
           <Button onClick={openCreate}>إضافة {labels.vehicleLabel}</Button>
         </div>
       </CardHeader>
+
       <CardContent className="space-y-3">
         <div className="grid gap-3 md:grid-cols-4">
           <Input
@@ -175,24 +213,33 @@ export function VehiclesManager() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
+
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="text-right"><SelectValue placeholder="الحالة" /></SelectTrigger>
+            <SelectTrigger className="text-right">
+              <SelectValue placeholder="الحالة" />
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">كل الحالات</SelectItem>
               <SelectItem value="active">مفعّلة</SelectItem>
               <SelectItem value="inactive">معطّلة</SelectItem>
             </SelectContent>
           </Select>
+
           <Select value={driverFilter} onValueChange={setDriverFilter}>
-            <SelectTrigger className="text-right"><SelectValue placeholder={labels.driverLabel} /></SelectTrigger>
+            <SelectTrigger className="text-right">
+              <SelectValue placeholder={labels.driverLabel} />
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">كل {labels.driverLabel}</SelectItem>
               <SelectItem value="with">مرتبطة بسائق</SelectItem>
               <SelectItem value="without">بدون سائق</SelectItem>
             </SelectContent>
           </Select>
+
           <Select value={routeFilter} onValueChange={setRouteFilter}>
-            <SelectTrigger className="text-right"><SelectValue placeholder={labels.routeLabel} /></SelectTrigger>
+            <SelectTrigger className="text-right">
+              <SelectValue placeholder={labels.routeLabel} />
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">كل {labels.routeLabel}</SelectItem>
               <SelectItem value="with">مرتبطة بمسار</SelectItem>
@@ -226,12 +273,14 @@ export function VehiclesManager() {
                     <td className="p-2">{drivers.find((d) => d._id === item.driverId)?.name || "-"}</td>
                     <td className="p-2">{routes.find((r) => r._id === item.routeId)?.name || "-"}</td>
                     <td className="p-2">{item.isActive ? "مفعّلة" : "معطّلة"}</td>
-                    <td className="p-2 space-x-2 space-x-reverse">
+                    <td className="space-x-2 space-x-reverse p-2">
+                      <Button variant="outline" onClick={() => openAssignRoute(item)}>ربط بمسار</Button>
                       <Button variant="outline" onClick={() => openEdit(item)}>تعديل</Button>
                       <Button variant="destructive" onClick={() => remove(item)}>حذف</Button>
                     </td>
                   </tr>
                 ))}
+
                 {paginatedItems.length === 0 && (
                   <tr>
                     <td className="p-4 text-center text-muted-foreground" colSpan={7}>
@@ -243,10 +292,9 @@ export function VehiclesManager() {
             </table>
           </div>
         )}
-        <div className="flex items-center justify-between border rounded-lg p-2">
-          <span className="text-sm text-muted-foreground">
-            صفحة {page} من {totalPages}
-          </span>
+
+        <div className="flex items-center justify-between rounded-lg border p-2">
+          <span className="text-sm text-muted-foreground">صفحة {page} من {totalPages}</span>
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={() => setPage((p) => p + 1)} disabled={page >= totalPages}>
               التالي
@@ -263,6 +311,7 @@ export function VehiclesManager() {
           <DialogHeader>
             <DialogTitle>{editing ? `تعديل ${labels.vehicleLabel}` : `إضافة ${labels.vehicleLabel}`}</DialogTitle>
           </DialogHeader>
+
           <div className="grid gap-3">
             <div>
               <Label>الاسم</Label>
@@ -280,10 +329,10 @@ export function VehiclesManager() {
               <Label>{labels.driverLabel}</Label>
               <Select value={form.driverId || ""} onValueChange={(value) => setForm({ ...form, driverId: value })}>
                 <SelectTrigger className="text-right">
-                  <SelectValue placeholder={`اختيار ${labels.driverLabel}`} />
+                  <SelectValue placeholder={`اختر ${labels.driverLabel}`} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">بدون</SelectItem>
+                  <SelectItem value="none">بدون</SelectItem>
                   {drivers.map((driver) => (
                     <SelectItem key={driver._id} value={driver._id}>{driver.name}</SelectItem>
                   ))}
@@ -294,24 +343,62 @@ export function VehiclesManager() {
               <Label>{labels.routeLabel}</Label>
               <Select value={form.routeId || ""} onValueChange={(value) => setForm({ ...form, routeId: value })}>
                 <SelectTrigger className="text-right">
-                  <SelectValue placeholder={`اختيار ${labels.routeLabel}`} />
+                  <SelectValue placeholder={`اختر ${labels.routeLabel}`} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">بدون</SelectItem>
+                  <SelectItem value="none">بدون</SelectItem>
                   {routes.map((route) => (
                     <SelectItem key={route._id} value={route._id}>{route.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
-            <div className="flex items-center justify-between border rounded-lg p-2">
+            <div className="flex items-center justify-between rounded-lg border p-2">
               <span>مفعّلة</span>
               <Switch checked={!!form.isActive} onCheckedChange={(checked) => setForm({ ...form, isActive: checked })} />
             </div>
           </div>
+
           <DialogFooter className="flex-row-reverse gap-2">
             <Button variant="outline" onClick={() => setOpen(false)}>إلغاء</Button>
-            <Button onClick={submit}>{editing ? "تحديث" : "إضافة"}</Button>
+            <Button onClick={submit}>
+              {editing ? "تحديث" : "إضافة"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={assignOpen} onOpenChange={setAssignOpen}>
+        <DialogContent className="text-right">
+          <DialogHeader>
+            <DialogTitle>{`ربط ${labels.vehicleLabel} بـ ${labels.routeLabel}`}</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <div className="text-sm text-muted-foreground">
+              {assigning ? `المركبة: ${assigning.name}` : ""}
+            </div>
+            <div>
+              <Label>{labels.routeLabel}</Label>
+              <Select value={assignRouteId} onValueChange={setAssignRouteId}>
+                <SelectTrigger className="text-right">
+                  <SelectValue placeholder={`اختر ${labels.routeLabel}`} />
+                </SelectTrigger>
+                <SelectContent>
+                  {routes.map((route) => (
+                    <SelectItem key={route._id} value={route._id}>{route.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              عند الربط سيتم إنشاء أحداث الدخول والخروج على Athar لكل نقاط المسار المرتبطة بمناطق.
+            </p>
+          </div>
+
+          <DialogFooter className="flex-row-reverse gap-2">
+            <Button variant="outline" onClick={() => setAssignOpen(false)}>إلغاء</Button>
+            <Button onClick={submitAssignRoute}>تأكيد الربط</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

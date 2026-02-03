@@ -190,6 +190,43 @@ export class AtharService {
     return markers;
   }
 
+  async getObjectLocations(
+    imeis: string[]
+  ): Promise<Record<string, { lat: number | null; lng: number | null; engineStatus: boolean; speed: number }>> {
+    const uniqueImeis = Array.from(
+      new Set(imeis.map((v) => String(v || '').trim()).filter(Boolean))
+    );
+
+    if (!uniqueImeis.length) return {};
+
+    const cmd = `OBJECT_GET_LOCATIONS,${uniqueImeis.join(';')}`;
+    const response = await this.makeRequest({ cmd });
+    const source = (response?.data ?? response ?? {}) as Record<string, any>;
+
+    const output: Record<
+      string,
+      { lat: number | null; lng: number | null; engineStatus: boolean; speed: number }
+    > = {};
+
+    for (const imei of uniqueImeis) {
+      const info = source?.[imei] ?? null;
+      const lat = Number(info?.lat);
+      const lng = Number(info?.lng);
+      const engineStatus = String(info?.params?.acc ?? '') === '1';
+      const speedRaw = info?.speed ?? info?.params?.speed ?? 0;
+      const speed = Number.isFinite(Number(speedRaw)) ? Number(speedRaw) : 0;
+
+      output[imei] = {
+        lat: Number.isFinite(lat) ? lat : null,
+        lng: Number.isFinite(lng) ? lng : null,
+        engineStatus,
+        speed,
+      };
+    }
+
+    return output;
+  }
+
   async findZoneIdByName(name: string): Promise<string | null> {
     console.log('[Athar] findZoneIdByName: name=', name);
     const zones = await this.getZones();
