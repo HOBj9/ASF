@@ -3,10 +3,11 @@
 import { useMemo, useState } from "react";
 import { MapContainer, TileLayer, Marker, Popup, Circle, Polygon } from "react-leaflet";
 import L from "leaflet";
-import { Maximize2, BusFront, MapPin, Hexagon, CarFront } from "lucide-react";
+import { Maximize2, BusFront, MapPin, Hexagon, CarFront, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Skeleton } from "@/components/ui/skeleton";
 import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
 import markerIcon from "leaflet/dist/images/marker-icon.png";
 import markerShadow from "leaflet/dist/images/marker-shadow.png";
@@ -144,6 +145,7 @@ export function MunicipalityMap({
   points,
   activeTab,
   onTabChange,
+  tabLoading = {},
 }: {
   municipality: MunicipalityInfo | null;
   liveVehicles?: LiveVehicle[];
@@ -152,8 +154,10 @@ export function MunicipalityMap({
   points: MapPoint[];
   activeTab: MapTab;
   onTabChange: (tab: MapTab) => void;
+  tabLoading?: Partial<Record<MapTab, boolean>>;
 }) {
   const [fullscreenOpen, setFullscreenOpen] = useState(false);
+  const currentTabLoading = !!tabLoading[activeTab];
 
   const visibleLiveVehicles = useMemo(
     () => liveVehicles.filter((v) => Array.isArray(v.coordinates) && v.coordinates.length === 2),
@@ -348,6 +352,38 @@ export function MunicipalityMap({
     </div>
   );
 
+  const renderTabSwitcher = (className = "w-full max-w-xl") => (
+    <Tabs
+      value={activeTab}
+      onValueChange={(value) => onTabChange(value as MapTab)}
+      dir="rtl"
+      className={className}
+    >
+      <TabsList className="grid w-full grid-cols-4">
+        <TabsTrigger value="live" className="gap-1.5">
+          <BusFront className="h-4 w-4" />
+          التتبع الحي
+        </TabsTrigger>
+        <TabsTrigger value="points" className="gap-1.5">
+          <MapPin className="h-4 w-4" />
+          نقاط أثر
+        </TabsTrigger>
+        <TabsTrigger value="zones" className="gap-1.5">
+          <Hexagon className="h-4 w-4" />
+          مناطق أثر
+        </TabsTrigger>
+        <TabsTrigger value="objects" className="gap-1.5">
+          <CarFront className="h-4 w-4" />
+          سيارات أثر
+        </TabsTrigger>
+      </TabsList>
+      <TabsContent value="live" className="hidden" />
+      <TabsContent value="points" className="hidden" />
+      <TabsContent value="zones" className="hidden" />
+      <TabsContent value="objects" className="hidden" />
+    </Tabs>
+  );
+
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-3">
@@ -356,21 +392,21 @@ export function MunicipalityMap({
           عرض كامل
         </Button>
 
-        <Tabs value={activeTab} onValueChange={(value) => onTabChange(value as MapTab)} dir="rtl" className="w-full max-w-xl">
-          <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="live" className="gap-1.5"><BusFront className="h-4 w-4" />التتبع الحي</TabsTrigger>
-            <TabsTrigger value="points" className="gap-1.5"><MapPin className="h-4 w-4" />نقاط أثر</TabsTrigger>
-            <TabsTrigger value="zones" className="gap-1.5"><Hexagon className="h-4 w-4" />مناطق أثر</TabsTrigger>
-            <TabsTrigger value="objects" className="gap-1.5"><CarFront className="h-4 w-4" />سيارات أثر</TabsTrigger>
-          </TabsList>
-          <TabsContent value="live" className="hidden" />
-          <TabsContent value="points" className="hidden" />
-          <TabsContent value="zones" className="hidden" />
-          <TabsContent value="objects" className="hidden" />
-        </Tabs>
+        {renderTabSwitcher("w-full max-w-xl")}
       </div>
 
-      {renderMap("h-[520px]")}
+      <div className="relative">
+        {renderMap("h-[520px]")}
+        {currentTabLoading && (
+          <div className="absolute inset-0 z-[500] flex items-center justify-center rounded-2xl bg-background/70 backdrop-blur-[1px]">
+            <div className="w-full max-w-md space-y-3 px-6">
+              <Skeleton className="h-5 w-32 mx-auto" />
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-4/5 mx-auto" />
+            </div>
+          </div>
+        )}
+      </div>
 
       {activeTab === "objects" && (
         <div className="rounded-xl border p-3 text-right">
@@ -394,11 +430,40 @@ export function MunicipalityMap({
       )}
 
       <Dialog open={fullscreenOpen} onOpenChange={setFullscreenOpen}>
-        <DialogContent className="h-[94vh] w-[96vw] max-w-[96vw] p-3 text-right">
-          <DialogHeader>
-            <DialogTitle>الخريطة التفاعلية</DialogTitle>
-          </DialogHeader>
-          {renderMap("h-[calc(94vh-80px)]")}
+        <DialogContent className="h-[96vh] w-[98vw] max-w-[98vw] overflow-hidden p-0 text-right">
+          <div className="flex h-full flex-col bg-gradient-to-b from-emerald-950/50 to-background">
+            <DialogHeader className="border-b border-border/60 px-4 py-3">
+              <div className="flex items-center justify-between gap-3">
+                <Button variant="outline" size="sm" className="gap-2" onClick={() => setFullscreenOpen(false)}>
+                  <X className="h-4 w-4" />
+                  إغلاق
+                </Button>
+                <div className="text-right">
+                  <DialogTitle className="text-lg">الخريطة التفاعلية</DialogTitle>
+                  <div className="text-xs text-muted-foreground mt-1">
+                    {activeTab === "live" && `مركبات مباشرة: ${visibleLiveVehicles.length}`}
+                    {activeTab === "points" && `نقاط أثر: ${points.length}`}
+                    {activeTab === "zones" && `مناطق أثر: ${zones.length}`}
+                    {activeTab === "objects" && `سيارات أثر: ${atharObjects.length}`}
+                  </div>
+                </div>
+              </div>
+              <div className="mt-3">{renderTabSwitcher("w-full")}</div>
+            </DialogHeader>
+
+            <div className="relative flex-1 p-3">
+              {renderMap("h-full")}
+              {currentTabLoading && (
+                <div className="absolute inset-3 z-[500] flex items-center justify-center rounded-2xl bg-background/70 backdrop-blur-[1px]">
+                  <div className="w-full max-w-md space-y-3 px-6">
+                    <Skeleton className="h-5 w-32 mx-auto" />
+                    <Skeleton className="h-4 w-full" />
+                    <Skeleton className="h-4 w-4/5 mx-auto" />
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

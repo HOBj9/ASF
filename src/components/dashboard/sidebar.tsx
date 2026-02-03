@@ -26,6 +26,7 @@ import { useEffect, useState, useMemo } from "react"
 import { hasAnyPermission, isAdmin } from "@/lib/permissions"
 import { permissionActions, permissionResources } from "@/constants/permissions"
 import { useLabels } from "@/hooks/use-labels"
+import { Skeleton } from "@/components/ui/skeleton"
 
 interface SidebarProps {
   isAdmin: boolean
@@ -40,9 +41,10 @@ interface SidebarProps {
 export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarProps) {
   const pathname = usePathname()
   const { isOpen, toggle, close } = useSidebarStore()
-  const { data: session } = useSession()
+  const { data: session, status: sessionStatus } = useSession()
   const [roleName, setRoleName] = useState<string | null>(initialUser.roleName || null)
-  const { labels } = useLabels()
+  const { labels, loading: labelsLoading } = useLabels()
+  const [roleLoading, setRoleLoading] = useState(false)
 
   // Get user data from session (updated when impersonation changes)
   const currentUser = useMemo(() => {
@@ -76,6 +78,7 @@ export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarP
     const fetchRoleName = async () => {
       if (session?.user?.role) {
         try {
+          setRoleLoading(true)
           // Check if role object has nameAr directly
           const role = session.user.role as any
           if (role?.nameAr) {
@@ -102,9 +105,12 @@ export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarP
           if (initialUser.roleName) {
             setRoleName(initialUser.roleName)
           }
+        } finally {
+          setRoleLoading(false)
         }
       } else if (initialUser.roleName) {
         setRoleName(initialUser.roleName)
+        setRoleLoading(false)
       }
     }
 
@@ -191,6 +197,7 @@ export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarP
       return true
     }
   )
+  const sidebarLoading = sessionStatus === "loading" || labelsLoading || roleLoading
 
   // Handle responsive behavior
   useEffect(() => {
@@ -248,35 +255,54 @@ export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarP
           
           {/* User Profile Section */}
           <div className="px-6 pt-2 pb-2">
-            <Link
-              href="/dashboard/profile"
-              className="flex items-center gap-3 rounded-xl px-3 py-2 hover:bg-[hsl(var(--sidebar-item-hover))] transition-all duration-200 text-right group"
-            >
-              <div className="relative">
-                {currentUser.avatar ? (
-                  <img
-                    src={currentUser.avatar}
-                    alt={currentUser.name}
-                    className="h-12 w-12 rounded-full object-cover border-2 border-[hsl(var(--primary))]/30 dark:border-[hsl(var(--primary))]/40 group-hover:border-[hsl(var(--primary))]/50 transition-all"
-                  />
-                ) : (
-                  <div className="h-12 w-12 rounded-full bg-gradient-to-br from-[hsl(var(--primary))] to-[hsl(var(--primary-light))] flex items-center justify-center border-2 border-[hsl(var(--primary))]/30 dark:border-[hsl(var(--primary))]/40 group-hover:border-[hsl(var(--primary))]/50 transition-all">
-                    <User className="h-6 w-6 text-white" />
-                  </div>
-                )}
+            {sidebarLoading ? (
+              <div className="flex items-center gap-3 rounded-xl px-3 py-2">
+                <Skeleton className="h-12 w-12 rounded-full" />
+                <div className="flex-1 space-y-2">
+                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="h-3 w-24" />
+                </div>
               </div>
-              <div className="flex-1 min-w-0">
-  <p className="text-sm font-semibold text-foreground truncate">
-    مرحبًا، {currentUser.name}
-  </p>
-</div>
-            </Link>
+            ) : (
+              <Link
+                href="/dashboard/profile"
+                className="flex items-center gap-3 rounded-xl px-3 py-2 hover:bg-[hsl(var(--sidebar-item-hover))] transition-all duration-200 text-right group"
+              >
+                <div className="relative">
+                  {currentUser.avatar ? (
+                    <img
+                      src={currentUser.avatar}
+                      alt={currentUser.name}
+                      className="h-12 w-12 rounded-full object-cover border-2 border-[hsl(var(--primary))]/30 dark:border-[hsl(var(--primary))]/40 group-hover:border-[hsl(var(--primary))]/50 transition-all"
+                    />
+                  ) : (
+                    <div className="h-12 w-12 rounded-full bg-gradient-to-br from-[hsl(var(--primary))] to-[hsl(var(--primary-light))] flex items-center justify-center border-2 border-[hsl(var(--primary))]/30 dark:border-[hsl(var(--primary))]/40 group-hover:border-[hsl(var(--primary))]/50 transition-all">
+                      <User className="h-6 w-6 text-white" />
+                    </div>
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-foreground truncate">
+                    مرحبًا، {currentUser.name}
+                  </p>
+                </div>
+              </Link>
+            )}
           </div>
         </div>
         
         {/* Navigation */}
         <nav className="flex-1 space-y-2 p-4 overflow-y-auto">
-          {filteredMenuItems.map((item, index) => {
+          {sidebarLoading ? (
+            <div className="space-y-2">
+              {Array.from({ length: 8 }).map((_, idx) => (
+                <div key={`sidebar-skeleton-${idx}`} className="flex items-center gap-3 rounded-xl px-4 py-3">
+                  <Skeleton className="h-5 w-5 rounded-full" />
+                  <Skeleton className="h-4 flex-1" />
+                </div>
+              ))}
+            </div>
+          ) : filteredMenuItems.map((item, index) => {
             const Icon = item.icon
             const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href))
             return (
@@ -310,8 +336,6 @@ export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarP
     </>
   )
 }
-
-
 
 
 

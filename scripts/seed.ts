@@ -18,11 +18,15 @@ import { defaultPermissions, defaultRoles } from "@/constants/permissions";
 import { appConfig } from "@/lib/config/app.config";
 
 type BranchSpec = {
+  code: string;
   name: string;
+  governorate: string;
+  areaName: string;
   addressText: string;
   centerLat: number;
   centerLng: number;
   zoneSeed: number;
+  atharKey?: string | null;
   neighborhoods: string[];
 };
 
@@ -38,94 +42,120 @@ type PointSpec = {
 };
 
 const timeZone = "Asia/Damascus";
+const tartusAtharKey = "5E61F6F1F182AA8406F9DF535CBFBFDA";
 
 const driverNames = [
-  "???? ??? ??????",
-  "???? ????",
-  "????? ????",
-  "????? ??????",
-  "???? ??????",
-  "???? ?????",
-  "???? ??????",
-  "???? ????",
-  "???? ??????",
-  "??? ??????",
-  "???? ????????",
-  "???? ?????",
-  "???? ?????",
-  "???? ??????",
-  "???? ????",
-  "??? ?????",
-  "???? ?????",
-  "???? ?????",
-  "??? ?????",
-  "???? ?????",
+  "أحمد الحسن",
+  "محمد ديب",
+  "محمود سليمان",
+  "رامي الأحمد",
+  "إبراهيم علي",
+  "يوسف درويش",
+  "سامر بشير",
+  "علاء خزيم",
+  "فراس الجندي",
+  "قصي العلي",
+  "جمال حسين",
+  "منير زيدان",
+  "زياد العبدالله",
+  "أنس الحلاق",
+  "عمر الخطيب",
+  "شادي رمضان",
+  "باسل حمزة",
+  "مؤيد منصور",
+  "نادر الحسين",
+  "خالد حمود",
+  "هشام درغام",
+  "هيثم يوسف",
+  "وسيم العلي",
+  "طارق جمول",
 ];
 
 const vehicleTypes = [
-  { label: "????? ??? ?????", short: "GC" },
-  { label: "????? ??? ?????", short: "SL" },
-  { label: "????? ??? ??????", short: "SP" },
-  { label: "????? ??????", short: "MO" },
+  { label: "شاحنة كبس خلفي", short: "GC" },
+  { label: "شاحنة تحميل جانبي", short: "SL" },
+  { label: "شاحنة صغيرة", short: "SP" },
+  { label: "مركبة متابعة", short: "MO" },
 ];
 
 const pointTypeLabels: Record<string, string> = {
-  container: "?????",
-  station: "???? ?????",
-  facility: "????? ???",
-  other: "???? ???",
+  container: "حاوية القمامة",
+  station: "محطة تجميع",
+  facility: "مرفق خدمي",
+  other: "نقطة تشغيل",
 };
 
 function randomBetween(min: number, max: number) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-function pickOne<T>(items: T[]): T {
-  return items[Math.floor(Math.random() * items.length)];
-}
-
 function formatIndex(index: number) {
   return String(index + 1).padStart(2, "0");
 }
 
-function buildPointSpecs(spec: BranchSpec): PointSpec[] {
-  const baseOffsets = [
-    { lat: 0.004, lng: 0.002 },
-    { lat: 0.002, lng: 0.006 },
-    { lat: -0.003, lng: 0.004 },
-    { lat: -0.004, lng: -0.002 },
-    { lat: 0.003, lng: -0.004 },
-    { lat: -0.002, lng: -0.006 },
-  ];
+function toRadians(value: number) {
+  return (value * Math.PI) / 180;
+}
 
+function offsetByMeters(
+  lat: number,
+  lng: number,
+  metersNorth: number,
+  metersEast: number
+) {
+  const latOffset = metersNorth / 111320;
+  const lngOffset = metersEast / (111320 * Math.cos(toRadians(lat)));
+  return {
+    lat: Number((lat + latOffset).toFixed(6)),
+    lng: Number((lng + lngOffset).toFixed(6)),
+  };
+}
+
+function buildPointSpecs(spec: BranchSpec): PointSpec[] {
   const pointSpecs: PointSpec[] = [];
   let zoneIndex = 1;
 
   spec.neighborhoods.forEach((neighborhood, neighborhoodIndex) => {
-    const offset = baseOffsets[neighborhoodIndex % baseOffsets.length];
+    const ringDistance = 650 + neighborhoodIndex * 280;
+    const angle = (neighborhoodIndex * 42 * Math.PI) / 180;
+    const neighborhoodCenter = offsetByMeters(
+      spec.centerLat,
+      spec.centerLng,
+      Math.sin(angle) * ringDistance,
+      Math.cos(angle) * ringDistance
+    );
 
-    const localPoints = [
-      { type: "container", count: 3 },
-      { type: "station", count: 1 },
-      { type: "facility", count: 1 },
-      { type: "other", count: 1 },
+    const localPoints: Array<{
+      type: PointSpec["type"];
+      count: number;
+      stepNorth: number;
+      stepEast: number;
+    }> = [
+      { type: "container", count: 6, stepNorth: 55, stepEast: 65 },
+      { type: "station", count: 1, stepNorth: 90, stepEast: -120 },
+      { type: "facility", count: 1, stepNorth: -130, stepEast: 80 },
+      { type: "other", count: 1, stepNorth: -70, stepEast: -110 },
     ];
 
-    localPoints.forEach(({ type, count }) => {
+    localPoints.forEach(({ type, count, stepNorth, stepEast }) => {
       for (let i = 0; i < count; i++) {
         const label = pointTypeLabels[type];
-        const lat = spec.centerLat + offset.lat + (i + 1) * 0.0012;
-        const lng = spec.centerLng + offset.lng + (i + 1) * 0.0013;
+        const pointPosition = offsetByMeters(
+          neighborhoodCenter.lat,
+          neighborhoodCenter.lng,
+          stepNorth * (i + 1),
+          stepEast * (i + 1)
+        );
         const zoneId = String(spec.zoneSeed + zoneIndex).padStart(5, "0");
 
         pointSpecs.push({
-          name: `${label} ${neighborhood} ${formatIndex(i)} - ${spec.name}`,
+          name: `${label} - ${neighborhood} - ${formatIndex(i)}`,
           nameAr: `${label} ${neighborhood} ${formatIndex(i)}`,
           type: type as PointSpec["type"],
-          lat,
-          lng,
-          radiusMeters: randomBetween(90, 180),
-          addressText: `${spec.name} - ${neighborhood}`,
+          lat: pointPosition.lat,
+          lng: pointPosition.lng,
+          radiusMeters: randomBetween(70, 160),
+          addressText: `${spec.name} - حي ${neighborhood}`,
           zoneId,
         });
         zoneIndex += 1;
@@ -134,6 +164,42 @@ function buildPointSpecs(spec: BranchSpec): PointSpec[] {
   });
 
   return pointSpecs;
+}
+
+async function fetchAtharObjects(apiKey: string): Promise<any[]> {
+  try {
+    const baseUrl = process.env.ATHAR_BASE_URL || "https://admin.almobtakiroon.com/api/api.php";
+    const api = process.env.ATHAR_API_TYPE || "user";
+    const version = process.env.ATHAR_VERSION || "1.0";
+
+    const url = new URL(baseUrl);
+    url.searchParams.set("api", api);
+    url.searchParams.set("ver", version);
+    url.searchParams.set("key", apiKey);
+    url.searchParams.set("cmd", "USER_GET_OBJECTS");
+
+    const response = await fetch(url.toString(), {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+        "User-Agent": "Athar-Demo-Seed/1.0",
+      },
+    });
+
+    if (!response.ok) {
+      return [];
+    }
+
+    const payload = await response.json();
+    const source = payload?.objects ?? payload?.data ?? payload;
+    if (Array.isArray(source)) return source;
+    if (source && typeof source === "object") {
+      return Object.values(source);
+    }
+    return [];
+  } catch {
+    return [];
+  }
 }
 
 async function seed() {
@@ -207,23 +273,23 @@ async function seed() {
     });
 
     const organization = await Organization.create({
-      name: "????? ??? ??????? ??????",
-      slug: "athar-smart",
+      name: "مجلس مدينة طرطوس",
+      slug: "tartus-city-council",
       type: "waste",
       labels: {
-        branchLabel: "?????",
-        pointLabel: "??????",
-        vehicleLabel: "??????",
-        driverLabel: "??????",
-        routeLabel: "??????",
+        branchLabel: "بلديات",
+        pointLabel: "حاويات القمامة",
+        vehicleLabel: "شاحنات قمامة",
+        driverLabel: "سائقون",
+        routeLabel: "خطوط النقل",
       },
       isActive: true,
     });
 
-    const organizationPassword = await bcrypt.hash("org123", 10);
+    const organizationPassword = await bcrypt.hash("org-tartus-123", 10);
     await User.create({
-      name: "???? ???????",
-      email: "org@demo.local",
+      name: "مدير مجلس مدينة طرطوس",
+      email: "council@tartus.local",
       password: organizationPassword,
       role: organizationRole._id,
       organizationId: organization._id,
@@ -232,30 +298,76 @@ async function seed() {
 
     const branchSpecs: BranchSpec[] = [
       {
-        name: "????? ????",
-        addressText: "???? - ???? ????????",
-        centerLat: 33.5138,
-        centerLng: 36.2765,
-        zoneSeed: 12000,
-        neighborhoods: ["???????", "?????", "???????", "????????", "???????", "??? ?????"],
+        code: "tartus-center",
+        name: "بلدية طرطوس المركز",
+        governorate: "طرطوس",
+        areaName: "منطقة طرطوس",
+        addressText: "ساحة الثورة - مركز مدينة طرطوس",
+        centerLat: 34.8936225,
+        centerLng: 35.885167,
+        zoneSeed: 51000,
+        atharKey: tartusAtharKey,
+        neighborhoods: ["الكورنيش", "القديمة", "الرمل الجنوبي", "مشبكة", "الثورة", "المنشية"],
       },
       {
-        name: "????? ???",
-        addressText: "??? - ???? ??????? ???????",
-        centerLat: 36.2021,
-        centerLng: 37.1343,
-        zoneSeed: 22000,
-        neighborhoods: ["???????", "???????", "????????", "??????????", "????????", "????????"],
+        code: "baniyas",
+        name: "بلدية بانياس",
+        governorate: "طرطوس",
+        areaName: "منطقة بانياس",
+        addressText: "مركز بلدية بانياس - الساحة الرئيسية",
+        centerLat: 35.185136,
+        centerLng: 35.9477821,
+        zoneSeed: 52000,
+        neighborhoods: ["القصور", "المرقب", "رأس النبع", "العنازة", "القوز", "الباصية"],
       },
       {
-        name: "????? ???",
-        addressText: "??? - ???? ??????",
-        centerLat: 34.7305,
-        centerLng: 36.7093,
-        zoneSeed: 32000,
-        neighborhoods: ["?????", "??? ??????", "????????", "?????", "???????", "???????"],
+        code: "safita",
+        name: "بلدية صافيتا",
+        governorate: "طرطوس",
+        areaName: "منطقة صافيتا",
+        addressText: "مركز مدينة صافيتا - قرب الساحة العامة",
+        centerLat: 34.820683,
+        centerLng: 36.1177283,
+        zoneSeed: 53000,
+        neighborhoods: ["المركز", "القلعة", "بلاطة غربية", "وادي العيون", "بيت فارس", "عين دابش"],
+      },
+      {
+        code: "dreikish",
+        name: "بلدية الدريكيش",
+        governorate: "طرطوس",
+        areaName: "منطقة الدريكيش",
+        addressText: "مجلس مدينة الدريكيش - المركز الإداري",
+        centerLat: 34.8972475,
+        centerLng: 36.1350818,
+        zoneSeed: 54000,
+        neighborhoods: ["الميدان", "البرانية", "الحي الشرقي", "الحي الغربي", "البلدة القديمة", "المنطقة الصناعية"],
+      },
+      {
+        code: "sheikh-badr",
+        name: "بلدية الشيخ بدر",
+        governorate: "طرطوس",
+        areaName: "منطقة الشيخ بدر",
+        addressText: "مركز مدينة الشيخ بدر - قرب البلدية",
+        centerLat: 34.9920957,
+        centerLng: 36.0795901,
+        zoneSeed: 55000,
+        neighborhoods: ["المركز", "الدريجات", "الكريمية", "بمبلة", "بتعنيتا", "الزاهرة"],
+      },
+      {
+        code: "qadmous",
+        name: "بلدية القدموس",
+        governorate: "طرطوس",
+        areaName: "منطقة بانياس",
+        addressText: "مركز مدينة القدموس - ساحة القلعة",
+        centerLat: 35.1003277,
+        centerLng: 36.1610851,
+        zoneSeed: 56000,
+        neighborhoods: ["القلعة", "المزة", "الحي الشمالي", "الحي الجنوبي", "بسورم", "الزوبة"],
       },
     ];
+
+    const atharObjects = await fetchAtharObjects(tartusAtharKey);
+    console.log(`Athar objects fetched for Tartus key: ${atharObjects.length}`);
 
     for (let branchIndex = 0; branchIndex < branchSpecs.length; branchIndex++) {
       const spec = branchSpecs[branchIndex];
@@ -263,20 +375,22 @@ async function seed() {
         organizationId: organization._id,
         name: spec.name,
         nameAr: spec.name,
+        governorate: spec.governorate,
+        areaName: spec.areaName,
         branchTypeLabel: organization.labels.branchLabel,
         addressText: spec.addressText,
         centerLat: spec.centerLat,
         centerLng: spec.centerLng,
         timezone: timeZone,
-        atharKey: process.env.ATHAR_TEST_KEY || null,
+        atharKey: spec.atharKey || null,
         isActive: true,
       });
 
-      const branchSlug = `${spec.name.replace(/\s+/g, "").toLowerCase()}-${spec.zoneSeed}`;
-      const branchPassword = await bcrypt.hash("branch123", 10);
+      const branchSlug = `${spec.code}-${spec.zoneSeed}`;
+      const branchPassword = await bcrypt.hash("branch-admin-123", 10);
       await User.create({
-        name: `???? ${spec.name}`,
-        email: `${branchSlug}@branch.local`,
+        name: `مدير ${spec.name}`,
+        email: `${branchSlug}@municipality.local`,
         password: branchPassword,
         role: branchRole._id,
         organizationId: organization._id,
@@ -284,12 +398,23 @@ async function seed() {
         isActive: true,
       });
 
-      const driverCount = 12;
+      const branchUserPassword = await bcrypt.hash("branch-user-123", 10);
+      await User.create({
+        name: `مستخدم ${spec.name}`,
+        email: `${branchSlug}@operator.local`,
+        password: branchUserPassword,
+        role: branchUserRole._id,
+        organizationId: organization._id,
+        branchId: branch._id,
+        isActive: true,
+      });
+
+      const driverCount = 18;
       const drivers = await Driver.insertMany(
         Array.from({ length: driverCount }).map((_, idx) => ({
           branchId: branch._id,
-          name: `${driverNames[idx % driverNames.length]} - ${spec.name}`,
-          phone: `09${spec.zoneSeed + idx}`.slice(0, 10),
+          name: `${driverNames[(idx + branchIndex) % driverNames.length]} - ${spec.name}`,
+          phone: `09${String(spec.zoneSeed + idx + 101).slice(0, 8)}`,
           isActive: idx % 9 !== 0,
         }))
       );
@@ -297,46 +422,72 @@ async function seed() {
       const routes = await Route.insertMany([
         {
           branchId: branch._id,
-          name: `???? ?????? - ${spec.name}`,
-          description: "??? ??? ?????? ?????? ???????",
+          name: `خط جمع المسائي - ${spec.name}`,
+          description: "خط ليلي مخصص لأحياء المركز التجاري والسكني",
           isActive: true,
         },
         {
           branchId: branch._id,
-          name: `???? ????? - ${spec.name}`,
-          description: "????? ????? ??????? ?????? ???????",
+          name: `خط الأحياء الداخلية - ${spec.name}`,
+          description: "جولة يومية على الأحياء الداخلية",
           isActive: true,
         },
         {
           branchId: branch._id,
-          name: `???? ?????? - ${spec.name}`,
-          description: "???? ?????? ??????? ????????",
+          name: `خط السوق الرئيسي - ${spec.name}`,
+          description: "خدمة الحاويات المحيطة بالأسواق والمحال",
           isActive: true,
         },
         {
           branchId: branch._id,
-          name: `???? ??????? - ${spec.name}`,
-          description: "???? ??? ???????? ???????? ???????????",
+          name: `خط المناطق البعيدة - ${spec.name}`,
+          description: "تغطية المناطق الطرفية وأطراف المدينة",
+          isActive: true,
+        },
+        {
+          branchId: branch._id,
+          name: `خط الطوارئ والدعم - ${spec.name}`,
+          description: "خط احتياطي للتدخل السريع عند الامتلاء",
           isActive: true,
         },
       ]);
 
-      const vehicleCount = 14;
-      const vehicles = await Vehicle.insertMany(
-        Array.from({ length: vehicleCount }).map((_, idx) => {
-          const vehicleType = vehicleTypes[idx % vehicleTypes.length];
-          const driver = drivers[idx % drivers.length];
-          return {
-            branchId: branch._id,
-            name: `${vehicleType.label} ${formatIndex(idx)} - ${spec.name}`,
-            plateNumber: `${vehicleType.short}-${spec.zoneSeed + idx + 1}`,
-            imei: String(spec.zoneSeed + 1000 + idx + 1).padEnd(15, "0"),
-            driverId: driver._id,
-            routeId: routes[idx % routes.length]._id,
-            isActive: idx % 10 !== 0,
-          };
-        })
-      );
+      const vehicleCount = 22;
+      const vehiclesPayload = Array.from({ length: vehicleCount }).map((_, idx) => {
+        const vehicleType = vehicleTypes[idx % vehicleTypes.length];
+        const driver = drivers[idx % drivers.length];
+        return {
+          branchId: branch._id,
+          name: `${organization.labels.vehicleLabel} ${formatIndex(idx)} - ${spec.name}`,
+          plateNumber: `${vehicleType.short}-${spec.zoneSeed + idx + 1}`,
+          imei: String(spec.zoneSeed + 1000 + idx + 1).padStart(15, "3"),
+          driverId: driver._id,
+          routeId: routes[idx % routes.length]._id,
+          atharObjectId: null as string | null,
+          isActive: idx % 13 !== 0,
+        };
+      });
+
+      if (spec.atharKey && atharObjects.length > 0) {
+        const syncCount = Math.min(10, atharObjects.length, vehiclesPayload.length);
+        for (let i = 0; i < syncCount; i++) {
+          const atharObject = atharObjects[i] as Record<string, any>;
+          const imei = String(atharObject?.imei || "").trim();
+          if (!imei) continue;
+          vehiclesPayload[i].imei = imei;
+          vehiclesPayload[i].atharObjectId = String(
+            atharObject?.id || atharObject?.object_id || atharObject?.name || imei
+          );
+          if (atharObject?.name) {
+            vehiclesPayload[i].name = `${organization.labels.vehicleLabel} ${formatIndex(i)} - ${atharObject.name}`;
+          }
+          if (atharObject?.plate_number) {
+            vehiclesPayload[i].plateNumber = String(atharObject.plate_number);
+          }
+        }
+      }
+
+      const vehicles = await Vehicle.insertMany(vehiclesPayload);
 
       const pointSpecs = buildPointSpecs(spec);
       const points = await Point.insertMany(
@@ -386,21 +537,22 @@ async function seed() {
       const events: any[] = [];
       const visits: any[] = [];
       const now = Date.now();
-      const days = 14;
+      const days = 21;
 
       for (let d = 0; d < days; d++) {
         const dayStart = now - d * 24 * 60 * 60 * 1000;
         for (const [vehicleIndex, vehicle] of vehicles.entries()) {
-          const visitCount = randomBetween(3, 6);
+          const visitCount = randomBetween(2, 5);
           for (let v = 0; v < visitCount; v++) {
             const point = points[(vehicleIndex + v + d) % points.length];
             const driver = drivers.find((drv) => drv._id.toString() === String(vehicle.driverId));
-            const start = new Date(dayStart - v * 55 * 60 * 1000 - vehicleIndex * 9 * 60 * 1000);
-            const durationMinutes = randomBetween(5, 16);
+            const minuteOffset = 6 * 60 + v * 80 + (vehicleIndex % 5) * 17;
+            const start = new Date(dayStart + minuteOffset * 60 * 1000);
+            const durationMinutes = randomBetween(6, 22);
             const end = new Date(start.getTime() + durationMinutes * 60 * 1000);
 
-            const eventNameIn = `???? ${vehicle.name} ??? ${point.nameAr || point.name} ? ??????: ${driver?.name || ""}`;
-            const eventNameOut = `???? ${vehicle.name} ?? ${point.nameAr || point.name} ? ??????: ${driver?.name || ""}`;
+            const eventNameIn = `دخول ${vehicle.name} إلى ${point.nameAr || point.name} - السائق: ${driver?.name || "غير محدد"}`;
+            const eventNameOut = `خروج ${vehicle.name} من ${point.nameAr || point.name} - السائق: ${driver?.name || "غير محدد"}`;
 
             const eventIn = {
               branchId: branch._id,
@@ -409,7 +561,7 @@ async function seed() {
               pointId: point._id,
               zoneId: point.zoneId,
               imei: vehicle.imei,
-              atharEventId: `${spec.zoneSeed + d}${vehicle._id.toString().slice(-3)}${v}1`,
+              atharEventId: `IN-${spec.zoneSeed}-${d}-${vehicleIndex}-${v}`,
               name: eventNameIn,
               driverName: driver?.name || null,
               type: "zone_in",
@@ -422,7 +574,7 @@ async function seed() {
               pointId: point._id,
               zoneId: point.zoneId,
               imei: vehicle.imei,
-              atharEventId: `${spec.zoneSeed + d}${vehicle._id.toString().slice(-3)}${v}2`,
+              atharEventId: `OUT-${spec.zoneSeed}-${d}-${vehicleIndex}-${v}`,
               name: eventNameOut,
               driverName: driver?.name || null,
               type: "zone_out",
@@ -465,7 +617,7 @@ async function seed() {
         const point = points[(idx + 2) % points.length];
         const driver = drivers.find((drv) => drv._id.toString() === String(vehicle.driverId));
         const start = new Date(Date.now() - (idx + 1) * 12 * 60 * 1000);
-        const eventNameIn = `???? ${vehicle.name} ??? ${point.nameAr || point.name} ? ??????: ${driver?.name || ""}`;
+        const eventNameIn = `دخول ${vehicle.name} إلى ${point.nameAr || point.name} - السائق: ${driver?.name || "غير محدد"}`;
 
         liveVisits.push({
           branchId: branch._id,
@@ -487,7 +639,7 @@ async function seed() {
           pointId: point._id,
           zoneId: point.zoneId,
           imei: vehicle.imei,
-          atharEventId: `${spec.zoneSeed}${vehicle._id.toString().slice(-3)}L${idx}`,
+          atharEventId: `LIVE-${spec.zoneSeed}-${idx}`,
           name: eventNameIn,
           driverName: driver?.name || null,
           type: "zone_in",
@@ -501,24 +653,13 @@ async function seed() {
       }
 
       await PointVisit.insertMany(visits);
-
-      const branchUserPassword = await bcrypt.hash("branchuser123", 10);
-      await User.create({
-        name: `?????? ${spec.name}`,
-        email: `${branchSlug}@user.local`,
-        password: branchUserPassword,
-        role: branchUserRole._id,
-        organizationId: organization._id,
-        branchId: branch._id,
-        isActive: true,
-      });
     }
 
     console.log("Seed completed successfully");
     console.log("Super Admin:", appConfig.defaultAdmin.email, appConfig.defaultAdmin.password);
-    console.log("Organization Admin: org@demo.local / org123");
-    console.log("Branch Admins: <branch>@branch.local / branch123");
-    console.log("Branch Users: <branch>@user.local / branchuser123");
+    console.log("Organization Admin: council@tartus.local / org-tartus-123");
+    console.log("Branch Admins: <branch-code>-<zoneSeed>@municipality.local / branch-admin-123");
+    console.log("Branch Users: <branch-code>-<zoneSeed>@operator.local / branch-user-123");
     process.exit(0);
   } catch (error) {
     console.error("Seed error:", error);

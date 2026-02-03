@@ -12,7 +12,8 @@ export default async function ReportsPage() {
   }
 
   const role = session.user.role as any
-  if (!isAdmin(role) && !hasPermission(role, permissionResources.REPORTS, permissionActions.READ)) {
+  const adminUser = isAdmin(role)
+  if (!adminUser && !hasPermission(role, permissionResources.REPORTS, permissionActions.READ)) {
     redirect("/unauthorized")
   }
 
@@ -20,9 +21,9 @@ export default async function ReportsPage() {
     <div className="text-right">
       <div className="mb-6 lg:mb-8">
         <h1 className="text-2xl lg:text-3xl font-bold">التقارير</h1>
-        <p className="text-muted-foreground mt-2">تحميل تقارير CSV حسب اليوم</p>
+        <p className="text-muted-foreground mt-2">تحميل تقارير CSV يومية وأسبوعية وشهرية ومخصصة</p>
       </div>
-      <ReportsPanel />
+      <ReportsPanel isSystemAdmin={adminUser} />
     </div>
   )
 }

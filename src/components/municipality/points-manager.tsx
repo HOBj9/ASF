@@ -13,6 +13,7 @@ import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import toast from "react-hot-toast"
 import { useLabels } from "@/hooks/use-labels"
+import { ExportExcelDialog, type ExportColumn } from "@/components/municipality/export-excel-dialog"
 
 const MapPicker = dynamic(() => import("@/components/ui/map-picker").then((m) => m.MapPicker), { ssr: false })
 
@@ -277,12 +278,36 @@ export function PointsManager() {
     }
   }
 
+  const localExportColumns: ExportColumn<Point>[] = useMemo(
+    () => [
+      { key: "name", label: `اسم ${labels.pointLabel}`, value: (row) => row.nameAr || row.name },
+      { key: "type", label: "النوع", value: (row) => pointTypeLabels[row.type] || row.type },
+      { key: "lat", label: "خط العرض", value: (row) => row.lat },
+      { key: "lng", label: "خط الطول", value: (row) => row.lng },
+      { key: "radius", label: "نصف القطر (متر)", value: (row) => row.radiusMeters },
+      { key: "zone", label: "معرف المنطقة", value: (row) => row.zoneId || "-" },
+      { key: "address", label: "العنوان", value: (row) => row.addressText || "-" },
+      { key: "status", label: "الحالة", value: (row) => (row.isActive ? "مفعل" : "معطل") },
+    ],
+    [labels.pointLabel]
+  )
+
   return (
     <Card className="text-right">
       <CardHeader>
         <div className="flex items-center justify-between flex-row-reverse">
           <CardTitle>{labels.pointLabel}</CardTitle>
-          {activeTab === "local" && <Button onClick={openCreate}>إضافة {labels.pointLabel}</Button>}
+          {activeTab === "local" && (
+            <div className="flex items-center gap-2">
+              <ExportExcelDialog
+                title={`Export ${labels.pointLabel} to Excel`}
+                rows={filteredLocalPoints}
+                columns={localExportColumns}
+                fileBaseName="points"
+              />
+              <Button onClick={openCreate}>Add {labels.pointLabel}</Button>
+            </div>
+          )}
         </div>
       </CardHeader>
       <CardContent>

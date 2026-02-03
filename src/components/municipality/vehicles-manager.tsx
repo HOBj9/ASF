@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
+import { ExportExcelDialog, type ExportColumn } from "@/components/municipality/export-excel-dialog"
 
 type Vehicle = {
   _id: string
@@ -197,12 +198,40 @@ export function VehiclesManager() {
     }
   }
 
+  const exportColumns: ExportColumn<Vehicle>[] = useMemo(
+    () => [
+      { key: "name", label: `اسم ${labels.vehicleLabel}`, value: (row) => row.name },
+      { key: "plate", label: "رقم اللوحة", value: (row) => row.plateNumber || "-" },
+      { key: "imei", label: "رقم IMEI", value: (row) => row.imei },
+      {
+        key: "driver",
+        label: labels.driverLabel,
+        value: (row) => drivers.find((d) => d._id === row.driverId)?.name || "-",
+      },
+      {
+        key: "route",
+        label: labels.routeLabel,
+        value: (row) => routes.find((r) => r._id === row.routeId)?.name || "-",
+      },
+      { key: "status", label: "الحالة", value: (row) => (row.isActive ? "مفعلة" : "معطلة") },
+    ],
+    [drivers, labels.driverLabel, labels.routeLabel, labels.vehicleLabel, routes]
+  )
+
   return (
     <Card className="text-right">
       <CardHeader>
         <div className="flex flex-row-reverse items-center justify-between">
           <CardTitle>{labels.vehicleLabel}</CardTitle>
-          <Button onClick={openCreate}>إضافة {labels.vehicleLabel}</Button>
+          <div className="flex items-center gap-2">
+            <ExportExcelDialog
+              title={`Export ${labels.vehicleLabel} to Excel`}
+              rows={filteredItems}
+              columns={exportColumns}
+              fileBaseName="vehicles"
+            />
+            <Button onClick={openCreate}>إضافة {labels.vehicleLabel}</Button>
+          </div>
         </div>
       </CardHeader>
 

@@ -26,7 +26,7 @@ export default async function DashboardLayout({
   const user = await User.findById(session.user.id).select("avatar name email role").populate('role', 'nameAr').lean()
 
   return (
-    <div className="flex h-screen overflow-hidden bg-gradient-to-br from-background via-background to-purple/5 dark:to-purple/10">
+    <div className="flex h-screen overflow-hidden bg-gradient-to-br from-background via-background to-emerald-900/10">
       <Sidebar 
         isAdmin={userIsAdmin} 
         user={{
@@ -38,7 +38,7 @@ export default async function DashboardLayout({
       />
       <div className="flex flex-1 flex-col overflow-hidden">
         <DashboardHeader />
-        <main className="flex-1 overflow-y-auto bg-background/30 dark:bg-background/40 backdrop-blur-sm p-4 lg:p-8">
+        <main className="flex-1 overflow-y-auto bg-background/30 backdrop-blur-sm p-4 lg:p-8">
           <PageTransition>
             {children}
           </PageTransition>

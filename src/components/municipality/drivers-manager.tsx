@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch"
 import toast from "react-hot-toast"
 import { useLabels } from "@/hooks/use-labels"
+import { ExportExcelDialog, type ExportColumn } from "@/components/municipality/export-excel-dialog"
 
 type Driver = {
   _id: string
@@ -147,12 +148,35 @@ export function DriversManager() {
     }
   }
 
+  const exportColumns: ExportColumn<Driver>[] = useMemo(
+    () => [
+      { key: "name", label: "الاسم", value: (row) => row.name },
+      { key: "phone", label: "الهاتف", value: (row) => row.phone || "-" },
+      { key: "nationalId", label: "رقم الهوية", value: (row) => row.nationalId || "-" },
+      {
+        key: "vehicle",
+        label: labels.vehicleLabel,
+        value: (row) => vehicles.find((v) => v._id === row.assignedVehicleId)?.name || "-",
+      },
+      { key: "status", label: "الحالة", value: (row) => (row.isActive ? "مفعل" : "معطل") },
+    ],
+    [labels.vehicleLabel, vehicles]
+  )
+
   return (
     <Card className="text-right">
       <CardHeader>
         <div className="flex items-center justify-between flex-row-reverse">
           <CardTitle>{labels.driverLabel}</CardTitle>
-          <Button onClick={openCreate}>إضافة {labels.driverLabel}</Button>
+          <div className="flex items-center gap-2">
+            <ExportExcelDialog
+              title={`Export ${labels.driverLabel} to Excel`}
+              rows={filteredItems}
+              columns={exportColumns}
+              fileBaseName="drivers"
+            />
+            <Button onClick={openCreate}>إضافة {labels.driverLabel}</Button>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-3">

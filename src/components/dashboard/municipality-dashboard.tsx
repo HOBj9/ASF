@@ -3,6 +3,9 @@
 import { useEffect, useState } from "react";
 import { MunicipalityMap, type MapTab } from "./municipality-map";
 import { cn } from "@/lib/utils";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Info, Download } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import {
   BarChart,
   Bar,
@@ -124,14 +127,15 @@ function StatCard({
   tone: "emerald" | "sky" | "amber" | "violet";
 }) {
   const toneClasses: Record<string, string> = {
-    emerald: "from-emerald-500/15 to-emerald-500/5 text-emerald-700",
-    sky: "from-sky-500/15 to-sky-500/5 text-sky-700",
-    amber: "from-amber-500/15 to-amber-500/5 text-amber-700",
-    violet: "from-violet-500/15 to-violet-500/5 text-violet-700",
+    emerald: "from-emerald-500/20 via-emerald-500/10 to-transparent text-emerald-200 border-emerald-500/30",
+    sky: "from-cyan-500/20 via-cyan-500/10 to-transparent text-cyan-200 border-cyan-500/30",
+    amber: "from-amber-500/20 via-amber-500/10 to-transparent text-amber-200 border-amber-500/30",
+    violet: "from-lime-500/20 via-lime-500/10 to-transparent text-lime-200 border-lime-500/30",
   };
+
   return (
-    <div className={`rounded-xl border bg-gradient-to-br ${toneClasses[tone]} p-4 text-right shadow-sm`}>
-      <div className="text-sm text-muted-foreground">{label}</div>
+    <div className={`rounded-xl border bg-gradient-to-br ${toneClasses[tone]} p-4 text-right shadow-sm backdrop-blur-sm`}>
+      <div className="text-sm text-foreground/75">{label}</div>
       <div className="text-2xl font-semibold mt-2">{value}</div>
     </div>
   );
@@ -149,6 +153,8 @@ export function MunicipalityDashboard() {
   const [events, setEvents] = useState<EventItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeMapTab, setActiveMapTab] = useState<MapTab>("live");
+  const [dailyDays, setDailyDays] = useState<7 | 14 | 30>(14);
+  const [monthlyMonths, setMonthlyMonths] = useState<6 | 12>(12);
   const [pointsLoaded, setPointsLoaded] = useState(false);
   const [zonesLoaded, setZonesLoaded] = useState(false);
   const [objectsLoaded, setObjectsLoaded] = useState(false);
@@ -156,6 +162,12 @@ export function MunicipalityDashboard() {
   const { labels } = useLabels();
 
   const chartPalette = ["#22c55e", "#0ea5e9", "#f97316", "#a855f7", "#facc15", "#14b8a6"];
+  const mapTabLoading: Partial<Record<MapTab, boolean>> = {
+    live: activeMapTab === "live" && !liveLoaded,
+    points: activeMapTab === "points" && !pointsLoaded,
+    zones: activeMapTab === "zones" && !zonesLoaded,
+    objects: activeMapTab === "objects" && !objectsLoaded,
+  };
 
   useEffect(() => {
     let active = true;
@@ -168,7 +180,7 @@ export function MunicipalityDashboard() {
             fetch("/api/routes"),
             fetch("/api/dashboard/stats"),
             fetch("/api/events?limit=8"),
-            fetch("/api/dashboard/analytics"),
+            fetch(`/api/dashboard/analytics?dailyDays=${dailyDays}&monthlyMonths=${monthlyMonths}`),
           ]);
 
         if (!active) return;
@@ -208,7 +220,7 @@ export function MunicipalityDashboard() {
         .then((res) => res.json())
         .then((data) => setEvents(data.events || []))
         .catch(() => null);
-      fetch("/api/dashboard/analytics")
+      fetch(`/api/dashboard/analytics?dailyDays=${dailyDays}&monthlyMonths=${monthlyMonths}`)
         .then((res) => res.json())
         .then((data) => setAnalytics(data))
         .catch(() => null);
@@ -218,7 +230,37 @@ export function MunicipalityDashboard() {
       active = false;
       clearInterval(interval);
     };
-  }, []);
+  }, [dailyDays, monthlyMonths]);
+
+  function exportChartAsPng(containerId: string, filename: string) {
+    const container = document.getElementById(containerId);
+    const svg = container?.querySelector("svg");
+    if (!svg) return;
+
+    const serializer = new XMLSerializer();
+    const source = serializer.serializeToString(svg);
+    const svgBlob = new Blob([source], { type: "image/svg+xml;charset=utf-8" });
+    const url = URL.createObjectURL(svgBlob);
+    const image = new Image();
+    image.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = image.width || 1400;
+      canvas.height = image.height || 700;
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(image, 0, 0);
+        const pngUrl = canvas.toDataURL("image/png");
+        const link = document.createElement("a");
+        link.href = pngUrl;
+        link.download = `${filename}.png`;
+        link.click();
+      }
+      URL.revokeObjectURL(url);
+    };
+    image.src = url;
+  }
 
   useEffect(() => {
     if (activeMapTab !== "live") return;
@@ -250,7 +292,9 @@ export function MunicipalityDashboard() {
           setLiveVehicles(data.data || []);
           setLiveLoaded(true);
         })
-        .catch(() => null);
+        .catch(() => {
+          setLiveLoaded(true);
+        });
       return;
     }
 
@@ -261,7 +305,9 @@ export function MunicipalityDashboard() {
           setPoints(data.points || []);
           setPointsLoaded(true);
         })
-        .catch(() => null);
+        .catch(() => {
+          setPointsLoaded(true);
+        });
       return;
     }
 
@@ -277,7 +323,9 @@ export function MunicipalityDashboard() {
           }
           setZonesLoaded(true);
         })
-        .catch(() => null);
+        .catch(() => {
+          setZonesLoaded(true);
+        });
       return;
     }
 
@@ -288,7 +336,9 @@ export function MunicipalityDashboard() {
           setAtharObjects(data.objects || []);
           setObjectsLoaded(true);
         })
-        .catch(() => null);
+        .catch(() => {
+          setObjectsLoaded(true);
+        });
     }
   }, [activeMapTab, liveLoaded, pointsLoaded, zonesLoaded, objectsLoaded]);
 
@@ -302,9 +352,49 @@ export function MunicipalityDashboard() {
     { name: "خروج", value: analytics?.eventsByType?.zone_out || 0 },
   ];
 
+
+  if (loading && !branch && !stats) {
+    return (
+      <div className="space-y-6">
+        <div className="rounded-2xl border bg-card p-6">
+          <Skeleton className="h-4 w-28 mb-3" />
+          <Skeleton className="h-8 w-72 mb-2" />
+          <Skeleton className="h-4 w-96" />
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, idx) => (
+            <div key={`kpi-loading-${idx}`} className="rounded-xl border bg-card p-4">
+              <Skeleton className="h-4 w-28 mb-3" />
+              <Skeleton className="h-7 w-20" />
+            </div>
+          ))}
+        </div>
+
+        <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
+          <div className="rounded-2xl border bg-card p-4">
+            <Skeleton className="h-5 w-44 mb-4" />
+            <Skeleton className="h-[520px] w-full rounded-xl" />
+          </div>
+          <div className="rounded-2xl border bg-card p-4">
+            <Skeleton className="h-5 w-32 mb-4" />
+            <div className="space-y-3">
+              {Array.from({ length: 6 }).map((_, idx) => (
+                <div key={`event-loading-${idx}`} className="rounded-lg border p-3">
+                  <Skeleton className="h-3 w-32 mb-2" />
+                  <Skeleton className="h-4 w-full mb-1" />
+                  <Skeleton className="h-3 w-2/3" />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="space-y-6">
-      <div className="rounded-2xl border bg-gradient-to-br from-emerald-50 via-sky-50 to-violet-50 p-6 shadow-sm text-right">
+      <div className="rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-emerald-950/60 via-emerald-900/30 to-cyan-900/20 p-6 shadow-sm text-right">
         <div className="text-sm text-muted-foreground">إدارة {labels.branchLabel}</div>
         <h2 className="text-2xl font-semibold mt-2">{branch?.name || "غير محدد بعد"}</h2>
         {branch?.addressText && (
@@ -335,15 +425,16 @@ export function MunicipalityDashboard() {
             points={points}
             activeTab={activeMapTab}
             onTabChange={setActiveMapTab}
+            tabLoading={mapTabLoading}
           />
         </div>
 
-        <div className="rounded-2xl border bg-card p-4 text-right shadow-sm">
+        <div className="rounded-2xl border bg-card p-4 text-right shadow-sm lg:h-[620px] flex flex-col">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-lg font-semibold">آخر الأحداث</h3>
             <span className="text-xs text-muted-foreground">آخر 8 أحداث</span>
           </div>
-          <div className="space-y-3">
+          <div className="space-y-3 overflow-y-auto flex-1 pr-1">
             {events.length === 0 && <div className="text-sm text-muted-foreground">لا توجد أحداث حالياً.</div>}
             {events.map((event) => (
               <div key={event._id} className="rounded-lg border p-3">
@@ -368,10 +459,49 @@ export function MunicipalityDashboard() {
         </div>
       </div>
 
+      <div className="rounded-2xl border bg-card p-4 text-right shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="font-semibold">فلاتر الرسوم البيانية</h3>
+            <p className="text-xs text-muted-foreground mt-1">اختر الفترة الزمنية لتحديث الرسوم البيانية.</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <select
+              className="rounded-lg border bg-background px-3 py-2 text-sm"
+              value={dailyDays}
+              onChange={(e) => setDailyDays(Number(e.target.value) as 7 | 14 | 30)}
+            >
+              <option value={7}>آخر 7 أيام</option>
+              <option value={14}>آخر 14 يوم</option>
+              <option value={30}>آخر 30 يوم</option>
+            </select>
+            <select
+              className="rounded-lg border bg-background px-3 py-2 text-sm"
+              value={monthlyMonths}
+              onChange={(e) => setMonthlyMonths(Number(e.target.value) as 6 | 12)}
+            >
+              <option value={6}>آخر 6 أشهر</option>
+              <option value={12}>آخر 12 شهر</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="rounded-2xl border bg-gradient-to-br from-sky-50 to-emerald-50 p-4 shadow-sm text-right">
-          <h3 className="text-lg font-semibold mb-3">{labels.pointLabel} المزارة يومياً</h3>
-          <div className="h-64">
+          <div className="mb-3 flex items-start justify-between gap-2">
+            <Button variant="outline" size="sm" onClick={() => exportChartAsPng("chart-daily-containers", "daily-containers")}> 
+              <Download className="h-4 w-4" />
+            </Button>
+            <div>
+              <div className="flex items-center justify-end gap-1">
+                <Info className="h-4 w-4 text-muted-foreground" title="يعرض عدد النقاط/الحاويات التي تمت زيارتها يوميا خلال الفترة الأخيرة." />
+                <h3 className="text-lg font-semibold">{labels.pointLabel} المزارة يوميا</h3>
+              </div>
+              <p className="text-xs text-muted-foreground">يعرض عدد النقاط/الحاويات التي تمت زيارتها يوميا خلال الفترة الأخيرة.</p>
+            </div>
+          </div>
+          <div className="h-64" id="chart-daily-containers">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={analytics?.daily || []}>
                 <CartesianGrid strokeDasharray="3 3" />
@@ -385,8 +515,19 @@ export function MunicipalityDashboard() {
         </div>
 
         <div className="rounded-2xl border bg-gradient-to-br from-violet-50 to-amber-50 p-4 shadow-sm text-right">
-          <h3 className="text-lg font-semibold mb-3">الأحداث اليومية</h3>
-          <div className="h-64">
+          <div className="mb-3 flex items-start justify-between gap-2">
+            <Button variant="outline" size="sm" onClick={() => exportChartAsPng("chart-daily-events", "daily-events")}>
+              <Download className="h-4 w-4" />
+            </Button>
+            <div>
+              <div className="flex items-center justify-end gap-1">
+                <Info className="h-4 w-4 text-muted-foreground" title="يوضح إجمالي أحداث الدخول والخروج المسجلة يوميا." />
+                <h3 className="text-lg font-semibold">الأحداث اليومية</h3>
+              </div>
+              <p className="text-xs text-muted-foreground">يوضح إجمالي أحداث الدخول والخروج المسجلة يوميا.</p>
+            </div>
+          </div>
+          <div className="h-64" id="chart-daily-events">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={analytics?.daily || []}>
                 <CartesianGrid strokeDasharray="3 3" />
@@ -401,8 +542,19 @@ export function MunicipalityDashboard() {
       </div>
 
       <div className="rounded-2xl border bg-gradient-to-br from-emerald-50 to-sky-50 p-4 shadow-sm text-right">
-        <h3 className="text-lg font-semibold mb-3">{labels.pointLabel} الشهرية</h3>
-        <div className="h-64">
+        <div className="mb-3 flex items-start justify-between gap-2">
+          <Button variant="outline" size="sm" onClick={() => exportChartAsPng("chart-monthly-containers", "monthly-containers")}>
+            <Download className="h-4 w-4" />
+          </Button>
+          <div>
+            <div className="flex items-center justify-end gap-1">
+              <Info className="h-4 w-4 text-muted-foreground" title="مقارنة شهرية لعدد النقاط/الحاويات التي تمت خدمتها." />
+              <h3 className="text-lg font-semibold">{labels.pointLabel} الشهرية</h3>
+            </div>
+            <p className="text-xs text-muted-foreground">مقارنة شهرية لعدد النقاط/الحاويات التي تمت خدمتها.</p>
+          </div>
+        </div>
+        <div className="h-64" id="chart-monthly-containers">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={analytics?.monthly || []}>
               <CartesianGrid strokeDasharray="3 3" />
@@ -417,8 +569,19 @@ export function MunicipalityDashboard() {
 
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="rounded-2xl border bg-gradient-to-br from-amber-50 to-rose-50 p-4 shadow-sm text-right">
-          <h3 className="text-lg font-semibold mb-3">متوسط زمن الخدمة (دقائق)</h3>
-          <div className="h-64">
+          <div className="mb-3 flex items-start justify-between gap-2">
+            <Button variant="outline" size="sm" onClick={() => exportChartAsPng("chart-service-duration", "service-duration")}>
+              <Download className="h-4 w-4" />
+            </Button>
+            <div>
+              <div className="flex items-center justify-end gap-1">
+                <Info className="h-4 w-4 text-muted-foreground" title="متوسط مدة بقاء المركبة داخل النقطة قبل تسجيل الخروج." />
+                <h3 className="text-lg font-semibold">متوسط زمن الخدمة (دقائق)</h3>
+              </div>
+              <p className="text-xs text-muted-foreground">متوسط مدة بقاء المركبة داخل النقطة قبل تسجيل الخروج.</p>
+            </div>
+          </div>
+          <div className="h-64" id="chart-service-duration">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={analytics?.daily || []}>
                 <CartesianGrid strokeDasharray="3 3" />
@@ -432,8 +595,19 @@ export function MunicipalityDashboard() {
         </div>
 
         <div className="rounded-2xl border bg-gradient-to-br from-emerald-50 to-lime-50 p-4 shadow-sm text-right">
-          <h3 className="text-lg font-semibold mb-3">حالة {labels.vehicleLabel}</h3>
-          <div className="h-64">
+          <div className="mb-3 flex items-start justify-between gap-2">
+            <Button variant="outline" size="sm" onClick={() => exportChartAsPng("chart-vehicle-status", "vehicle-status")}>
+              <Download className="h-4 w-4" />
+            </Button>
+            <div>
+              <div className="flex items-center justify-end gap-1">
+                <Info className="h-4 w-4 text-muted-foreground" title="يبين عدد المركبات النشطة مقابل غير النشطة حاليا." />
+                <h3 className="text-lg font-semibold">حالة {labels.vehicleLabel}</h3>
+              </div>
+              <p className="text-xs text-muted-foreground">يبين عدد المركبات النشطة مقابل غير النشطة حاليا.</p>
+            </div>
+          </div>
+          <div className="h-64" id="chart-vehicle-status">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={vehicleStatusData}>
                 <CartesianGrid strokeDasharray="3 3" />
@@ -449,25 +623,53 @@ export function MunicipalityDashboard() {
 
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="rounded-2xl border bg-gradient-to-br from-sky-50 to-indigo-50 p-4 shadow-sm text-right">
-          <h3 className="text-lg font-semibold mb-3">توزيع أنواع {labels.pointLabel}</h3>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie data={pointTypeData} dataKey="count" nameKey="label" innerRadius={50} outerRadius={90}>
-                  {pointTypeData.map((entry, index) => (
-                    <Cell key={entry.type || index} fill={chartPalette[index % chartPalette.length]} />
-                  ))}
-                </Pie>
-                <Tooltip />
-                <Legend />
-              </PieChart>
-            </ResponsiveContainer>
+          <div className="mb-3 flex items-start justify-between gap-2">
+            <Button variant="outline" size="sm" onClick={() => exportChartAsPng("chart-point-types", "point-types")}>
+              <Download className="h-4 w-4" />
+            </Button>
+            <div>
+              <div className="flex items-center justify-end gap-1">
+                <Info className="h-4 w-4 text-muted-foreground" title="توزيع نسبي لأنواع النقاط داخل هذا الفرع." />
+                <h3 className="text-lg font-semibold">توزيع أنواع {labels.pointLabel}</h3>
+              </div>
+              <p className="text-xs text-muted-foreground">توزيع نسبي لأنواع النقاط داخل هذا الفرع.</p>
+            </div>
+          </div>
+          <div className="h-64" id="chart-point-types">
+            {pointTypeData.length === 0 ? (
+              <div className="h-full flex items-center justify-center text-sm text-muted-foreground">
+                لا توجد بيانات متاحة لعرض توزيع الأنواع حالياً.
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={pointTypeData} dataKey="count" nameKey="label" innerRadius={50} outerRadius={90}>
+                    {pointTypeData.map((entry, index) => (
+                      <Cell key={entry.type || index} fill={chartPalette[index % chartPalette.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            )}
           </div>
         </div>
 
         <div className="rounded-2xl border bg-gradient-to-br from-violet-50 to-slate-50 p-4 shadow-sm text-right">
-          <h3 className="text-lg font-semibold mb-3">توزيع أنواع أحداث المناطق</h3>
-          <div className="h-64">
+          <div className="mb-3 flex items-start justify-between gap-2">
+            <Button variant="outline" size="sm" onClick={() => exportChartAsPng("chart-event-types", "event-types")}>
+              <Download className="h-4 w-4" />
+            </Button>
+            <div>
+              <div className="flex items-center justify-end gap-1">
+                <Info className="h-4 w-4 text-muted-foreground" title="يوضح نسبة أحداث الدخول مقابل الخروج المسجلة من المناطق." />
+                <h3 className="text-lg font-semibold">توزيع أنواع أحداث المناطق</h3>
+              </div>
+              <p className="text-xs text-muted-foreground">يوضح نسبة أحداث الدخول مقابل الخروج المسجلة من المناطق.</p>
+            </div>
+          </div>
+          <div className="h-64" id="chart-event-types">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie data={eventTypeData} dataKey="value" nameKey="name" innerRadius={50} outerRadius={90}>

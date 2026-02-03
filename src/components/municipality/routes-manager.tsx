@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
+import { ExportExcelDialog, type ExportColumn } from "@/components/municipality/export-excel-dialog"
 
 const RoutePreviewMap = dynamic(
   () => import("@/components/municipality/route-preview-map").then((m) => m.RoutePreviewMap),
@@ -297,12 +298,29 @@ export function RoutesManager() {
     }
   }
 
+  const exportColumns: ExportColumn<RouteItem>[] = useMemo(
+    () => [
+      { key: "name", label: "الاسم", value: (row) => row.name },
+      { key: "description", label: "الوصف", value: (row) => row.description || "-" },
+      { key: "status", label: "الحالة", value: (row) => (row.isActive ? "مفعل" : "معطل") },
+    ],
+    []
+  )
+
   return (
     <Card className="text-right">
       <CardHeader>
         <div className="flex items-center justify-between flex-row-reverse">
           <CardTitle>{labels.routeLabel}</CardTitle>
-          <Button onClick={openCreate}>إضافة {labels.routeLabel}</Button>
+          <div className="flex items-center gap-2">
+            <ExportExcelDialog
+              title={`Export ${labels.routeLabel} to Excel`}
+              rows={filteredItems}
+              columns={exportColumns}
+              fileBaseName="routes"
+            />
+            <Button onClick={openCreate}>إضافة {labels.routeLabel}</Button>
+          </div>
         </div>
       </CardHeader>
 

@@ -19,9 +19,11 @@ const defaultLabels: Labels = {
 export function useLabels() {
   const [labels, setLabels] = useState<Labels>(defaultLabels);
   const [organizationName, setOrganizationName] = useState<string>('');
+  const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
     let active = true;
+    setLoading(true);
     fetch('/api/labels')
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
@@ -33,13 +35,16 @@ export function useLabels() {
           setOrganizationName(data.organizationName);
         }
       })
-      .catch(() => null);
+      .catch(() => null)
+      .finally(() => {
+        if (active) setLoading(false);
+      });
 
     return () => {
       active = false;
     };
   }, []);
 
-  return { labels, organizationName };
+  return { labels, organizationName, loading };
 }
 

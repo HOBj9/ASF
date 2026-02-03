@@ -17,6 +17,15 @@ function formatMonthLabel(date: Date, timeZone: string): string {
   }).format(date);
 }
 
+function parsePositiveInt(value: string | null, fallback: number, min: number, max: number): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  const num = Math.floor(parsed);
+  if (num < min) return min;
+  if (num > max) return max;
+  return num;
+}
+
 export async function GET(request: Request) {
   try {
     const authResult = await requirePermission(permissionResources.REPORTS, permissionActions.READ);
@@ -25,6 +34,8 @@ export async function GET(request: Request) {
     const { session } = authResult;
     const { searchParams } = new URL(request.url);
     const branchId = resolveBranchId(session, searchParams.get('branchId'));
+    const dailyDays = parsePositiveInt(searchParams.get('dailyDays'), 14, 7, 60);
+    const monthlyMonths = parsePositiveInt(searchParams.get('monthlyMonths'), 12, 3, 24);
 
     const branch = await Branch.findById(branchId).select('timezone').lean();
     if (!branch) {
@@ -33,7 +44,7 @@ export async function GET(request: Request) {
     const timezone = branch.timezone || 'Asia/Damascus';
 
     const { start: todayStart, end: todayEnd } = getZonedDayRange(timezone);
-    const dailyStart = new Date(todayStart.getTime() - 13 * 24 * 60 * 60 * 1000);
+    const dailyStart = new Date(todayStart.getTime() - (dailyDays - 1) * 24 * 60 * 60 * 1000);
 
     const dailyContainersAgg = await PointVisit.aggregate([
       {
@@ -94,7 +105,7 @@ export async function GET(request: Request) {
     const dwellMap = new Map(dailyDwellAgg.map((d: any) => [d._id, d.avgSeconds]));
 
     const daily = [];
-    for (let i = 0; i < 14; i++) {
+    for (let i = 0; i < dailyDays; i++) {
       const date = new Date(dailyStart.getTime() + i * 24 * 60 * 60 * 1000);
       const label = new Intl.DateTimeFormat('en-CA', {
         timeZone: timezone,
@@ -110,7 +121,7 @@ export async function GET(request: Request) {
       });
     }
 
-    const monthStart = getZonedMonthStart(timezone, 11);
+    const monthStart = getZonedMonthStart(timezone, monthlyMonths - 1);
     const monthEnd = todayEnd;
 
     const monthlyAgg = await PointVisit.aggregate([
@@ -133,7 +144,7 @@ export async function GET(request: Request) {
 
     const monthlyMap = new Map(monthlyAgg.map((d: any) => [d._id, d.count]));
     const monthly = [];
-    for (let i = 11; i >= 0; i--) {
+    for (let i = monthlyMonths - 1; i >= 0; i--) {
       const monthDate = getZonedMonthStart(timezone, i);
       const label = formatMonthLabel(monthDate, timezone);
       monthly.push({
@@ -146,7 +157,7 @@ export async function GET(request: Request) {
       Vehicle.countDocuments({ branchId, isActive: true }),
       Vehicle.countDocuments({ branchId, isActive: false }),
       Point.aggregate([
-        { $match: { branchId, isActive: true } },
+        { $match: { branchId: branch._id, isActive: true } },
         { $group: { _id: '$type', count: { $sum: 1 } } },
       ]),
       ZoneEvent.aggregate([
@@ -184,6 +195,10 @@ export async function GET(request: Request) {
     return NextResponse.json({
       daily,
       monthly,
+      ranges: {
+        dailyDays,
+        monthlyMonths,
+      },
       vehicleStatus: {
         active: activeVehicles,
         inactive: inactiveVehicles,
