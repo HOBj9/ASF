@@ -14,6 +14,7 @@ export type VehicleLiveLocationItem = {
   passengers: number;
   capacity: number;
   speed: number;
+  heading: number;
   coordinates: [number, number] | null;
   imei?: string;
   engineStatus?: boolean;
@@ -94,6 +95,7 @@ export class LiveTrackingService {
           passengers: 0,
           capacity: 40,
           speed: Number(info.speed || 0),
+          heading: Number(info.heading ?? 0),
           coordinates: [Number(info.lat), Number(info.lng)],
           imei,
           engineStatus: !!info.engineStatus,
@@ -110,6 +112,7 @@ export class LiveTrackingService {
         passengers: 0,
         capacity: 40,
         speed: 0,
+        heading: 0,
         coordinates: null,
         imei,
         engineStatus: false,

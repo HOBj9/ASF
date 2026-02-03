@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { MunicipalityMap } from "./municipality-map";
+import { MunicipalityMap, type MapTab } from "./municipality-map";
 import { cn } from "@/lib/utils";
 import {
   BarChart,
@@ -48,6 +48,7 @@ type LiveVehicle = {
   status: "moving" | "stopped" | "offline";
   lastUpdate: string;
   speed: number;
+  heading: number;
   coordinates: [number, number] | null;
   imei?: string;
 };
@@ -58,6 +59,23 @@ type AtharZone = {
   color?: string;
   center: { lat: number; lng: number } | null;
   vertices: Array<{ lat: number; lng: number }>;
+};
+
+type AtharObject = {
+  id: string;
+  imei: string;
+  name: string;
+  plateNumber: string | null;
+  lat: number | null;
+  lng: number | null;
+  speed: number;
+  angle: number;
+  active: boolean;
+  dtTracker: string | null;
+  dtServer: string | null;
+  model: string | null;
+  device: string | null;
+  raw: Record<string, any>;
 };
 
 type Route = {
@@ -122,6 +140,7 @@ function StatCard({
 export function MunicipalityDashboard() {
   const [branch, setBranch] = useState<BranchInfo | null>(null);
   const [liveVehicles, setLiveVehicles] = useState<LiveVehicle[]>([]);
+  const [atharObjects, setAtharObjects] = useState<AtharObject[]>([]);
   const [zones, setZones] = useState<AtharZone[]>([]);
   const [points, setPoints] = useState<Point[]>([]);
   const [routes, setRoutes] = useState<Route[]>([]);
@@ -129,6 +148,11 @@ export function MunicipalityDashboard() {
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
   const [events, setEvents] = useState<EventItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeMapTab, setActiveMapTab] = useState<MapTab>("live");
+  const [pointsLoaded, setPointsLoaded] = useState(false);
+  const [zonesLoaded, setZonesLoaded] = useState(false);
+  const [objectsLoaded, setObjectsLoaded] = useState(false);
+  const [liveLoaded, setLiveLoaded] = useState(false);
   const { labels } = useLabels();
 
   const chartPalette = ["#22c55e", "#0ea5e9", "#f97316", "#a855f7", "#facc15", "#14b8a6"];
@@ -138,13 +162,9 @@ export function MunicipalityDashboard() {
 
     async function loadInitial() {
       try {
-        const liveVehiclesPromise = fetch("/api/vehicles/locations").then((r) => (r.ok ? r : null));
-        const atharZonesPromise = fetch("/api/athar/zones").then((r) => (r.ok ? r : fetch("/api/points")));
-        const [branchRes, liveVehiclesRes, pointsRes, routesRes, statsRes, eventsRes, analyticsRes] =
+        const [branchRes, routesRes, statsRes, eventsRes, analyticsRes] =
           await Promise.all([
             fetch("/api/municipality"),
-            liveVehiclesPromise,
-            atharZonesPromise,
             fetch("/api/routes"),
             fetch("/api/dashboard/stats"),
             fetch("/api/events?limit=8"),
@@ -156,17 +176,6 @@ export function MunicipalityDashboard() {
         if (branchRes.ok) {
           const data = await branchRes.json();
           setBranch(data.branch || data.municipality || null);
-        }
-        if (liveVehiclesRes?.ok) {
-          const data = await liveVehiclesRes.json();
-          setLiveVehicles(data.data || []);
-        } else {
-          setLiveVehicles([]);
-        }
-        if (pointsRes.ok) {
-          const data = await pointsRes.json();
-          setPoints(data.points || []);
-          setZones(data.zones || []);
         }
         if (routesRes.ok) {
           const data = await routesRes.json();
@@ -191,10 +200,6 @@ export function MunicipalityDashboard() {
 
     loadInitial();
     const interval = setInterval(() => {
-      fetch("/api/vehicles/locations")
-        .then((res) => res.json())
-        .then((data) => setLiveVehicles(data.data || []))
-        .catch(() => null);
       fetch("/api/dashboard/stats")
         .then((res) => res.json())
         .then((data) => setStats(data))
@@ -216,12 +221,14 @@ export function MunicipalityDashboard() {
   }, []);
 
   useEffect(() => {
+    if (activeMapTab !== "live") return;
     const source = new EventSource("/api/vehicles/locations/websocket");
     source.onmessage = (event) => {
       try {
         const payload = JSON.parse(event.data);
         if (payload?.type === "bus_locations" && Array.isArray(payload?.data)) {
           setLiveVehicles(payload.data);
+          setLiveLoaded(true);
         }
       } catch {
         // ignore malformed events
@@ -233,7 +240,57 @@ export function MunicipalityDashboard() {
     };
 
     return () => source.close();
-  }, []);
+  }, [activeMapTab]);
+
+  useEffect(() => {
+    if (activeMapTab === "live" && !liveLoaded) {
+      fetch("/api/vehicles/locations")
+        .then((res) => res.json())
+        .then((data) => {
+          setLiveVehicles(data.data || []);
+          setLiveLoaded(true);
+        })
+        .catch(() => null);
+      return;
+    }
+
+    if (activeMapTab === "points" && !pointsLoaded) {
+      fetch("/api/points")
+        .then((res) => res.json())
+        .then((data) => {
+          setPoints(data.points || []);
+          setPointsLoaded(true);
+        })
+        .catch(() => null);
+      return;
+    }
+
+    if (activeMapTab === "zones" && !zonesLoaded) {
+      fetch("/api/athar/zones?sync=false")
+        .then((res) => res.json())
+        .then((data) => {
+          setZones(data.zones || []);
+          // keep points if returned, useful fallback
+          if (Array.isArray(data.points) && data.points.length && !pointsLoaded) {
+            setPoints(data.points);
+            setPointsLoaded(true);
+          }
+          setZonesLoaded(true);
+        })
+        .catch(() => null);
+      return;
+    }
+
+    if (activeMapTab === "objects" && !objectsLoaded) {
+      fetch("/api/athar/objects")
+        .then((res) => res.json())
+        .then((data) => {
+          setAtharObjects(data.objects || []);
+          setObjectsLoaded(true);
+        })
+        .catch(() => null);
+    }
+  }, [activeMapTab, liveLoaded, pointsLoaded, zonesLoaded, objectsLoaded]);
 
   const pointTypeData = analytics?.pointTypes || [];
   const vehicleStatusData = [
@@ -267,10 +324,18 @@ export function MunicipalityDashboard() {
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-semibold text-right">الخريطة التشغيلية</h3>
             <div className="text-sm text-muted-foreground">
-              {points.length} {labels.pointLabel} • {zones.length} مناطق • {routes.length} {labels.routeLabel}
+              {points.length} {labels.pointLabel} • {zones.length} مناطق • {routes.length} {labels.routeLabel} • {atharObjects.length} سيارات أثر
             </div>
           </div>
-          <MunicipalityMap municipality={branch} liveVehicles={liveVehicles} zones={zones} points={points} />
+          <MunicipalityMap
+            municipality={branch}
+            liveVehicles={liveVehicles}
+            atharObjects={atharObjects}
+            zones={zones}
+            points={points}
+            activeTab={activeMapTab}
+            onTabChange={setActiveMapTab}
+          />
         </div>
 
         <div className="rounded-2xl border bg-card p-4 text-right shadow-sm">

@@ -21,14 +21,11 @@ export class AtharService {
   }
 
   static async forBranch(branchId: string): Promise<AtharService> {
-    console.log('[Athar] forBranch: branchId=', branchId);
     await connectDB();
     const branch = await Branch.findById(branchId).select('atharKey').lean();
     if (!branch?.atharKey) {
-      console.log('[Athar] forBranch: no atharKey for branch', branchId);
       throw new Error('مفتاح Athar API غير معرّف للفرع');
     }
-    console.log('[Athar] forBranch: OK, instance created for branch', branchId);
 
     return new AtharService({
       baseUrl: process.env.ATHAR_BASE_URL || 'https://admin.alather.net/api/api.php',
@@ -52,8 +49,6 @@ export class AtharService {
     url.searchParams.append('key', this.config.apiKey);
 
     const urlStr = url.toString();
-    const safeUrl = urlStr.replace(/key=[^&]+/, 'key=***');
-    console.log('[Athar] makeRequest: cmd=', params.cmd, 'url=', safeUrl);
 
     const response = await fetch(urlStr, {
       method: 'GET',
@@ -84,7 +79,6 @@ export class AtharService {
       );
     }
 
-    console.log('[Athar] makeRequest: response keys=', Object.keys(data || {}));
     return data;
   }
 
@@ -126,7 +120,6 @@ export class AtharService {
   }
 
   async getZones(): Promise<any[]> {
-    console.log('[Athar] getZones: calling USER_GET_ZONES');
     const response = await this.makeRequest({ cmd: 'USER_GET_ZONES' });
     if (!response) {
       console.log('[Athar] getZones: empty response');
@@ -154,7 +147,6 @@ export class AtharService {
         };
       });
     }
-    console.log('[Athar] getZones: count=', zones.length, 'sample keys=', zones[0] ? Object.keys(zones[0]) : []);
     return zones;
   }
 
@@ -169,7 +161,6 @@ export class AtharService {
   }
 
   async getMarkers(): Promise<Array<{ id: string; lat: number; lng: number; name?: string }>> {
-    console.log('[Athar] getMarkers: calling USER_GET_MARKERS');
     const response = await this.makeRequest({ cmd: 'USER_GET_MARKERS' });
     if (!response) {
       console.log('[Athar] getMarkers: empty response');
@@ -186,13 +177,41 @@ export class AtharService {
     const markers = raw
       .map((m: any) => AtharService.normalizeMarker(m))
       .filter((m: NormMarker | null): m is NormMarker => m != null);
-    console.log('[Athar] getMarkers: count=', markers.length);
     return markers;
+  }
+
+  async getObjects(): Promise<any[]> {
+    const response = await this.makeRequest({ cmd: 'USER_GET_OBJECTS' });
+    if (!response) {
+      console.log('[Athar] getObjects: empty response');
+      return [];
+    }
+
+    const source = response.objects ?? response.data ?? response;
+    let objects: any[] = [];
+    if (Array.isArray(source)) {
+      objects = source;
+    } else if (source && typeof source === 'object') {
+      objects = Object.entries(source).map(([key, value]) => {
+        const obj = (value && typeof value === 'object' ? value : {}) as Record<string, any>;
+        return {
+          ...obj,
+          id: obj.id ?? obj.object_id ?? obj.objectId ?? key,
+        };
+      });
+    }
+
+    return objects;
   }
 
   async getObjectLocations(
     imeis: string[]
-  ): Promise<Record<string, { lat: number | null; lng: number | null; engineStatus: boolean; speed: number }>> {
+  ): Promise<
+    Record<
+      string,
+      { lat: number | null; lng: number | null; engineStatus: boolean; speed: number; heading: number | null }
+    >
+  > {
     const uniqueImeis = Array.from(
       new Set(imeis.map((v) => String(v || '').trim()).filter(Boolean))
     );
@@ -205,7 +224,7 @@ export class AtharService {
 
     const output: Record<
       string,
-      { lat: number | null; lng: number | null; engineStatus: boolean; speed: number }
+      { lat: number | null; lng: number | null; engineStatus: boolean; speed: number; heading: number | null }
     > = {};
 
     for (const imei of uniqueImeis) {
@@ -215,12 +234,15 @@ export class AtharService {
       const engineStatus = String(info?.params?.acc ?? '') === '1';
       const speedRaw = info?.speed ?? info?.params?.speed ?? 0;
       const speed = Number.isFinite(Number(speedRaw)) ? Number(speedRaw) : 0;
+      const headingRaw = info?.angle ?? info?.course ?? info?.params?.angle ?? info?.params?.course;
+      const headingNum = Number(headingRaw);
 
       output[imei] = {
         lat: Number.isFinite(lat) ? lat : null,
         lng: Number.isFinite(lng) ? lng : null,
         engineStatus,
         speed,
+        heading: Number.isFinite(headingNum) ? headingNum : null,
       };
     }
 
