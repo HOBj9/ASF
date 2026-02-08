@@ -13,6 +13,14 @@ import Route from "@/models/Route";
 import RoutePoint from "@/models/RoutePoint";
 import ZoneEvent from "@/models/ZoneEvent";
 import PointVisit from "@/models/PointVisit";
+import Unit from "@/models/Unit";
+import MaterialCategory from "@/models/MaterialCategory";
+import Material from "@/models/Material";
+import MaterialCategoryLink from "@/models/MaterialCategoryLink";
+import MaterialAttributeDefinition from "@/models/MaterialAttributeDefinition";
+import MaterialAttributeValue from "@/models/MaterialAttributeValue";
+import MaterialStock from "@/models/MaterialStock";
+import MaterialTransaction from "@/models/MaterialTransaction";
 
 import { defaultPermissions, defaultRoles } from "@/constants/permissions";
 import { appConfig } from "@/lib/config/app.config";
@@ -39,6 +47,23 @@ type PointSpec = {
   radiusMeters: number;
   addressText: string;
   zoneId: string;
+};
+
+type CategorySeed = {
+  key: string;
+  name: string;
+  nameAr: string;
+  parentKey?: string | null;
+  sortOrder?: number;
+};
+
+type AttributeSeed = {
+  categoryKey: string;
+  name: string;
+  type: "text" | "number" | "select" | "boolean" | "date";
+  required?: boolean;
+  options?: string[];
+  unitKey?: string | null;
 };
 
 const timeZone = "Asia/Damascus";
@@ -84,6 +109,77 @@ const pointTypeLabels: Record<string, string> = {
   facility: "ŸÖÿ±ŸÅŸÇ ÿÆÿØŸÖŸä",
   other: "ŸÜŸÇÿ∑ÿ© ÿ™ÿ¥ÿ∫ŸäŸÑ",
 };
+const unitSeeds = [
+  { key: "kg", name: "Kilogram", nameAr: "ﬂÃ„", symbol: "kg", baseKey: null, factor: 1 },
+  { key: "g", name: "Gram", nameAr: "€—«„", symbol: "g", baseKey: "kg", factor: 0.001 },
+  { key: "ton", name: "Ton", nameAr: "ÿ‰", symbol: "t", baseKey: "kg", factor: 1000 },
+  { key: "pcs", name: "Piece", nameAr: "ﬁÿ⁄…", symbol: "pcs", baseKey: null, factor: 1 },
+];
+
+const orgCategorySeeds: CategorySeed[] = [
+  { key: "organic", name: "Organic Waste", nameAr: "„Œ·›«  ⁄÷ÊÌ…" },
+  { key: "organic-food", name: "Food Waste", nameAr: "„Œ·›«  €–«∆Ì…", parentKey: "organic" },
+  { key: "plastic", name: "Plastic Waste", nameAr: "„Œ·›«  »·«” ÌﬂÌ…" },
+  { key: "plastic-pet", name: "PET", nameAr: "»·«” Ìﬂ PET", parentKey: "plastic" },
+  { key: "paper", name: "Paper Waste", nameAr: "„Œ·›«  Ê—ﬁÌ…" },
+  { key: "paper-cardboard", name: "Cardboard", nameAr: "ﬂ— Ê‰", parentKey: "paper" },
+  { key: "metal", name: "Metal Waste", nameAr: "„Œ·›«  „⁄œ‰Ì…" },
+  { key: "metal-iron", name: "Iron", nameAr: "ÕœÌœ", parentKey: "metal" },
+  { key: "glass", name: "Glass Waste", nameAr: "„Œ·›«  “Ã«ÃÌ…" },
+];
+
+const orgAttributeSeeds: AttributeSeed[] = [
+  { categoryKey: "organic", name: "‰”»… «·—ÿÊ»…", type: "number" },
+  { categoryKey: "organic", name: "„’œ— «·„Œ·›« ", type: "select", options: ["„ÿ«»Œ", "„ÿ«⁄„", "√”Ê«ﬁ"] },
+  { categoryKey: "plastic", name: "‰Ê⁄ «·»·«” Ìﬂ", type: "select", options: ["PET", "HDPE", "LDPE"] },
+  { categoryKey: "paper", name: "œ—Ã… «·‰ﬁ«¡", type: "select", options: ["„— ›⁄", "„ Ê”ÿ", "„‰Œ›÷"] },
+  { categoryKey: "metal", name: "‰Ê⁄ «·„⁄œ‰", type: "select", options: ["ÕœÌœ", "√·„‰ÌÊ„", "‰Õ«”"] },
+  { categoryKey: "glass", name: "·Ê‰ «·“Ã«Ã", type: "select", options: ["‘›«›", "√Œ÷—", "»‰Ì"] },
+];
+
+const branchMaterialSeeds = [
+  {
+    name: "Food Waste",
+    nameAr: "„Œ·›«  ÿ⁄«„",
+    sku: "FOOD",
+    baseUnitKey: "kg",
+    categories: ["organic-food"],
+    attributes: [
+      { categoryKey: "organic", name: "‰”»… «·—ÿÊ»…", value: 60 },
+      { categoryKey: "organic", name: "„’œ— «·„Œ·›« ", value: "„ÿ«⁄„" },
+    ],
+  },
+  {
+    name: "PET Plastic",
+    nameAr: "»·«” Ìﬂ PET",
+    sku: "PET",
+    baseUnitKey: "kg",
+    categories: ["plastic-pet"],
+    attributes: [
+      { categoryKey: "plastic", name: "‰Ê⁄ «·»·«” Ìﬂ", value: "PET" },
+    ],
+  },
+  {
+    name: "Cardboard",
+    nameAr: "ﬂ— Ê‰",
+    sku: "CARD",
+    baseUnitKey: "kg",
+    categories: ["paper-cardboard"],
+    attributes: [
+      { categoryKey: "paper", name: "œ—Ã… «·‰ﬁ«¡", value: "„ Ê”ÿ" },
+    ],
+  },
+  {
+    name: "Iron Scrap",
+    nameAr: "Œ—œ… ÕœÌœ",
+    sku: "IRON",
+    baseUnitKey: "kg",
+    categories: ["metal-iron"],
+    attributes: [
+      { categoryKey: "metal", name: "‰Ê⁄ «·„⁄œ‰", value: "ÕœÌœ" },
+    ],
+  },
+];
 
 function randomBetween(min: number, max: number) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
@@ -220,6 +316,14 @@ async function seed() {
       RoutePoint.deleteMany({}),
       ZoneEvent.deleteMany({}),
       PointVisit.deleteMany({}),
+      Unit.deleteMany({}),
+      MaterialCategory.deleteMany({}),
+      Material.deleteMany({}),
+      MaterialCategoryLink.deleteMany({}),
+      MaterialAttributeDefinition.deleteMany({}),
+      MaterialAttributeValue.deleteMany({}),
+      MaterialStock.deleteMany({}),
+      MaterialTransaction.deleteMany({}),
     ]);
 
     const permissions = await Permission.insertMany(
@@ -295,6 +399,66 @@ async function seed() {
       organizationId: organization._id,
       isActive: true,
     });
+    const unitMap = new Map<string, any>();
+    for (const unitSeed of unitSeeds) {
+      const baseUnitId = unitSeed.baseKey ? unitMap.get(unitSeed.baseKey)?._id : null;
+      const unit = await Unit.create({
+        organizationId: organization._id,
+        branchId: null,
+        name: unitSeed.name,
+        nameAr: unitSeed.nameAr,
+        symbol: unitSeed.symbol,
+        baseUnitId,
+        factor: unitSeed.factor,
+        isActive: true,
+      });
+      unitMap.set(unitSeed.key, unit);
+    }
+
+    const orgCategoryKeyToId = new Map<string, string>();
+    for (const categorySeed of orgCategorySeeds) {
+      const parentId = categorySeed.parentKey
+        ? orgCategoryKeyToId.get(categorySeed.parentKey) || null
+        : null;
+      const parentDepth = parentId
+        ? await MaterialCategory.findById(parentId).select("depth").lean()
+        : null;
+      const depth = parentDepth && typeof parentDepth.depth === "number" ? parentDepth.depth + 1 : 0;
+
+      const category = await MaterialCategory.create({
+        organizationId: organization._id,
+        branchId: null,
+        parentId,
+        originCategoryId: null,
+        name: categorySeed.name,
+        nameAr: categorySeed.nameAr,
+        depth,
+        sortOrder: categorySeed.sortOrder || 0,
+        isActive: true,
+      });
+      orgCategoryKeyToId.set(categorySeed.key, String(category._id));
+    }
+
+    const orgAttributePayload = orgAttributeSeeds
+      .map((attr) => ({
+        categoryId: orgCategoryKeyToId.get(attr.categoryKey),
+        name: attr.name,
+        type: attr.type,
+        required: attr.required ?? false,
+        options: attr.options || [],
+        unitId: attr.unitKey ? unitMap.get(attr.unitKey)?._id || null : null,
+        isActive: true,
+      }))
+      .filter((attr) => attr.categoryId);
+
+    if (orgAttributePayload.length > 0) {
+      await MaterialAttributeDefinition.insertMany(orgAttributePayload as any[]);
+    }
+
+    const orgCategories = await MaterialCategory.find({ organizationId: organization._id, branchId: null }).lean();
+    const orgAttributes = await MaterialAttributeDefinition.find({
+      categoryId: { $in: orgCategories.map((c) => c._id) },
+    }).lean();
 
     const branchSpecs: BranchSpec[] = [
       {
@@ -504,6 +668,177 @@ async function seed() {
           isActive: true,
         }))
       );
+      const branchCategoryMap = new Map<string, string>();
+      const sortedOrgCategories = orgCategories.slice().sort((a, b) => (a.depth || 0) - (b.depth || 0));
+
+      for (const orgCategory of sortedOrgCategories) {
+        const parentId = orgCategory.parentId ? branchCategoryMap.get(String(orgCategory.parentId)) || null : null;
+        const branchCategory = await MaterialCategory.create({
+          organizationId: organization._id,
+          branchId: branch._id,
+          parentId,
+          originCategoryId: orgCategory._id,
+          name: orgCategory.name,
+          nameAr: orgCategory.nameAr || null,
+          depth: typeof orgCategory.depth === "number" ? orgCategory.depth : 0,
+          sortOrder: orgCategory.sortOrder || 0,
+          isActive: orgCategory.isActive !== false,
+        });
+        branchCategoryMap.set(String(orgCategory._id), String(branchCategory._id));
+      }
+
+      const branchAttributes = await MaterialAttributeDefinition.insertMany(
+        orgAttributes.map((attr) => ({
+          categoryId: branchCategoryMap.get(String(attr.categoryId)),
+          name: attr.name,
+          type: attr.type,
+          required: attr.required,
+          options: attr.options || [],
+          unitId: attr.unitId || null,
+          isActive: attr.isActive !== false,
+        }))
+      );
+
+      const branchAttrLookup = new Map<string, any>();
+      branchAttributes.forEach((attr) => {
+        branchAttrLookup.set(`${attr.categoryId}:${attr.name}`, attr);
+      });
+
+      const resolveBranchCategoryId = (key: string) => {
+        const orgId = orgCategoryKeyToId.get(key);
+        return orgId ? branchCategoryMap.get(orgId) || null : null;
+      };
+
+      const branchMaterials: any[] = [];
+      for (const seed of branchMaterialSeeds) {
+        const baseUnitId = unitMap.get(seed.baseUnitKey)?._id || null;
+        const material = await Material.create({
+          organizationId: organization._id,
+          branchId: branch._id,
+          name: seed.name,
+          nameAr: seed.nameAr,
+          sku: `${seed.sku}-${spec.zoneSeed}`,
+          baseUnitId,
+          isActive: true,
+        });
+
+        const categoryIds = seed.categories
+          .map((key: string) => resolveBranchCategoryId(key))
+          .filter(Boolean) as string[];
+
+        if (categoryIds.length > 0) {
+          await MaterialCategoryLink.insertMany(
+            categoryIds.map((categoryId, index) => ({
+              materialId: material._id,
+              categoryId,
+              isPrimary: index === 0,
+            }))
+          );
+        }
+
+        const attrPayload = (seed.attributes || [])
+          .map((attr: any) => {
+            const categoryId = resolveBranchCategoryId(attr.categoryKey);
+            if (!categoryId) return null;
+            const def = branchAttrLookup.get(`${categoryId}:${attr.name}`);
+            if (!def) return null;
+            return {
+              materialId: material._id,
+              attributeId: def._id,
+              value: attr.value,
+            };
+          })
+          .filter(Boolean);
+
+        if (attrPayload.length > 0) {
+          await MaterialAttributeValue.insertMany(attrPayload as any[]);
+        }
+
+        branchMaterials.push(material);
+      }
+
+      const stockPoints = points.slice(0, 2);
+      const stockMaterials = branchMaterials.slice(0, 3);
+      const stockNow = Date.now();
+
+      for (const [idx, material] of stockMaterials.entries()) {
+        const point = stockPoints[idx % stockPoints.length];
+        if (!point) continue;
+
+        let balance = randomBetween(20, 120);
+        const baseUnitId = material.baseUnitId || null;
+
+        await MaterialStock.create({
+          organizationId: organization._id,
+          branchId: branch._id,
+          pointId: point._id,
+          materialId: material._id,
+          quantity: balance,
+        });
+
+        const firstTime = new Date(stockNow - (idx + 1) * 60 * 60 * 1000);
+        await MaterialTransaction.create({
+          organizationId: organization._id,
+          branchId: branch._id,
+          pointId: point._id,
+          materialId: material._id,
+          type: "adjust",
+          quantity: balance,
+          unitId: baseUnitId,
+          quantityBase: balance,
+          deltaBase: balance,
+          balanceAfter: balance,
+          note: "—’Ìœ «›  «ÕÌ",
+          createdBy: null,
+          createdAt: firstTime,
+          updatedAt: firstTime,
+        });
+
+        const outQty = Math.min(5, Math.max(1, Math.round(balance * 0.1)));
+        balance -= outQty;
+        const outTime = new Date(firstTime.getTime() + 30 * 60 * 1000);
+        await MaterialTransaction.create({
+          organizationId: organization._id,
+          branchId: branch._id,
+          pointId: point._id,
+          materialId: material._id,
+          type: "out",
+          quantity: outQty,
+          unitId: baseUnitId,
+          quantityBase: outQty,
+          deltaBase: -outQty,
+          balanceAfter: balance,
+          note: "’—›  ‘€Ì·Ì",
+          createdBy: null,
+          createdAt: outTime,
+          updatedAt: outTime,
+        });
+
+        const inQty = randomBetween(3, 12);
+        balance += inQty;
+        const inTime = new Date(outTime.getTime() + 45 * 60 * 1000);
+        await MaterialTransaction.create({
+          organizationId: organization._id,
+          branchId: branch._id,
+          pointId: point._id,
+          materialId: material._id,
+          type: "in",
+          quantity: inQty,
+          unitId: baseUnitId,
+          quantityBase: inQty,
+          deltaBase: inQty,
+          balanceAfter: balance,
+          note: " Ê—Ìœ ÃœÌœ",
+          createdBy: null,
+          createdAt: inTime,
+          updatedAt: inTime,
+        });
+
+        await MaterialStock.updateOne(
+          { branchId: branch._id, pointId: point._id, materialId: material._id },
+          { $set: { quantity: balance } }
+        );
+      }
 
       const routeBuckets: Record<string, typeof points> = {};
       routes.forEach((route) => {
@@ -668,3 +1003,16 @@ async function seed() {
 }
 
 seed();
+
+
+
+
+
+
+
+
+
+
+
+
+

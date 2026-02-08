@@ -17,6 +17,7 @@ import {
   MapPin,
   Route,
   FileText,
+  Boxes,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { apiClient } from "@/lib/api/client"
@@ -182,6 +183,12 @@ export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarP
       href: "/dashboard/settings",
       icon: Settings,
     },
+    {
+      title: "المواد",
+      href: "/dashboard/materials",
+      icon: Boxes,
+      permissions: [{ resource: permissionResources.MATERIALS, action: permissionActions.READ }],
+    },
   ]), [labels.branchLabel, labels.driverLabel, labels.pointLabel, labels.routeLabel, labels.vehicleLabel])
 
   const filteredMenuItems = menuItems.filter(
@@ -336,7 +343,6 @@ export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarP
     </>
   )
 }
-
 
 
 

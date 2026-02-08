@@ -45,3 +45,12 @@ export function isAdmin(role: IRole | null): boolean {
   )
 }
 
+export function isOrganizationAdmin(role: IRole | null): boolean {
+  if (!role) return false
+  if (typeof role === 'string') return role === 'organization_admin'
+  if (typeof role === 'object' && 'name' in role) {
+    return role.name === 'organization_admin'
+  }
+  return false
+}
+

@@ -36,6 +36,15 @@ services:
       NEXTAUTH_SECRET: local-development-secret-key-change-in-production
       # Enable file watching in Docker
       WATCHPACK_POLLING: "true"
+      # Increase Node heap to avoid ENOMEM during Next.js dev (scandir/watchpack)
+      # Increase max HTTP header size to avoid 431 (Request Header Fields Too Large) when session cookie is large
+      NODE_OPTIONS: "--max-old-space-size=1536 --max-http-header-size=32768"
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 512M
     volumes:
       - .:/app
       - /app/node_modules

@@ -16,6 +16,7 @@ import {
   MapPin,
   Route,
   FileText,
+  Boxes,
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -102,6 +103,12 @@ function useDashboardNavItems() {
       title: "الإعدادات",
       href: "/dashboard/settings",
       icon: Settings,
+    },
+    {
+      title: "المواد",
+      href: "/dashboard/materials",
+      icon: Boxes,
+      permissions: [{ resource: permissionResources.MATERIALS, action: permissionActions.READ }],
     },
   ]), [labels.branchLabel, labels.driverLabel, labels.pointLabel, labels.routeLabel, labels.vehicleLabel])
 

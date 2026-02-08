@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Custom hook for API calls
  * Reduces boilerplate and improves performance
  */
@@ -29,7 +29,7 @@ export function useApi<T = any>() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || 'ط­ط¯ط« ط®ط·ط£');
+        throw new Error(data.error || 'حدث خطأ');
       }
 
       if (options.successMessage) {
@@ -42,7 +42,7 @@ export function useApi<T = any>() {
 
       return data;
     } catch (err: any) {
-      const errorMessage = err.message || options.errorMessage || 'ط­ط¯ط« ط®ط·ط£';
+      const errorMessage = err.message || options.errorMessage || 'حدث خطأ';
       setError(errorMessage);
       
       if (options.onError) {

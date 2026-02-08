@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Setup Script
  * Interactive setup wizard for initializing the template
  */
@@ -23,7 +23,7 @@ async function setup() {
 
   // App Information
   const appName = await question('App Name (default: Admin Dashboard): ') || 'Admin Dashboard';
-  const appNameAr = await question('App Name (Arabic) (default: ظ„ظˆط­ط© ط§ظ„طھط­ظƒظ…): ') || 'ظ„ظˆط­ط© ط§ظ„طھط­ظƒظ…';
+  const appNameAr = await question('App Name (Arabic) (default: لوحة التحكم): ') || 'لوحة التحكم';
   const appDescription = await question('App Description: ') || '';
 
   // Database Configuration
@@ -44,8 +44,8 @@ async function setup() {
     'admin@example.com';
   const adminPassword = await question('Admin Password (default: admin123): ') || 
     'admin123';
-  const adminName = await question('Admin Name (default: ظ…ط¯ظٹط± ط§ظ„ظ†ط¸ط§ظ…): ') || 
-    'ظ…ط¯ظٹط± ط§ظ„ظ†ط¸ط§ظ…';
+  const adminName = await question('Admin Name (default: مدير النظام): ') || 
+    'مدير النظام';
 
   // Default User
   console.log('\nًں‘¥ Default User Account:');
@@ -53,8 +53,8 @@ async function setup() {
     'user@example.com';
   const userPassword = await question('User Password (default: user123): ') || 
     'user123';
-  const userName = await question('User Name (default: ظ…ط³طھط®ط¯ظ… ط¹ط§ط¯ظٹ): ') || 
-    'ظ…ط³طھط®ط¯ظ… ط¹ط§ط¯ظٹ';
+  const userName = await question('User Name (default: مستخدم عادي): ') || 
+    'مستخدم عادي';
 
   // Features
   console.log('\nâڑ™ï¸ڈ  Features:');

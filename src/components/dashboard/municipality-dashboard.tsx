@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useState } from "react";
 import { MunicipalityMap, type MapTab } from "./municipality-map";
@@ -369,12 +369,12 @@ export function MunicipalityDashboard() {
 
   const pointTypeData = analytics?.pointTypes || [];
   const vehicleStatusData = [
-    { name: "ظ†ط´ط·ط©", value: analytics?.vehicleStatus?.active || 0 },
-    { name: "ط؛ظٹط± ظ†ط´ط·ط©", value: analytics?.vehicleStatus?.inactive || 0 },
+    { name: "مفعّلة", value: analytics?.vehicleStatus?.active || 0 },
+    { name: "غير مفعّلة", value: analytics?.vehicleStatus?.inactive || 0 },
   ];
   const eventTypeData = [
-    { name: "ط¯ط®ظˆظ„", value: analytics?.eventsByType?.zone_in || 0 },
-    { name: "ط®ط±ظˆط¬", value: analytics?.eventsByType?.zone_out || 0 },
+    { name: "دخول", value: analytics?.eventsByType?.zone_in || 0 },
+    { name: "خروج", value: analytics?.eventsByType?.zone_out || 0 },
   ];
 
 
@@ -420,25 +420,25 @@ export function MunicipalityDashboard() {
   return (
     <div className="space-y-6">
       <div className="rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-emerald-950/60 via-emerald-900/30 to-cyan-900/20 p-6 shadow-sm text-right">
-        <div className="text-sm text-muted-foreground">ط¥ط¯ط§ط±ط© {labels.branchLabel}</div>
-        <h2 className="text-2xl font-semibold mt-2">{branch?.name || "ط؛ظٹط± ظ…ط­ط¯ط¯ ط¨ط¹ط¯"}</h2>
+        <div className="text-sm text-muted-foreground">إدارة {labels.branchLabel}</div>
+        <h2 className="text-2xl font-semibold mt-2">{branch?.name || "غير محدد بعد"}</h2>
         {branch?.addressText && (
           <p className="text-sm text-muted-foreground mt-1">{branch.addressText}</p>
         )}
       </div>
 
       <div className="grid gap-4 md:grid-cols-4">
-        <StatCard label={`${labels.vehicleLabel} ط§ظ„ط¹ط§ظ…ظ„ط© ط§ظ„ط¢ظ†`} value={stats?.activeVehicles ?? "--"} tone="emerald" />
-        <StatCard label={`${labels.pointLabel} ط§ظ„ظ†ط´ط·ط© ط§ظ„ط¢ظ†`} value={stats?.activePoints ?? "--"} tone="sky" />
-        <StatCard label={`${labels.pointLabel} ط§ظ„ظ…ط²ط§ط±ط© ط§ظ„ظٹظˆظ…`} value={stats?.visitedPointsToday ?? "--"} tone="amber" />
-        <StatCard label="ظ†ط³ط¨ط© ط§ظ„ط¥ظ†ط¬ط§ط² ط§ظ„ظٹظˆظ…ظٹط©" value={`${stats?.dailyCompletionPercent ?? 0}%`} tone="violet" />
+        <StatCard label={`${labels.vehicleLabel} العاملة الآن`} value={stats?.activeVehicles ?? "--"} tone="emerald" />
+        <StatCard label={`${labels.pointLabel} النشطة الآن`} value={stats?.activePoints ?? "--"} tone="sky" />
+        <StatCard label={`${labels.pointLabel} المنجزة اليوم`} value={stats?.visitedPointsToday ?? "--"} tone="amber" />
+        <StatCard label="نسبة الإنجاز اليومية" value={`${stats?.dailyCompletionPercent ?? 0}%`} tone="violet" />
       </div>
 
       <div className={cn("grid gap-6", showEvents ? "lg:grid-cols-[2fr_1fr]" : "lg:grid-cols-1")}>
         <div className={cn("space-y-4", loading && "opacity-70")}>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <h3 className="text-lg font-semibold text-right">ط§ظ„ط®ط±ظٹط·ط© ط§ظ„طھط´ط؛ظٹظ„ظٹط©</h3>
+              <h3 className="text-lg font-semibold text-right">الخريطة التشغيلية</h3>
               <Button
                 variant="outline"
                 size="sm"
@@ -448,7 +448,7 @@ export function MunicipalityDashboard() {
               </Button>
             </div>
             <div className="text-sm text-muted-foreground">
-              {points.length} {labels.pointLabel} â€¢ {zones.length} ظ…ظ†ط§ط·ظ‚ â€¢ {routes.length} {labels.routeLabel} â€¢ {atharObjects.length} ط³ظٹط§ط±ط§طھ ط£ط«ط±
+              {points.length} {labels.pointLabel} â€¢ {zones.length} مناطق â€¢ {routes.length} {labels.routeLabel} â€¢ {atharObjects.length} سيارات أثر
             </div>
           </div>
           <MunicipalityMap
@@ -468,19 +468,19 @@ export function MunicipalityDashboard() {
         {showEvents && (
         <div className="rounded-2xl border bg-card p-4 text-right shadow-sm lg:h-[620px] flex flex-col">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-lg font-semibold">ط¢ط®ط± ط§ظ„ط£ط­ط¯ط§ط«</h3>
-            <span className="text-xs text-muted-foreground">ط¢ط®ط± 8 ط£ط­ط¯ط§ط«</span>
+            <h3 className="text-lg font-semibold">آخر الأحداث</h3>
+            <span className="text-xs text-muted-foreground">آخر 8 أحداث</span>
           </div>
           <div className="space-y-3 overflow-y-auto flex-1 pr-1">
-            {events.length === 0 && <div className="text-sm text-muted-foreground">ظ„ط§ طھظˆط¬ط¯ ط£ط­ط¯ط§ط« ط­ط§ظ„ظٹط§ظ‹.</div>}
+            {events.length === 0 && <div className="text-sm text-muted-foreground">لا توجد أحداث حالياً.</div>}
             {events.map((event) => (
               <div key={event._id} className="rounded-lg border p-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">{event.type === "zone_in" ? "ط¯ط®ظˆظ„" : "ط®ط±ظˆط¬"}</span>
+                  <span className="text-xs text-muted-foreground">{event.type === "zone_in" ? "دخول" : "خروج"}</span>
                   <span className="text-xs text-muted-foreground">{event.eventTimestamp || ""}</span>
                 </div>
                 <div className="font-semibold mt-1">
-                  {event.name || event.pointName || `${labels.pointLabel} ط¨ط¯ظˆظ† ط§ط³ظ…`}
+                  {event.name || event.pointName || `${labels.pointLabel} بدون اسم`}
                 </div>
                 <div className="text-xs text-muted-foreground mt-1">
                   {event.vehicleName || event.imei || ""}
@@ -500,8 +500,8 @@ export function MunicipalityDashboard() {
       <div className="rounded-2xl border bg-card p-4 text-right shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h3 className="font-semibold">ظپظ„ط§طھط± ط§ظ„ط±ط³ظˆظ… ط§ظ„ط¨ظٹط§ظ†ظٹط©</h3>
-            <p className="text-xs text-muted-foreground mt-1">ط§ط®طھط± ط§ظ„ظپطھط±ط© ط§ظ„ط²ظ…ظ†ظٹط© ظ„طھط­ط¯ظٹط« ط§ظ„ط±ط³ظˆظ… ط§ظ„ط¨ظٹط§ظ†ظٹط©.</p>
+            <h3 className="font-semibold">فلتر الرسوم البيانية</h3>
+            <p className="text-xs text-muted-foreground mt-1">اختر الفترة الزمنية لتحديث الرسوم البيانية.</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <select
@@ -509,17 +509,17 @@ export function MunicipalityDashboard() {
               value={dailyDays}
               onChange={(e) => setDailyDays(Number(e.target.value) as 7 | 14 | 30)}
             >
-              <option value={7}>ط¢ط®ط± 7 ط£ظٹط§ظ…</option>
-              <option value={14}>ط¢ط®ط± 14 ظٹظˆظ…</option>
-              <option value={30}>ط¢ط®ط± 30 ظٹظˆظ…</option>
+              <option value={7}>آخر 7 أيام</option>
+              <option value={14}>آخر 14 يوم</option>
+              <option value={30}>آخر 30 يوم</option>
             </select>
             <select
               className="rounded-lg border bg-background px-3 py-2 text-sm"
               value={monthlyMonths}
               onChange={(e) => setMonthlyMonths(Number(e.target.value) as 6 | 12)}
             >
-              <option value={6}>ط¢ط®ط± 6 ط£ط´ظ‡ط±</option>
-              <option value={12}>ط¢ط®ط± 12 ط´ظ‡ط±</option>
+              <option value={6}>آخر 6 أشهر</option>
+              <option value={12}>آخر 12 شهر</option>
             </select>
           </div>
         </div>
@@ -533,10 +533,10 @@ export function MunicipalityDashboard() {
             </Button>
             <div>
               <div className="flex items-center justify-end gap-1">
-                <Info className="h-4 w-4 text-muted-foreground" title="ظٹط¹ط±ط¶ ط¹ط¯ط¯ ط§ظ„ظ†ظ‚ط§ط·/ط§ظ„ط­ط§ظˆظٹط§طھ ط§ظ„طھظٹ طھظ…طھ ط²ظٹط§ط±طھظ‡ط§ ظٹظˆظ…ظٹط§ ط®ظ„ط§ظ„ ط§ظ„ظپطھط±ط© ط§ظ„ط£ط®ظٹط±ط©." />
-                <h3 className="text-lg font-semibold">{labels.pointLabel} ط§ظ„ظ…ط²ط§ط±ط© ظٹظˆظ…ظٹط§</h3>
+                <Info className="h-4 w-4 text-muted-foreground" title="يعرض عدد النقاط/الحاويات التي تمت زيارتها يومياً خلال الفترة الأخيرة." />
+                <h3 className="text-lg font-semibold">{labels.pointLabel} المنجزة يومياً</h3>
               </div>
-              <p className="text-xs text-muted-foreground">ظٹط¹ط±ط¶ ط¹ط¯ط¯ ط§ظ„ظ†ظ‚ط§ط·/ط§ظ„ط­ط§ظˆظٹط§طھ ط§ظ„طھظٹ طھظ…طھ ط²ظٹط§ط±طھظ‡ط§ ظٹظˆظ…ظٹط§ ط®ظ„ط§ظ„ ط§ظ„ظپطھط±ط© ط§ظ„ط£ط®ظٹط±ط©.</p>
+              <p className="text-xs text-muted-foreground">يعرض عدد النقاط/الحاويات التي تمت زيارتها يومياً خلال الفترة الأخيرة.</p>
             </div>
           </div>
           <div className="h-64" id="chart-daily-containers">
@@ -559,10 +559,10 @@ export function MunicipalityDashboard() {
             </Button>
             <div>
               <div className="flex items-center justify-end gap-1">
-                <Info className="h-4 w-4 text-muted-foreground" title="ظٹظˆط¶ط­ ط¥ط¬ظ…ط§ظ„ظٹ ط£ط­ط¯ط§ط« ط§ظ„ط¯ط®ظˆظ„ ظˆط§ظ„ط®ط±ظˆط¬ ط§ظ„ظ…ط³ط¬ظ„ط© ظٹظˆظ…ظٹط§." />
-                <h3 className="text-lg font-semibold">ط§ظ„ط£ط­ط¯ط§ط« ط§ظ„ظٹظˆظ…ظٹط©</h3>
+                <Info className="h-4 w-4 text-muted-foreground" title="يوضح إجمالي أحداث الدخول والخروج المسجلة يومياً." />
+                <h3 className="text-lg font-semibold">الأحداث اليومية</h3>
               </div>
-              <p className="text-xs text-muted-foreground">ظٹظˆط¶ط­ ط¥ط¬ظ…ط§ظ„ظٹ ط£ط­ط¯ط§ط« ط§ظ„ط¯ط®ظˆظ„ ظˆط§ظ„ط®ط±ظˆط¬ ط§ظ„ظ…ط³ط¬ظ„ط© ظٹظˆظ…ظٹط§.</p>
+              <p className="text-xs text-muted-foreground">يوضح إجمالي أحداث الدخول والخروج المسجلة يومياً.</p>
             </div>
           </div>
           <div className="h-64" id="chart-daily-events">
@@ -586,10 +586,10 @@ export function MunicipalityDashboard() {
           </Button>
           <div>
             <div className="flex items-center justify-end gap-1">
-              <Info className="h-4 w-4 text-muted-foreground" title="ظ…ظ‚ط§ط±ظ†ط© ط´ظ‡ط±ظٹط© ظ„ط¹ط¯ط¯ ط§ظ„ظ†ظ‚ط§ط·/ط§ظ„ط­ط§ظˆظٹط§طھ ط§ظ„طھظٹ طھظ…طھ ط®ط¯ظ…طھظ‡ط§." />
-              <h3 className="text-lg font-semibold">{labels.pointLabel} ط§ظ„ط´ظ‡ط±ظٹط©</h3>
+              <Info className="h-4 w-4 text-muted-foreground" title="مقارنة شهرية لعدد النقاط/الحاويات التي تمت خدمتها." />
+              <h3 className="text-lg font-semibold">{labels.pointLabel} الشهرية</h3>
             </div>
-            <p className="text-xs text-muted-foreground">ظ…ظ‚ط§ط±ظ†ط© ط´ظ‡ط±ظٹط© ظ„ط¹ط¯ط¯ ط§ظ„ظ†ظ‚ط§ط·/ط§ظ„ط­ط§ظˆظٹط§طھ ط§ظ„طھظٹ طھظ…طھ ط®ط¯ظ…طھظ‡ط§.</p>
+            <p className="text-xs text-muted-foreground">مقارنة شهرية لعدد النقاط/الحاويات التي تمت خدمتها.</p>
           </div>
         </div>
         <div className="h-64" id="chart-monthly-containers">
@@ -613,10 +613,10 @@ export function MunicipalityDashboard() {
             </Button>
             <div>
               <div className="flex items-center justify-end gap-1">
-                <Info className="h-4 w-4 text-muted-foreground" title="ظ…طھظˆط³ط· ظ…ط¯ط© ط¨ظ‚ط§ط، ط§ظ„ظ…ط±ظƒط¨ط© ط¯ط§ط®ظ„ ط§ظ„ظ†ظ‚ط·ط© ظ‚ط¨ظ„ طھط³ط¬ظٹظ„ ط§ظ„ط®ط±ظˆط¬." />
-                <h3 className="text-lg font-semibold">ظ…طھظˆط³ط· ط²ظ…ظ† ط§ظ„ط®ط¯ظ…ط© (ط¯ظ‚ط§ط¦ظ‚)</h3>
+                <Info className="h-4 w-4 text-muted-foreground" title="متوسط مدة بقاء المركبة داخل النقطة قبل تسجيل الخروج." />
+                <h3 className="text-lg font-semibold">متوسط وقت الخدمة (دقائق)</h3>
               </div>
-              <p className="text-xs text-muted-foreground">ظ…طھظˆط³ط· ظ…ط¯ط© ط¨ظ‚ط§ط، ط§ظ„ظ…ط±ظƒط¨ط© ط¯ط§ط®ظ„ ط§ظ„ظ†ظ‚ط·ط© ظ‚ط¨ظ„ طھط³ط¬ظٹظ„ ط§ظ„ط®ط±ظˆط¬.</p>
+              <p className="text-xs text-muted-foreground">متوسط مدة بقاء المركبة داخل النقطة قبل تسجيل الخروج.</p>
             </div>
           </div>
           <div className="h-64" id="chart-service-duration">
@@ -639,10 +639,10 @@ export function MunicipalityDashboard() {
             </Button>
             <div>
               <div className="flex items-center justify-end gap-1">
-                <Info className="h-4 w-4 text-muted-foreground" title="ظٹط¨ظٹظ† ط¹ط¯ط¯ ط§ظ„ظ…ط±ظƒط¨ط§طھ ط§ظ„ظ†ط´ط·ط© ظ…ظ‚ط§ط¨ظ„ ط؛ظٹط± ط§ظ„ظ†ط´ط·ط© ط­ط§ظ„ظٹط§." />
-                <h3 className="text-lg font-semibold">ط­ط§ظ„ط© {labels.vehicleLabel}</h3>
+                <Info className="h-4 w-4 text-muted-foreground" title="يبيّن عدد المركبات النشطة مقابل غير النشطة حالياً." />
+                <h3 className="text-lg font-semibold">حالة {labels.vehicleLabel}</h3>
               </div>
-              <p className="text-xs text-muted-foreground">ظٹط¨ظٹظ† ط¹ط¯ط¯ ط§ظ„ظ…ط±ظƒط¨ط§طھ ط§ظ„ظ†ط´ط·ط© ظ…ظ‚ط§ط¨ظ„ ط؛ظٹط± ط§ظ„ظ†ط´ط·ط© ط­ط§ظ„ظٹط§.</p>
+              <p className="text-xs text-muted-foreground">يبيّن عدد المركبات النشطة مقابل غير النشطة حالياً.</p>
             </div>
           </div>
           <div className="h-64" id="chart-vehicle-status">
@@ -667,16 +667,16 @@ export function MunicipalityDashboard() {
             </Button>
             <div>
               <div className="flex items-center justify-end gap-1">
-                <Info className="h-4 w-4 text-muted-foreground" title="طھظˆط²ظٹط¹ ظ†ط³ط¨ظٹ ظ„ط£ظ†ظˆط§ط¹ ط§ظ„ظ†ظ‚ط§ط· ط¯ط§ط®ظ„ ظ‡ط°ط§ ط§ظ„ظپط±ط¹." />
-                <h3 className="text-lg font-semibold">طھظˆط²ظٹط¹ ط£ظ†ظˆط§ط¹ {labels.pointLabel}</h3>
+                <Info className="h-4 w-4 text-muted-foreground" title="توزيع نسبي لأنواع النقاط داخل هذا الفرع." />
+                <h3 className="text-lg font-semibold">توزيع أنواع {labels.pointLabel}</h3>
               </div>
-              <p className="text-xs text-muted-foreground">طھظˆط²ظٹط¹ ظ†ط³ط¨ظٹ ظ„ط£ظ†ظˆط§ط¹ ط§ظ„ظ†ظ‚ط§ط· ط¯ط§ط®ظ„ ظ‡ط°ط§ ط§ظ„ظپط±ط¹.</p>
+              <p className="text-xs text-muted-foreground">توزيع نسبي لأنواع النقاط داخل هذا الفرع.</p>
             </div>
           </div>
           <div className="h-64" id="chart-point-types">
             {pointTypeData.length === 0 ? (
               <div className="h-full flex items-center justify-center text-sm text-muted-foreground">
-                ظ„ط§ طھظˆط¬ط¯ ط¨ظٹط§ظ†ط§طھ ظ…طھط§ط­ط© ظ„ط¹ط±ط¶ طھظˆط²ظٹط¹ ط§ظ„ط£ظ†ظˆط§ط¹ ط­ط§ظ„ظٹط§ظ‹.
+                لا توجد بيانات متاحة لعرض توزيع الأنواع حالياً.
               </div>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
@@ -701,10 +701,10 @@ export function MunicipalityDashboard() {
             </Button>
             <div>
               <div className="flex items-center justify-end gap-1">
-                <Info className="h-4 w-4 text-muted-foreground" title="ظٹظˆط¶ط­ ظ†ط³ط¨ط© ط£ط­ط¯ط§ط« ط§ظ„ط¯ط®ظˆظ„ ظ…ظ‚ط§ط¨ظ„ ط§ظ„ط®ط±ظˆط¬ ط§ظ„ظ…ط³ط¬ظ„ط© ظ…ظ† ط§ظ„ظ…ظ†ط§ط·ظ‚." />
-                <h3 className="text-lg font-semibold">طھظˆط²ظٹط¹ ط£ظ†ظˆط§ط¹ ط£ط­ط¯ط§ط« ط§ظ„ظ…ظ†ط§ط·ظ‚</h3>
+                <Info className="h-4 w-4 text-muted-foreground" title="يوضح نسبة أحداث الدخول مقابل الخروج المسجلة من المناطق." />
+                <h3 className="text-lg font-semibold">توزيع أنواع أحداث المناطق</h3>
               </div>
-              <p className="text-xs text-muted-foreground">ظٹظˆط¶ط­ ظ†ط³ط¨ط© ط£ط­ط¯ط§ط« ط§ظ„ط¯ط®ظˆظ„ ظ…ظ‚ط§ط¨ظ„ ط§ظ„ط®ط±ظˆط¬ ط§ظ„ظ…ط³ط¬ظ„ط© ظ…ظ† ط§ظ„ظ…ظ†ط§ط·ظ‚.</p>
+              <p className="text-xs text-muted-foreground">يوضح نسبة أحداث الدخول مقابل الخروج المسجلة من المناطق.</p>
             </div>
           </div>
           <div className="h-64" id="chart-event-types">
@@ -724,13 +724,13 @@ export function MunicipalityDashboard() {
       </div>
 
       <div className="rounded-2xl border bg-card p-4 text-right shadow-sm">
-        <h3 className="text-lg font-semibold mb-3">طھطµط¯ظٹط± CSV</h3>
+        <h3 className="text-lg font-semibold mb-3">تصدير CSV</h3>
         <div className="flex flex-wrap gap-3">
           <a className="rounded-lg border px-4 py-2 text-sm hover:bg-muted" href="/api/reports/vehicles">
-            طھط­ظ…ظٹظ„ طھظ‚ط±ظٹط± {labels.vehicleLabel} (CSV)
+            تحميل تقرير {labels.vehicleLabel} (CSV)
           </a>
           <a className="rounded-lg border px-4 py-2 text-sm hover:bg-muted" href="/api/reports/points">
-            طھط­ظ…ظٹظ„ طھظ‚ط±ظٹط± {labels.pointLabel} (CSV)
+            تحميل تقرير {labels.pointLabel} (CSV)
           </a>
         </div>
       </div>

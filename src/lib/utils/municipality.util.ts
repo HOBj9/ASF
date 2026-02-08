@@ -1,4 +1,4 @@
-﻿import { isAdmin } from '@/lib/permissions';
+﻿import { isAdmin, isOrganizationAdmin } from '@/lib/permissions';
 
 export function resolveBranchId(
   session: any,
@@ -7,7 +7,7 @@ export function resolveBranchId(
   const sessionBranchId = session?.user?.branchId || null;
   const role = session?.user?.role || null;
 
-  if (isAdmin(role)) {
+  if (isAdmin(role) || isOrganizationAdmin(role)) {
     const resolved = providedBranchId || sessionBranchId;
     if (!resolved) {
       throw new Error('يرجى تحديد الفرع');
@@ -21,4 +21,3 @@ export function resolveBranchId(
 
   return sessionBranchId;
 }
-

@@ -23,6 +23,14 @@ import Route from "../src/models/Route"
 import RoutePoint from "../src/models/RoutePoint"
 import ZoneEvent from "../src/models/ZoneEvent"
 import PointVisit from "../src/models/PointVisit"
+import Unit from "../src/models/Unit"
+import MaterialCategory from "../src/models/MaterialCategory"
+import Material from "../src/models/Material"
+import MaterialCategoryLink from "../src/models/MaterialCategoryLink"
+import MaterialAttributeDefinition from "../src/models/MaterialAttributeDefinition"
+import MaterialAttributeValue from "../src/models/MaterialAttributeValue"
+import MaterialStock from "../src/models/MaterialStock"
+import MaterialTransaction from "../src/models/MaterialTransaction"
 
 import { defaultPermissions, defaultRoles } from "../src/constants/permissions"
 
@@ -45,6 +53,14 @@ const models: ModelInfo[] = [
   { name: "RoutePoint", model: RoutePoint, collection: "routepoints" },
   { name: "ZoneEvent", model: ZoneEvent, collection: "zoneevents" },
   { name: "PointVisit", model: PointVisit, collection: "pointvisits" },
+  { name: "Unit", model: Unit, collection: "units" },
+  { name: "MaterialCategory", model: MaterialCategory, collection: "materialcategories" },
+  { name: "Material", model: Material, collection: "materials" },
+  { name: "MaterialCategoryLink", model: MaterialCategoryLink, collection: "materialcategorylinks" },
+  { name: "MaterialAttributeDefinition", model: MaterialAttributeDefinition, collection: "materialattributedefinitions" },
+  { name: "MaterialAttributeValue", model: MaterialAttributeValue, collection: "materialattributevalues" },
+  { name: "MaterialStock", model: MaterialStock, collection: "materialstocks" },
+  { name: "MaterialTransaction", model: MaterialTransaction, collection: "materialtransactions" },
 ]
 
 async function syncIndexes(modelInfo: ModelInfo): Promise<number> {

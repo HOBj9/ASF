@@ -3,6 +3,7 @@ import { requirePermission, handleApiError } from '@/lib/middleware/api-auth.mid
 import { BranchService } from '@/lib/services/branch.service';
 import { permissionActions, permissionResources } from '@/constants/permissions';
 import { resolveOrganizationId } from '@/lib/utils/organization.util';
+import { cloneOrganizationMaterialTreeToBranch } from '@/lib/services/material-tree.service';
 
 const branchService = new BranchService();
 
@@ -71,25 +72,35 @@ export async function POST(request: Request) {
       isActive: isActive ?? true,
     });
 
-    if (adminUserName && adminUserEmail && adminUserPassword) {
-      const { UserService } = await import('@/lib/services/user.service');
-      const { RoleService } = await import('@/lib/services/role.service');
-      const userService = new UserService();
-      const roleService = new RoleService();
-      const defaultRole = (await roleService.getByName('branch_admin')) || (await roleService.getByName('branch_user'));
-      if (!defaultRole) {
-        throw new Error('لم يتم العثور على دور الفرع');
+    try {
+      if (organizationId) {
+        await cloneOrganizationMaterialTreeToBranch(organizationId, branch._id.toString());
       }
 
-      await userService.create({
-        name: adminUserName,
-        email: adminUserEmail,
-        password: adminUserPassword,
-        role: defaultRole._id.toString(),
-        organizationId,
-        branchId: branch._id.toString(),
-        isActive: true,
-      });
+      if (adminUserName && adminUserEmail && adminUserPassword) {
+        const { UserService } = await import('@/lib/services/user.service');
+        const { RoleService } = await import('@/lib/services/role.service');
+        const userService = new UserService();
+        const roleService = new RoleService();
+        const defaultRole =
+          (await roleService.getByName('branch_admin')) || (await roleService.getByName('branch_user'));
+        if (!defaultRole) {
+          throw new Error('لم يتم العثور على دور الفرع');
+        }
+
+        await userService.create({
+          name: adminUserName,
+          email: adminUserEmail,
+          password: adminUserPassword,
+          role: defaultRole._id.toString(),
+          organizationId,
+          branchId: branch._id.toString(),
+          isActive: true,
+        });
+      }
+    } catch (error) {
+      await branchService.delete(branch._id.toString());
+      throw error;
     }
 
     return NextResponse.json({ branch }, { status: 201 });

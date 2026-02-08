@@ -5,6 +5,8 @@ import { resolveBranchId } from '@/lib/utils/municipality.util';
 import { AtharService } from '@/lib/services/athar.service';
 import Vehicle from '@/models/Vehicle';
 import { permissionActions, permissionResources } from '@/constants/permissions';
+import { cloneBranchMaterialTreeToPoint } from '@/lib/services/material-tree.service';
+import { resolveOrganizationId } from '@/lib/utils/organization.util';
 
 const pointService = new PointService();
 
@@ -32,6 +34,7 @@ export async function POST(request: Request) {
     const { session } = authResult;
     const body = await request.json();
     const branchId = resolveBranchId(session, body.branchId);
+    const organizationId = await resolveOrganizationId(session, body.organizationId);
 
     const { name, nameAr, nameEn, type, lat, lng, radiusMeters, addressText, isActive } = body;
     if (!name || lat === undefined || lng === undefined) {
@@ -85,6 +88,8 @@ export async function POST(request: Request) {
       }
       console.log('[Athar API] POST /api/points: zone events created');
     }
+
+    await cloneBranchMaterialTreeToPoint(organizationId, branchId, point._id.toString());
 
     return NextResponse.json({ point }, { status: 201 });
   } catch (error: any) {

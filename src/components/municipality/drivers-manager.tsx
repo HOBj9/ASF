@@ -279,12 +279,12 @@ export function DriversManager() {
             </div>
             <div>
               <Label>{labels.vehicleLabel}</Label>
-              <Select value={form.assignedVehicleId || ""} onValueChange={(value) => setForm({ ...form, assignedVehicleId: value })}>
+              <Select value={form.assignedVehicleId || "__none__"} onValueChange={(value) => setForm({ ...form, assignedVehicleId: value === "__none__" ? "" : value })}>
                 <SelectTrigger className="text-right">
                   <SelectValue placeholder={`اختيار ${labels.vehicleLabel}`} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">بدون</SelectItem>
+                  <SelectItem value="__none__">بدون</SelectItem>
                   {vehicles.map((vehicle) => (
                     <SelectItem key={vehicle._id} value={vehicle._id}>{vehicle.name}</SelectItem>
                   ))}
