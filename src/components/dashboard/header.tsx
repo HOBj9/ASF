@@ -1,22 +1,22 @@
-"use client"
+﻿"use client"
 
-import { Menu, LogOut, AlertCircle, Home, RefreshCw } from "lucide-react"
+import { LogOut, AlertCircle, Home, RefreshCw, User, Menu } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { useSidebarStore } from "@/store/sidebar-store"
 import { useSession, signOut } from "next-auth/react"
 import { apiClient } from "@/lib/api/client"
-import { useRouter } from "next/navigation"
+import { usePathname } from "next/navigation"
 import { useCallback, useState, useEffect } from "react"
 import toast from "react-hot-toast"
 import { Loading } from "@/components/ui/loading"
 import { ThemeToggle } from "@/components/theme-toggle"
 import Link from "next/link"
+import { DashboardNavIcons, DashboardNavMenu } from "@/components/dashboard/nav-icons"
 
 export function DashboardHeader() {
-  const { toggle } = useSidebarStore()
   const { data: session, update } = useSession()
-  const router = useRouter()
+  const pathname = usePathname()
   const [returningToAdmin, setReturningToAdmin] = useState(false)
+  const [isNavOpen, setIsNavOpen] = useState(false)
 
   const handleStopImpersonate = useCallback(async () => {
     setReturningToAdmin(true)
@@ -48,7 +48,7 @@ export function DashboardHeader() {
       toast.error(error.message || 'حدث خطأ')
       setReturningToAdmin(false)
     }
-  }, [update, router])
+  }, [update])
 
   const isImpersonating = session?.user && 'originalAdminId' in session.user
 
@@ -63,6 +63,10 @@ export function DashboardHeader() {
     }
   }, [isImpersonating, returningToAdmin])
 
+  useEffect(() => {
+    setIsNavOpen(false)
+  }, [pathname])
+
   return (
     <>
       {returningToAdmin && (
@@ -71,72 +75,104 @@ export function DashboardHeader() {
           text="جاري العودة إلى حساب المدير... يرجى الانتظار" 
         />
       )}
-      <header className="flex h-16 items-center border-b bg-background px-4 lg:px-6 flex-row-reverse">
-      <Button
-        variant="ghost"
-        size="icon"
-        onClick={toggle}
-        className="lg:hidden"
-        type="button"
-      >
-        <Menu className="h-5 w-5" />
-      </Button>
-      <div className="flex items-center gap-3">
-        <Button
-          variant="ghost"
-          size="icon"
-          asChild
-          className="flex items-center gap-2"
-          title="العودة إلى الصفحة الرئيسية"
-        >
-          <Link href="/">
-            <Home className="h-5 w-5" />
-            <span className="sr-only">العودة إلى الصفحة الرئيسية</span>
-          </Link>
-        </Button>
-        <ThemeToggle />
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => signOut({ callbackUrl: "/login" })}
-          className="flex items-center gap-2"
-        >
-          <LogOut className="h-4 w-4" />
-          <span className="hidden sm:inline">تسجيل الخروج</span>
-        </Button>
-      </div>
-      <div className="flex-1" />
-      {isImpersonating && (
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-[hsl(var(--warning-bg))] text-[hsl(var(--warning))] border border-[hsl(var(--warning-border))]">
-            <AlertCircle className="h-4 w-4" />
-            <span className="text-sm font-medium">
-              تعمل كـ: {session.user.name}
-            </span>
-          </div>
+      <header className="flex h-16 items-center border-b bg-background px-4 lg:px-6 flex-row-reverse gap-4">
+        <div className="flex items-center gap-3">
           <Button
-            variant="outline"
+            variant="ghost"
+            size="icon"
+            asChild
+            className="flex items-center gap-2"
+            title="العودة إلى الصفحة الرئيسية"
+          >
+            <Link href="/">
+              <Home className="h-5 w-5" />
+              <span className="sr-only">العودة إلى الصفحة الرئيسية</span>
+            </Link>
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            asChild
+            title="الملف الشخصي"
+          >
+            <Link href="/dashboard/profile">
+              <User className="h-5 w-5" />
+              <span className="sr-only">الملف الشخصي</span>
+            </Link>
+          </Button>
+          <ThemeToggle />
+          <Button
+            variant="ghost"
             size="sm"
-            onClick={handleStopImpersonate}
-            disabled={returningToAdmin}
+            onClick={() => signOut({ callbackUrl: "/login" })}
             className="flex items-center gap-2"
           >
-            {returningToAdmin ? (
-              <>
-                <RefreshCw className="h-4 w-4 animate-spin" />
-                جاري العودة...
-              </>
-            ) : (
-              <>
-                <LogOut className="h-4 w-4" />
-                العودة للمدير
-              </>
-            )}
+            <LogOut className="h-4 w-4" />
+            <span className="hidden sm:inline">تسجيل الخروج</span>
           </Button>
         </div>
-      )}
-    </header>
+        <div className="flex-1 flex justify-center px-2">
+          <div className="hidden lg:flex w-full">
+            <DashboardNavIcons />
+          </div>
+          <div className="relative lg:hidden">
+            <Button
+              variant="ghost"
+              size="icon"
+              type="button"
+              aria-expanded={isNavOpen}
+              aria-controls="dashboard-nav-menu"
+              onClick={() => setIsNavOpen((open) => !open)}
+              title="القائمة"
+            >
+              <Menu className="h-5 w-5" />
+            </Button>
+            {isNavOpen && (
+              <>
+                <div
+                  className="fixed inset-0 z-40"
+                  onClick={() => setIsNavOpen(false)}
+                />
+                <div
+                  id="dashboard-nav-menu"
+                  className="absolute z-50 mt-2 right-0"
+                >
+                  <DashboardNavMenu onNavigate={() => setIsNavOpen(false)} />
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+        {isImpersonating && (
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-[hsl(var(--warning-bg))] text-[hsl(var(--warning))] border border-[hsl(var(--warning-border))]">
+              <AlertCircle className="h-4 w-4" />
+              <span className="text-sm font-medium">
+                تعمل كـ: {session.user.name}
+              </span>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleStopImpersonate}
+              disabled={returningToAdmin}
+              className="flex items-center gap-2"
+            >
+              {returningToAdmin ? (
+                <>
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                  جاري العودة...
+                </>
+              ) : (
+                <>
+                  <LogOut className="h-4 w-4" />
+                  العودة للمدير
+                </>
+              )}
+            </Button>
+          </div>
+        )}
+      </header>
     </>
   )
 }
-

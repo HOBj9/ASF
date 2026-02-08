@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import { useSearchParams } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { useLabels } from "@/hooks/use-labels"
 
@@ -72,6 +73,7 @@ const DURATION_OPTIONS = [
 ] as const
 
 export function ReportsPanel({ isSystemAdmin = false }: ReportsPanelProps) {
+  const searchParams = useSearchParams()
   const { labels } = useLabels()
   const [period, setPeriod] = useState<"daily" | "weekly" | "monthly" | "custom">("daily")
   const [status, setStatus] = useState<"all" | "open" | "closed">("all")
@@ -91,6 +93,7 @@ export function ReportsPanel({ isSystemAdmin = false }: ReportsPanelProps) {
   const [loadingPreview, setLoadingPreview] = useState(false)
   const [error, setError] = useState("")
   const [preview, setPreview] = useState<PreviewResponse | null>(null)
+  const [vehicleParamApplied, setVehicleParamApplied] = useState(false)
 
   const columnOptions: Array<{ key: ColumnKey; label: string }> = useMemo(
     () => [
@@ -140,6 +143,15 @@ export function ReportsPanel({ isSystemAdmin = false }: ReportsPanelProps) {
       })
       .catch(() => null)
   }, [isSystemAdmin])
+
+  useEffect(() => {
+    if (vehicleParamApplied) return
+    const paramVehicleId = searchParams.get("vehicleId")
+    if (paramVehicleId) {
+      setVehicleId(paramVehicleId)
+    }
+    setVehicleParamApplied(true)
+  }, [searchParams, vehicleParamApplied])
 
   const branchParam = isSystemAdmin ? selectedBranchId : ""
 

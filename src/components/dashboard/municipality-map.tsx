@@ -1,6 +1,7 @@
 ﻿"use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { MapContainer, TileLayer, Marker, Popup, Circle, Polygon } from "react-leaflet";
 import L from "leaflet";
 import { Maximize2, BusFront, MapPin, Hexagon, CarFront, X } from "lucide-react";
@@ -57,6 +58,21 @@ type AtharObject = {
   model: string | null;
   device: string | null;
   raw: Record<string, any>;
+};
+
+type VehicleSummary = {
+  _id: string;
+  name: string;
+  plateNumber?: string | null;
+  imei?: string;
+  atharObjectId?: string | null;
+  routeId?: string | null;
+  isActive?: boolean;
+};
+
+type RouteSummary = {
+  _id: string;
+  name: string;
 };
 
 type MunicipalityInfo = {
@@ -141,6 +157,8 @@ export function MunicipalityMap({
   municipality,
   liveVehicles = [],
   atharObjects = [],
+  vehicles = [],
+  routes = [],
   zones = [],
   points,
   activeTab,
@@ -150,6 +168,8 @@ export function MunicipalityMap({
   municipality: MunicipalityInfo | null;
   liveVehicles?: LiveVehicle[];
   atharObjects?: AtharObject[];
+  vehicles?: VehicleSummary[];
+  routes?: RouteSummary[];
   zones?: MapZone[];
   points: MapPoint[];
   activeTab: MapTab;
@@ -157,6 +177,9 @@ export function MunicipalityMap({
   tabLoading?: Partial<Record<MapTab, boolean>>;
 }) {
   const [fullscreenOpen, setFullscreenOpen] = useState(false);
+  const [objectsPanelOpen, setObjectsPanelOpen] = useState(false);
+  const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null);
+  const mapRef = useRef<L.Map | null>(null);
   const currentTabLoading = !!tabLoading[activeTab];
 
   const visibleLiveVehicles = useMemo(
@@ -182,6 +205,71 @@ export function MunicipalityMap({
     return map;
   }, [atharObjects]);
 
+  const vehicleByImei = useMemo(() => {
+    const map = new Map<string, VehicleSummary>();
+    for (const vehicle of vehicles) {
+      if (vehicle.imei) map.set(String(vehicle.imei), vehicle);
+    }
+    return map;
+  }, [vehicles]);
+
+  const vehicleByAtharId = useMemo(() => {
+    const map = new Map<string, VehicleSummary>();
+    for (const vehicle of vehicles) {
+      if (vehicle.atharObjectId) map.set(String(vehicle.atharObjectId), vehicle);
+    }
+    return map;
+  }, [vehicles]);
+
+  const routeById = useMemo(() => {
+    const map = new Map<string, RouteSummary>();
+    for (const route of routes) {
+      map.set(String(route._id), route);
+    }
+    return map;
+  }, [routes]);
+
+  useEffect(() => {
+    if (activeTab !== "objects") {
+      setObjectsPanelOpen(false);
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab !== "objects") return;
+    if (!atharObjects.length) {
+      setSelectedObjectId(null);
+      return;
+    }
+    if (!selectedObjectId || !atharObjects.some((obj) => String(obj.id) === String(selectedObjectId))) {
+      setSelectedObjectId(String(atharObjects[0].id));
+    }
+  }, [activeTab, atharObjects, selectedObjectId]);
+
+  const selectedObject = useMemo(() => {
+    if (!selectedObjectId) return null;
+    return atharObjects.find((obj) => String(obj.id) === String(selectedObjectId)) || null;
+  }, [atharObjects, selectedObjectId]);
+
+  const matchedVehicle = useMemo(() => {
+    if (!selectedObject) return null;
+    return (
+      vehicleByAtharId.get(String(selectedObject.id)) ||
+      vehicleByImei.get(String(selectedObject.imei)) ||
+      null
+    );
+  }, [selectedObject, vehicleByAtharId, vehicleByImei]);
+
+  const matchedRoute = useMemo(() => {
+    if (!matchedVehicle?.routeId) return null;
+    return routeById.get(String(matchedVehicle.routeId)) || null;
+  }, [matchedVehicle, routeById]);
+
+  const focusOnObject = (obj: AtharObject | null) => {
+    if (!obj || obj.lat == null || obj.lng == null || !mapRef.current) return;
+    mapRef.current.setView([Number(obj.lat), Number(obj.lng)], 15, { animate: true });
+  };
+
   const center = useMemo(() => {
     if (municipality) {
       return [municipality.centerLat, municipality.centerLng] as [number, number];
@@ -202,9 +290,14 @@ export function MunicipalityMap({
     return defaultCenter;
   }, [municipality, activeTab, visibleLiveVehicles, points, zones, atharObjects]);
 
-  const renderMap = (heightClass: string) => (
+  const renderMap = (heightClass: string, attachRef = false) => (
     <div className={`${heightClass} w-full overflow-hidden rounded-2xl border bg-background`}>
-      <MapContainer center={center} zoom={13} className="h-full w-full">
+      <MapContainer
+        center={center}
+        zoom={13}
+        className="h-full w-full"
+        whenCreated={attachRef ? (map) => (mapRef.current = map) : undefined}
+      >
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -330,6 +423,12 @@ export function MunicipalityMap({
                 key={`obj-${obj.id}`}
                 position={[Number(obj.lat), Number(obj.lng)]}
                 icon={getBusIcon(obj.active ? "moving" : "stopped", obj.angle)}
+                eventHandlers={{
+                  click: () => {
+                    setSelectedObjectId(String(obj.id));
+                    setObjectsPanelOpen(true);
+                  },
+                }}
               >
                 <Popup>
                   <div className="text-right space-y-1 max-w-[300px]">
@@ -395,39 +494,142 @@ export function MunicipalityMap({
         {renderTabSwitcher("w-full max-w-xl")}
       </div>
 
-      <div className="relative">
-        {renderMap("h-[520px]")}
-        {currentTabLoading && (
-          <div className="absolute inset-0 z-[500] flex items-center justify-center rounded-2xl bg-background/70 backdrop-blur-[1px]">
-            <div className="w-full max-w-md space-y-3 px-6">
-              <Skeleton className="h-5 w-32 mx-auto" />
-              <Skeleton className="h-4 w-full" />
-              <Skeleton className="h-4 w-4/5 mx-auto" />
-            </div>
-          </div>
-        )}
-      </div>
-
       {activeTab === "objects" && (
-        <div className="rounded-xl border p-3 text-right">
-          <div className="mb-2 text-sm text-muted-foreground">إجمالي سيارات أثر: {atharObjects.length}</div>
-          <div className="max-h-40 overflow-y-auto space-y-1">
-            {atharObjects.map((obj) => (
-              <div key={`obj-row-${obj.id}`} className="flex items-center justify-between rounded-md border px-2 py-1 text-xs">
-                <span className="text-muted-foreground">
-                  {obj.lat != null && obj.lng != null ? `${obj.lat.toFixed(5)}, ${obj.lng.toFixed(5)}` : "بدون موقع"}
-                </span>
-                <span className="font-medium">
-                  {obj.name} {obj.plateNumber ? `(${obj.plateNumber})` : ""}
-                </span>
-              </div>
-            ))}
-            {atharObjects.length === 0 && (
-              <div className="text-xs text-muted-foreground">لا توجد سيارات قادمة من أثر حالياً.</div>
-            )}
-          </div>
+        <div className="flex items-center justify-between gap-3">
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            onClick={() => setObjectsPanelOpen((open) => !open)}
+          >
+            <CarFront className="h-4 w-4" />
+            إجمالي سيارات أثر: {atharObjects.length}
+          </Button>
+          {objectsPanelOpen && (
+            <span className="text-xs text-muted-foreground">اضغط على السيارة لعرض التفاصيل</span>
+          )}
         </div>
       )}
+
+      <div className={`relative ${activeTab === "objects" && objectsPanelOpen ? "lg:flex lg:gap-4" : ""}`}>
+        <div
+          className={`${activeTab === "objects" && objectsPanelOpen ? "lg:order-2 lg:flex-1" : ""} relative`}
+        >
+          {renderMap("h-[520px]", true)}
+          {currentTabLoading && (
+            <div className="absolute inset-0 z-[500] flex items-center justify-center rounded-2xl bg-background/70 backdrop-blur-[1px]">
+              <div className="w-full max-w-md space-y-3 px-6">
+                <Skeleton className="h-5 w-32 mx-auto" />
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-4/5 mx-auto" />
+              </div>
+            </div>
+          )}
+        </div>
+
+        {activeTab === "objects" && objectsPanelOpen && (
+          <aside className="mt-3 rounded-2xl border bg-background p-3 text-right shadow-sm lg:order-1 lg:mt-0 lg:w-[340px]">
+            <div className="flex items-center justify-between">
+              <div className="text-sm text-muted-foreground">سيارات أثر</div>
+              <Button variant="ghost" size="icon" onClick={() => setObjectsPanelOpen(false)} title="إغلاق">
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+
+            <div className="mt-3 max-h-52 overflow-y-auto space-y-1 pr-1">
+              {atharObjects.map((obj) => {
+                const isSelected = String(obj.id) === String(selectedObjectId);
+                return (
+                  <button
+                    key={`obj-row-${obj.id}`}
+                    type="button"
+                    onClick={() => setSelectedObjectId(String(obj.id))}
+                    className={`w-full rounded-md border px-2 py-2 text-xs transition ${
+                      isSelected ? "bg-primary/10 border-primary/40 text-foreground" : "hover:bg-muted"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-muted-foreground">
+                        {obj.lat != null && obj.lng != null ? `${obj.lat.toFixed(5)}, ${obj.lng.toFixed(5)}` : "بدون موقع"}
+                      </span>
+                      <span className="font-medium">
+                        {obj.name} {obj.plateNumber ? `(${obj.plateNumber})` : ""}
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
+              {atharObjects.length === 0 && (
+                <div className="text-xs text-muted-foreground">لا توجد سيارات قادمة من أثر حالياً.</div>
+              )}
+            </div>
+
+            {selectedObject ? (
+              <div className="mt-4 border-t pt-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="font-semibold">{selectedObject.name}</div>
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-[11px] ${
+                      selectedObject.active ? "bg-emerald-500/15 text-emerald-700" : "bg-slate-500/15 text-slate-600"
+                    }`}
+                  >
+                    {selectedObject.active ? "نشطة" : "غير نشطة"}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-[11px] text-muted-foreground">
+                  <div>اللوحة: {selectedObject.plateNumber || "-"}</div>
+                  <div>IMEI: {selectedObject.imei || "-"}</div>
+                  <div>السرعة: {selectedObject.speed} كم/س</div>
+                  <div>الاتجاه: {Math.round(selectedObject.angle || 0)}°</div>
+                  <div>وقت الجهاز: {selectedObject.dtTracker || "-"}</div>
+                  <div>وقت الخادم: {selectedObject.dtServer || "-"}</div>
+                </div>
+
+                {matchedVehicle && (
+                  <div className="text-xs text-muted-foreground">المركبة بالنظام: {matchedVehicle.name}</div>
+                )}
+                {matchedRoute && (
+                  <div className="text-xs text-muted-foreground">المسار الحالي: {matchedRoute.name}</div>
+                )}
+
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <Button
+                    size="sm"
+                    className="h-8"
+                    onClick={() => focusOnObject(selectedObject)}
+                    disabled={selectedObject.lat == null || selectedObject.lng == null}
+                  >
+                    تحديد على الخريطة
+                  </Button>
+
+                  {matchedVehicle?.routeId ? (
+                    <Button size="sm" variant="outline" className="h-8" asChild>
+                      <Link href={`/dashboard/routes/${String(matchedVehicle.routeId)}/points`}>عرض المسار</Link>
+                    </Button>
+                  ) : (
+                    <Button size="sm" variant="outline" className="h-8" disabled>
+                      عرض المسار
+                    </Button>
+                  )}
+
+                  {matchedVehicle?._id ? (
+                    <Button size="sm" variant="outline" className="h-8" asChild>
+                      <Link href={`/dashboard/reports?vehicleId=${matchedVehicle._id}`}>تقارير المركبة</Link>
+                    </Button>
+                  ) : (
+                    <Button size="sm" variant="outline" className="h-8" disabled>
+                      تقارير المركبة
+                    </Button>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="mt-4 text-xs text-muted-foreground">اختر سيارة لعرض التفاصيل.</div>
+            )}
+          </aside>
+        )}
+      </div>
 
       <Dialog open={fullscreenOpen} onOpenChange={setFullscreenOpen}>
         <DialogContent className="h-[96vh] w-[98vw] max-w-[98vw] overflow-hidden p-0 text-right">
