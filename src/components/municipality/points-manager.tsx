@@ -1,6 +1,5 @@
 "use client"
 
-import dynamic from "next/dynamic"
 import { useEffect, useMemo, useState } from "react"
 import { apiClient } from "@/lib/api/client"
 import { Button } from "@/components/ui/button"
@@ -14,8 +13,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import toast from "react-hot-toast"
 import { useLabels } from "@/hooks/use-labels"
 import { ExportExcelDialog, type ExportColumn } from "@/components/municipality/export-excel-dialog"
+import dynamic from "next/dynamic"
 
-const MapPicker = dynamic(() => import("@/components/ui/map-picker").then((m) => m.MapPicker), { ssr: false })
+const MapPicker = dynamic(
+  () => import("@/components/ui/map-picker").then((mod) => mod.MapPicker),
+  { ssr: false, loading: () => <div className="h-[240px] rounded-lg border animate-pulse bg-muted" /> }
+)
 
 type Point = {
   _id: string

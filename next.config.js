@@ -10,13 +10,12 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
-  // Enable file watching in Docker
+  // Enable file watching in Docker with relaxed intervals to reduce CPU load
   webpack: (config, { isServer }) => {
-    if (!isServer) {
-      config.watchOptions = {
-        poll: 1000,
-        aggregateTimeout: 300,
-      }
+    config.watchOptions = {
+      poll: 3000,
+      aggregateTimeout: 1000,
+      ignored: ['**/node_modules', '**/.next', '**/.git'],
     }
     return config
   },

@@ -38,13 +38,16 @@ services:
       WATCHPACK_POLLING: "true"
       # Increase Node heap to avoid ENOMEM during Next.js dev (scandir/watchpack)
       # Increase max HTTP header size to avoid 431 (Request Header Fields Too Large) when session cookie is large
-      NODE_OPTIONS: "--max-old-space-size=1536 --max-http-header-size=32768"
+      NODE_OPTIONS: "--max-old-space-size=3072 --max-http-header-size=32768"
+      # Reduce file-watching pressure
+      CHOKIDAR_USEPOLLING: "true"
+      CHOKIDAR_INTERVAL: "3000"
     deploy:
       resources:
         limits:
-          memory: 2G
+          memory: 4G
         reservations:
-          memory: 512M
+          memory: 1G
     volumes:
       - .:/app
       - /app/node_modules

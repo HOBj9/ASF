@@ -1,4 +1,4 @@
-﻿import { NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import connectDB from '@/lib/mongodb';
 import { requirePermission, handleApiError } from '@/lib/middleware/api-auth.middleware';
 import { permissionActions, permissionResources } from '@/constants/permissions';
@@ -82,5 +82,4 @@ export async function GET(request: Request) {
   } catch (error: any) {
     return handleApiError(error);
   }
-}
 }

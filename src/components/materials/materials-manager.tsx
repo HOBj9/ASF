@@ -15,11 +15,11 @@ import { Switch } from "@/components/ui/switch"
 import { isAdmin, isOrganizationAdmin } from "@/lib/permissions"
 
 const ATTRIBUTE_TYPES = [
-  { value: "text", label: "نص" },
-  { value: "number", label: "رقم" },
-  { value: "select", label: "قائمة" },
-  { value: "boolean", label: "نعم/لا" },
-  { value: "date", label: "تاريخ" },
+  { value: "text", label: "\u0646\u0635" },
+  { value: "number", label: "\u0631\u0642\u0645" },
+  { value: "select", label: "\u0642\u0627\u0626\u0645\u0629" },
+  { value: "boolean", label: "\u0646\u0639\u0645/\u0644\u0627" },
+  { value: "date", label: "\u062a\u0627\u0631\u064a\u062e" },
 ] as const
 
 type Category = {
@@ -172,7 +172,7 @@ export function MaterialsManager() {
         setSelectedBranchId(fallback)
       }
     } catch (error: any) {
-      toast.error(error.message || "حدث خطأ")
+      toast.error(error.message || "\u062d\u062f\u062b \u062e\u0637\u0623")
     }
   }
 
@@ -186,7 +186,7 @@ export function MaterialsManager() {
         setSelectedPointId(list[0]?._id || "")
       }
     } catch (error: any) {
-      toast.error(error.message || "حدث خطأ")
+      toast.error(error.message || "\u062d\u062f\u062b \u062e\u0637\u0623")
     }
   }
 
@@ -287,7 +287,7 @@ export function MaterialsManager() {
   useEffect(() => {
     setLoading(true)
     Promise.all([loadCategories(), loadUnits(), loadMaterials(null)])
-      .catch((error: any) => toast.error(error.message || "حدث خطأ"))
+      .catch((error: any) => toast.error(error.message || "\u062d\u062f\u062b \u062e\u0637\u0623"))
       .finally(() => setLoading(false))
   }, [activeBranchId, activePointId, isOrgScope, isPointScope])
 
@@ -298,11 +298,11 @@ export function MaterialsManager() {
 
   const ensureScopeReady = () => {
     if (!isOrgScope && !activeBranchId) {
-      toast.error("يرجى اختيار الفرع")
+      toast.error("\u064a\u0631\u062c\u0649 \u0627\u062e\u062a\u064a\u0627\u0631 \u0627\u0644\u0641\u0631\u0639")
       return false
     }
     if (isPointScope && !activePointId) {
-      toast.error("يرجى اختيار النقطة")
+      toast.error("\u064a\u0631\u062c\u0649 \u0627\u062e\u062a\u064a\u0627\u0631 \u0627\u0644\u0646\u0642\u0637\u0629")
       return false
     }
     return true
@@ -332,6 +332,11 @@ export function MaterialsManager() {
     return roots
   }, [categories])
 
+  const selectedCategory = useMemo(
+    () => categories.find((cat) => cat._id === selectedCategoryId) || null,
+    [categories, selectedCategoryId]
+  )
+
   const openCreateCategory = () => {
     setCategoryEditing(null)
     setCategoryForm({
@@ -355,7 +360,7 @@ export function MaterialsManager() {
   const submitCategory = async () => {
     if (!ensureScopeReady()) return
     if (!categoryForm.name) {
-      toast.error("يرجى إدخال اسم التصنيف")
+      toast.error("\u064a\u0631\u062c\u0649 \u0625\u062f\u062e\u0627\u0644 \u0627\u0633\u0645 \u0627\u0644\u062a\u0635\u0646\u064a\u0641")
       return
     }
     const payload = {
@@ -371,21 +376,21 @@ export function MaterialsManager() {
     try {
       if (categoryEditing) {
         await apiClient.patch(`/material-categories/${categoryEditing._id}`, payload)
-        toast.success("تم تحديث التصنيف")
+        toast.success("\u062a\u0645 \u062a\u062d\u062f\u064a\u062b \u0627\u0644\u062a\u0635\u0646\u064a\u0641")
       } else {
         await apiClient.post("/material-categories", payload)
-        toast.success("تم إضافة التصنيف")
+        toast.success("\u062a\u0645 \u0625\u0636\u0627\u0641\u0629 \u0627\u0644\u062a\u0635\u0646\u064a\u0641")
       }
       setCategoryOpen(false)
       await loadCategories()
     } catch (error: any) {
-      toast.error(error.message || "حدث خطأ")
+      toast.error(error.message || "\u062d\u062f\u062b \u062e\u0637\u0623")
     }
   }
 
   const removeCategory = async (category: Category) => {
     if (!ensureScopeReady()) return
-    if (!confirm(`حذف التصنيف ${category.name}؟`)) return
+    if (!confirm(`\u062d\u0630\u0641 \u0627\u0644\u062a\u0635\u0646\u064a\u0641 ${category.name}\u061f`)) return
     try {
       const url = isOrgScope
         ? `/material-categories/${category._id}?scope=org`
@@ -393,21 +398,21 @@ export function MaterialsManager() {
           ? `/material-categories/${category._id}?branchId=${activeBranchId}&pointId=${activePointId}&scope=point`
           : `/material-categories/${category._id}?branchId=${activeBranchId}`
       await apiClient.delete(url)
-      toast.success("تم حذف التصنيف")
+      toast.success("\u062a\u0645 \u062d\u0630\u0641 \u0627\u0644\u062a\u0635\u0646\u064a\u0641")
       setSelectedCategoryId((prev) => (prev === category._id ? null : prev))
       await loadCategories()
     } catch (error: any) {
-      toast.error(error.message || "حدث خطأ")
+      toast.error(error.message || "\u062d\u062f\u062b \u062e\u0637\u0623")
     }
   }
 
   const submitAttribute = async () => {
     if (!selectedCategoryId) {
-      toast.error("اختر تصنيفًا أولاً")
+      toast.error("\u0627\u062e\u062a\u0631 \u062a\u0635\u0646\u064a\u0641\u064b\u0627 \u0623\u0648\u0644\u0627\u064b")
       return
     }
     if (!attributeForm.name) {
-      toast.error("يرجى إدخال اسم الخاصية")
+      toast.error("\u064a\u0631\u062c\u0649 \u0625\u062f\u062e\u0627\u0644 \u0627\u0633\u0645 \u0627\u0644\u062e\u0627\u0635\u064a\u0629")
       return
     }
 
@@ -423,17 +428,17 @@ export function MaterialsManager() {
       setAttributeForm({ name: "", type: "text", required: false, options: "", unitId: "" })
       await loadCategoryAttributes(selectedCategoryId)
     } catch (error: any) {
-      toast.error(error.message || "حدث خطأ")
+      toast.error(error.message || "\u062d\u062f\u062b \u062e\u0637\u0623")
     }
   }
 
   const removeAttribute = async (attr: AttributeDef) => {
-    if (!confirm(`حذف الخاصية ${attr.name}؟`)) return
+    if (!confirm(`\u062d\u0630\u0641 \u0627\u0644\u062e\u0627\u0635\u064a\u0629 ${attr.name}\u061f`)) return
     try {
       await apiClient.delete(`/material-attributes/${attr._id}`)
       await loadCategoryAttributes(selectedCategoryId)
     } catch (error: any) {
-      toast.error(error.message || "حدث خطأ")
+      toast.error(error.message || "\u062d\u062f\u062b \u062e\u0637\u0623")
     }
   }
 
@@ -475,14 +480,14 @@ export function MaterialsManager() {
       await loadMaterialAttributes(categoryIds)
       setMaterialOpen(true)
     } catch (error: any) {
-      toast.error(error.message || "حدث خطأ")
+      toast.error(error.message || "\u062d\u062f\u062b \u062e\u0637\u0623")
     }
   }
 
   const submitMaterial = async () => {
     if (!ensureScopeReady()) return
     if (!materialForm.name || !materialForm.sku) {
-      toast.error("الاسم والكود مطلوبان")
+      toast.error("\u0627\u0644\u0627\u0633\u0645 \u0648\u0627\u0644\u0643\u0648\u062f \u0645\u0637\u0644\u0648\u0628\u0627\u0646")
       return
     }
 
@@ -507,21 +512,21 @@ export function MaterialsManager() {
     try {
       if (materialEditing) {
         await apiClient.patch(`/materials/${materialEditing._id}`, payload)
-        toast.success("تم تحديث المادة")
+        toast.success("\u062a\u0645 \u062a\u062d\u062f\u064a\u062b \u0627\u0644\u0645\u0627\u062f\u0629")
       } else {
         await apiClient.post("/materials", payload)
-        toast.success("تم إضافة المادة")
+        toast.success("\u062a\u0645 \u0625\u0636\u0627\u0641\u0629 \u0627\u0644\u0645\u0627\u062f\u0629")
       }
       setMaterialOpen(false)
       await loadMaterials(selectedCategoryId)
     } catch (error: any) {
-      toast.error(error.message || "حدث خطأ")
+      toast.error(error.message || "\u062d\u062f\u062b \u062e\u0637\u0623")
     }
   }
 
   const removeMaterial = async (item: Material) => {
     if (!ensureScopeReady()) return
-    if (!confirm(`حذف المادة ${item.name}؟`)) return
+    if (!confirm(`\u062d\u0630\u0641 \u0627\u0644\u0645\u0627\u062f\u0629 ${item.name}\u061f`)) return
     try {
       const url = isOrgScope
         ? `/materials/${item._id}?scope=org`
@@ -529,17 +534,17 @@ export function MaterialsManager() {
           ? `/materials/${item._id}?branchId=${activeBranchId}&pointId=${activePointId}&scope=point`
           : `/materials/${item._id}?branchId=${activeBranchId}`
       await apiClient.delete(url)
-      toast.success("تم حذف المادة")
+      toast.success("\u062a\u0645 \u062d\u0630\u0641 \u0627\u0644\u0645\u0627\u062f\u0629")
       await loadMaterials(selectedCategoryId)
     } catch (error: any) {
-      toast.error(error.message || "حدث خطأ")
+      toast.error(error.message || "\u062d\u062f\u062b \u062e\u0637\u0623")
     }
   }
 
   const submitUnit = async () => {
     if (!ensureScopeReady()) return
     if (!unitForm.name) {
-      toast.error("يرجى إدخال اسم الوحدة")
+      toast.error("\u064a\u0631\u062c\u0649 \u0625\u062f\u062e\u0627\u0644 \u0627\u0633\u0645 \u0627\u0644\u0648\u062d\u062f\u0629")
       return
     }
     try {
@@ -557,48 +562,30 @@ export function MaterialsManager() {
       setUnitForm({ ...emptyUnitForm })
       await loadUnits()
     } catch (error: any) {
-      toast.error(error.message || "حدث خطأ")
+      toast.error(error.message || "\u062d\u062f\u062b \u062e\u0637\u0623")
     }
   }
 
-  const renderCategory = (node: CategoryNode, depth = 0) => {
-    const isSelected = selectedCategoryId === node._id
-    return (
-      <div key={node._id} className="space-y-1">
-        <div
-          className={cn(
-            "flex items-center justify-between rounded-md border px-2 py-1 text-sm",
-            isSelected ? "bg-primary/10 border-primary/40" : "hover:bg-muted"
-          )}
-          style={{ paddingRight: `${depth * 12 + 8}px` }}
-        >
-          <button className="flex-1 text-right" onClick={() => setSelectedCategoryId(node._id)}>
-            {node.nameAr || node.name}
-          </button>
-          <div className="flex items-center gap-1">
-            <Button variant="ghost" size="sm" onClick={() => openEditCategory(node)}>
-              تعديل
-            </Button>
-            <Button variant="ghost" size="sm" onClick={() => removeCategory(node)}>
-              حذف
-            </Button>
-          </div>
-        </div>
-        {node.children && node.children.length > 0 && (
-          <div className="space-y-1">
-            {node.children.map((child) => renderCategory(child, depth + 1))}
-          </div>
-        )}
-      </div>
-    )
-  }
+  const flatCategoryRows = useMemo(() => {
+    const rows: Array<{ node: CategoryNode; depth: number; childrenCount: number }> = []
+    const walk = (nodes: CategoryNode[], depth = 0) => {
+      nodes.forEach((node) => {
+        rows.push({ node, depth, childrenCount: node.children?.length || 0 })
+        if (node.children && node.children.length > 0) {
+          walk(node.children, depth + 1)
+        }
+      })
+    }
+    walk(categoryTree)
+    return rows
+  }, [categoryTree])
 
   return (
     <div className="space-y-4">
       <Card className="text-right">
         <CardContent className="py-4">
           <div className="flex flex-wrap items-center gap-3">
-            <span className="text-sm font-semibold">نطاق الإدارة</span>
+            <span className="text-sm font-semibold">{"\u0646\u0637\u0627\u0642 \u0627\u0644\u0625\u062f\u0627\u0631\u0629"}</span>
             <div className="flex items-center gap-2">
               {canManageOrg && (
                 <Button
@@ -609,7 +596,7 @@ export function MaterialsManager() {
                     setSelectedCategoryId(null)
                   }}
                 >
-                  المؤسسة (الشجرة الأساسية)
+                  {"\u0627\u0644\u0645\u0624\u0633\u0633\u0629 (\u0627\u0644\u0634\u062c\u0631\u0629 \u0627\u0644\u0623\u0633\u0627\u0633\u064a\u0629)"}
                 </Button>
               )}
               <Button
@@ -620,7 +607,7 @@ export function MaterialsManager() {
                   setSelectedCategoryId(null)
                 }}
               >
-                فرع
+                {"\u0641\u0631\u0639"}
               </Button>
               <Button
                 size="sm"
@@ -631,13 +618,13 @@ export function MaterialsManager() {
                   setSelectedCategoryId(null)
                 }}
               >
-                نقطة
+                {"\u0646\u0642\u0637\u0629"}
               </Button>
             </div>
 
             {(scope === "branch" || scope === "point") && canManageOrg && (
               <>
-                <span className="text-sm font-semibold">اختيار الفرع</span>
+                <span className="text-sm font-semibold">{"\u0627\u062e\u062a\u064a\u0627\u0631 \u0627\u0644\u0641\u0631\u0639"}</span>
                 <div className="min-w-[220px]">
                   <Select
                     value={selectedBranchId}
@@ -648,7 +635,7 @@ export function MaterialsManager() {
                     }}
                   >
                     <SelectTrigger className="text-right">
-                      <SelectValue placeholder="اختر الفرع" />
+                      <SelectValue placeholder={"\u0627\u062e\u062a\u0631 \u0627\u0644\u0641\u0631\u0639"} />
                     </SelectTrigger>
                     <SelectContent>
                       {branches.map((branch) => (
@@ -660,14 +647,14 @@ export function MaterialsManager() {
                   </Select>
                 </div>
                 {branches.length === 0 && (
-                  <span className="text-xs text-muted-foreground">لا توجد فروع متاحة.</span>
+                  <span className="text-xs text-muted-foreground">{"\u0644\u0627 \u062a\u0648\u062c\u062f \u0641\u0631\u0648\u0639 \u0645\u062a\u0627\u062d\u0629."}</span>
                 )}
               </>
             )}
 
             {scope === "point" && (
               <>
-                <span className="text-sm font-semibold">اختيار النقطة</span>
+                <span className="text-sm font-semibold">{"\u0627\u062e\u062a\u064a\u0627\u0631 \u0627\u0644\u0646\u0642\u0637\u0629"}</span>
                 <div className="min-w-[220px]">
                   <Select
                     value={selectedPointId}
@@ -677,7 +664,7 @@ export function MaterialsManager() {
                     }}
                   >
                     <SelectTrigger className="text-right">
-                      <SelectValue placeholder="اختر النقطة" />
+                      <SelectValue placeholder={"\u0627\u062e\u062a\u0631 \u0627\u0644\u0646\u0642\u0637\u0629"} />
                     </SelectTrigger>
                     <SelectContent>
                       {points.map((point) => (
@@ -689,7 +676,7 @@ export function MaterialsManager() {
                   </Select>
                 </div>
                 {points.length === 0 && (
-                  <span className="text-xs text-muted-foreground">لا توجد نقاط متاحة.</span>
+                  <span className="text-xs text-muted-foreground">{"\u0644\u0627 \u062a\u0648\u062c\u062f \u0646\u0642\u0627\u0637 \u0645\u062a\u0627\u062d\u0629."}</span>
                 )}
               </>
             )}
@@ -700,27 +687,103 @@ export function MaterialsManager() {
       <Card className="text-right">
         <CardHeader>
           <div className="flex items-center justify-between">
-            <CardTitle>شجرة المواد</CardTitle>
-            <Button size="sm" onClick={openCreateCategory}>إضافة تصنيف</Button>
+            <CardTitle>{"\u0634\u062c\u0631\u0629 \u0627\u0644\u0645\u0648\u0627\u062f"}</CardTitle>
+            <Button size="sm" onClick={openCreateCategory}>{"\u0625\u0636\u0627\u0641\u0629 \u062a\u0635\u0646\u064a\u0641"}</Button>
           </div>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-4 lg:grid-cols-2">
-            <div className="space-y-2 max-h-[400px] overflow-y-auto pr-1">
-              {categoryTree.length === 0 ? (
-                <div className="text-sm text-muted-foreground">لا توجد تصنيفات بعد.</div>
-              ) : (
-                categoryTree.map((node) => renderCategory(node))
-              )}
+          <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="text-xs text-muted-foreground">{"\u0625\u062c\u0645\u0627\u0644\u064a \u0627\u0644\u062a\u0635\u0646\u064a\u0641\u0627\u062a:"} {categories.length}</div>
+                <div className="text-xs text-muted-foreground">
+                  {selectedCategory ? `${"\u0627\u0644\u062a\u0635\u0646\u064a\u0641 \u0627\u0644\u0645\u062d\u062f\u062f:"} ${selectedCategory.nameAr || selectedCategory.name}` : "\u0644\u0627 \u064a\u0648\u062c\u062f \u062a\u062d\u062f\u064a\u062f"}
+                </div>
+              </div>
+              <div className="rounded-lg border bg-card/40">
+                <div className="max-h-[420px] overflow-auto">
+                  <table className="w-full text-sm">
+                    <thead className="sticky top-0 z-10 border-b bg-background/90 backdrop-blur">
+                      <tr className="text-right">
+                        <th className="p-2">{"\u0627\u0644\u062a\u0635\u0646\u064a\u0641"}</th>
+                        <th className="p-2 w-[70px] text-center">{"\u0627\u0644\u0639\u0645\u0642"}</th>
+                        <th className="p-2 w-[70px] text-center">{"\u0641\u0631\u0639\u064a"}</th>
+                        <th className="p-2 w-[90px] text-center">{"\u0627\u0644\u062d\u0627\u0644\u0629"}</th>
+                        <th className="p-2 w-[150px] text-center">{"\u0627\u0644\u0625\u062c\u0631\u0627\u0621\u0627\u062a"}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {flatCategoryRows.map(({ node, depth, childrenCount }) => {
+                        const isSelected = selectedCategoryId === node._id
+                        return (
+                          <tr
+                            key={node._id}
+                            className={cn(
+                              "border-b transition-colors",
+                              isSelected ? "bg-primary/10" : "hover:bg-muted/50"
+                            )}
+                          >
+                            <td className="p-2">
+                              <button
+                                className="flex w-full items-center justify-between gap-2 text-right"
+                                onClick={() => setSelectedCategoryId(node._id)}
+                              >
+                                <span
+                                  className="flex-1 truncate"
+                                  style={{ paddingRight: `${depth * 14 + 8}px` }}
+                                >
+                                  {node.nameAr || node.name}
+                                </span>
+                                {node.parentId && <span className="text-[10px] text-muted-foreground">{"\u0641\u0631\u0639\u064a"}</span>}
+                              </button>
+                            </td>
+                            <td className="p-2 text-center">{depth}</td>
+                            <td className="p-2 text-center">{childrenCount}</td>
+                            <td className="p-2 text-center">
+                              <span
+                                className={cn(
+                                  "inline-flex items-center rounded-full border px-2 py-0.5 text-[11px]",
+                                  node.isActive === false
+                                    ? "border-destructive/40 text-destructive"
+                                    : "border-emerald-500/30 text-emerald-300"
+                                )}
+                              >
+                                {node.isActive === false ? "\u0645\u0639\u0637\u0644\u0629" : "\u0645\u0641\u0639\u0644\u0629"}
+                              </span>
+                            </td>
+                            <td className="p-2">
+                              <div className="flex items-center justify-end gap-2">
+                                <Button variant="outline" size="sm" onClick={() => openEditCategory(node)}>
+                                  {"\u062a\u0639\u062f\u064a\u0644"}
+                                </Button>
+                                <Button variant="destructive" size="sm" onClick={() => removeCategory(node)}>
+                                  {"\u062d\u0630\u0641"}
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                      {flatCategoryRows.length === 0 && (
+                        <tr>
+                          <td className="p-4 text-center text-muted-foreground" colSpan={5}>
+                            {"\u0644\u0627 \u062a\u0648\u062c\u062f \u062a\u0635\u0646\u064a\u0641\u0627\u062a \u0628\u0639\u062f."}
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>
 
             <div className="space-y-3 border-r pr-4 lg:border-r-0 lg:border-t-0 lg:border-l lg:pl-4">
-              <div className="text-sm font-semibold">خصائص التصنيف</div>
+              <div className="text-sm font-semibold">{"\u062e\u0635\u0627\u0626\u0635 \u0627\u0644\u062a\u0635\u0646\u064a\u0641"}</div>
               {selectedCategoryId ? (
                 <>
                   <div className="space-y-2">
                     {attributes.length === 0 && (
-                      <div className="text-xs text-muted-foreground">لا توجد خصائص.</div>
+                      <div className="text-xs text-muted-foreground">{"\u0644\u0627 \u062a\u0648\u062c\u062f \u062e\u0635\u0627\u0626\u0635."}</div>
                     )}
                     {attributes.map((attr) => (
                       <div key={attr._id} className="flex items-center justify-between rounded-md border px-2 py-1 text-xs">
@@ -728,16 +791,16 @@ export function MaterialsManager() {
                           {attr.name} ({ATTRIBUTE_TYPES.find((t) => t.value === attr.type)?.label || attr.type})
                         </div>
                         <Button variant="ghost" size="sm" onClick={() => removeAttribute(attr)}>
-                          حذف
+                          {"\u062d\u0630\u0641"}
                         </Button>
                       </div>
                     ))}
                   </div>
 
                   <div className="space-y-2 rounded-lg border p-2">
-                    <div className="text-sm font-medium">إضافة خاصية</div>
+                    <div className="text-sm font-medium">{"\u0625\u0636\u0627\u0641\u0629 \u062e\u0627\u0635\u064a\u0629"}</div>
                     <Input
-                      placeholder="اسم الخاصية"
+                      placeholder={"\u0627\u0633\u0645 \u0627\u0644\u062e\u0627\u0635\u064a\u0629"}
                       value={attributeForm.name}
                       onChange={(e) => setAttributeForm({ ...attributeForm, name: e.target.value })}
                     />
@@ -746,7 +809,7 @@ export function MaterialsManager() {
                       onValueChange={(value) => setAttributeForm({ ...attributeForm, type: value })}
                     >
                       <SelectTrigger className="text-right">
-                        <SelectValue placeholder="نوع الخاصية" />
+                        <SelectValue placeholder={"\u0646\u0648\u0639 \u0627\u0644\u062e\u0627\u0635\u064a\u0629"} />
                       </SelectTrigger>
                       <SelectContent>
                         {ATTRIBUTE_TYPES.map((type) => (
@@ -758,7 +821,7 @@ export function MaterialsManager() {
                     </Select>
                     {attributeForm.type === "select" && (
                       <Input
-                        placeholder="الخيارات (مفصولة بفواصل)"
+                        placeholder={"\u0627\u0644\u062e\u064a\u0627\u0631\u0627\u062a (\u0645\u0641\u0635\u0648\u0644\u0629 \u0628\u0641\u0648\u0627\u0635\u0644)"}
                         value={attributeForm.options}
                         onChange={(e) => setAttributeForm({ ...attributeForm, options: e.target.value })}
                       />
@@ -768,10 +831,10 @@ export function MaterialsManager() {
                       onValueChange={(value) => setAttributeForm({ ...attributeForm, unitId: value === "__none__" ? "" : value })}
                     >
                       <SelectTrigger className="text-right">
-                        <SelectValue placeholder="وحدة القياس (اختياري)" />
+                        <SelectValue placeholder={"\u0648\u062d\u062f\u0629 \u0627\u0644\u0642\u064a\u0627\u0633 (\u0627\u062e\u062a\u064a\u0627\u0631\u064a)"} />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="__none__">بدون</SelectItem>
+                        <SelectItem value="__none__">{"\u0628\u062f\u0648\u0646"}</SelectItem>
                         {units.map((unit) => (
                           <SelectItem key={unit._id} value={unit._id}>
                             {unit.nameAr || unit.name}
@@ -780,17 +843,17 @@ export function MaterialsManager() {
                       </SelectContent>
                     </Select>
                     <div className="flex items-center justify-between rounded-md border px-2 py-1 text-xs">
-                      <span>إجباري</span>
+                      <span>{"\u0625\u062c\u0628\u0627\u0631\u064a"}</span>
                       <Switch
                         checked={attributeForm.required}
                         onCheckedChange={(checked) => setAttributeForm({ ...attributeForm, required: checked })}
                       />
                     </div>
-                    <Button size="sm" onClick={submitAttribute}>حفظ الخاصية</Button>
+                    <Button size="sm" onClick={submitAttribute}>{"\u062d\u0641\u0638 \u0627\u0644\u062e\u0627\u0635\u064a\u0629"}</Button>
                   </div>
                 </>
               ) : (
-                <div className="text-xs text-muted-foreground">اختر تصنيفًا لعرض الخصائص.</div>
+                <div className="text-xs text-muted-foreground">{"\u0627\u062e\u062a\u0631 \u062a\u0635\u0646\u064a\u0641\u064b\u0627 \u0644\u0639\u0631\u0636 \u0627\u0644\u062e\u0635\u0627\u0626\u0635."}</div>
               )}
             </div>
           </div>
@@ -800,38 +863,38 @@ export function MaterialsManager() {
       <Card className="text-right">
         <CardHeader>
           <div className="flex items-center justify-between">
-            <CardTitle>المواد</CardTitle>
+            <CardTitle>{"\u0627\u0644\u0645\u0648\u0627\u062f"}</CardTitle>
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={() => setUnitOpen(true)}>الوحدات</Button>
-              <Button size="sm" onClick={openCreateMaterial}>إضافة مادة</Button>
+              <Button variant="outline" size="sm" onClick={() => setUnitOpen(true)}>{"\u0627\u0644\u0648\u062d\u062f\u0627\u062a"}</Button>
+              <Button size="sm" onClick={openCreateMaterial}>{"\u0625\u0636\u0627\u0641\u0629 \u0645\u0627\u062f\u0629"}</Button>
             </div>
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="grid gap-3 md:grid-cols-2">
             <Input
-              placeholder="بحث بالاسم أو الكود"
+              placeholder={"\u0628\u062d\u062b \u0628\u0627\u0644\u0627\u0633\u0645 \u0623\u0648 \u0627\u0644\u0643\u0648\u062f"}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
             <div className="text-sm text-muted-foreground flex items-center justify-end">
-              {selectedCategoryId ? "فلترة حسب التصنيف المحدد" : "كل التصنيفات"}
+              {selectedCategoryId ? "\u0641\u0644\u062a\u0631\u0629 \u062d\u0633\u0628 \u0627\u0644\u062a\u0635\u0646\u064a\u0641 \u0627\u0644\u0645\u062d\u062f\u062f" : "\u0643\u0644 \u0627\u0644\u062a\u0635\u0646\u064a\u0641\u0627\u062a"}
             </div>
           </div>
 
           {loading ? (
-            <div className="text-sm text-muted-foreground">جاري التحميل...</div>
+            <div className="text-sm text-muted-foreground">{"\u062c\u0627\u0631\u064a \u0627\u0644\u062a\u062d\u0645\u064a\u0644..."}</div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b text-right">
-                    <th className="p-2">الاسم</th>
-                    <th className="p-2">الكود</th>
-                    <th className="p-2">الوحدة</th>
-                    <th className="p-2">التصنيفات</th>
-                    <th className="p-2">الحالة</th>
-                    <th className="p-2">الإجراءات</th>
+                    <th className="p-2">{"\u0627\u0644\u0627\u0633\u0645"}</th>
+                    <th className="p-2">{"\u0627\u0644\u0643\u0648\u062f"}</th>
+                    <th className="p-2">{"\u0627\u0644\u0648\u062d\u062f\u0629"}</th>
+                    <th className="p-2">{"\u0627\u0644\u062a\u0635\u0646\u064a\u0641\u0627\u062a"}</th>
+                    <th className="p-2">{"\u0627\u0644\u062d\u0627\u0644\u0629"}</th>
+                    <th className="p-2">{"\u0627\u0644\u0625\u062c\u0631\u0627\u0621\u0627\u062a"}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -843,10 +906,10 @@ export function MaterialsManager() {
                         <td className="p-2">{item.sku}</td>
                         <td className="p-2">{unit?.nameAr || unit?.name || "-"}</td>
                         <td className="p-2">{item.categoryIds?.length || 0}</td>
-                        <td className="p-2">{item.isActive === false ? "معطلة" : "مفعلة"}</td>
+                        <td className="p-2">{item.isActive === false ? "\u0645\u0639\u0637\u0644\u0629" : "\u0645\u0641\u0639\u0644\u0629"}</td>
                         <td className="p-2 space-x-2 space-x-reverse">
-                          <Button variant="outline" size="sm" onClick={() => openEditMaterial(item)}>تعديل</Button>
-                          <Button variant="destructive" size="sm" onClick={() => removeMaterial(item)}>حذف</Button>
+                          <Button variant="outline" size="sm" onClick={() => openEditMaterial(item)}>{"\u062a\u0639\u062f\u064a\u0644"}</Button>
+                          <Button variant="destructive" size="sm" onClick={() => removeMaterial(item)}>{"\u062d\u0630\u0641"}</Button>
                         </td>
                       </tr>
                     )
@@ -854,7 +917,7 @@ export function MaterialsManager() {
                   {filteredMaterials.length === 0 && (
                     <tr>
                       <td className="p-4 text-center text-muted-foreground" colSpan={6}>
-                        لا توجد مواد لعرضها
+                        {"\u0644\u0627 \u062a\u0648\u062c\u062f \u0645\u0648\u0627\u062f \u0644\u0639\u0631\u0636\u0647\u0627"}
                       </td>
                     </tr>
                   )}
@@ -868,25 +931,25 @@ export function MaterialsManager() {
       <Dialog open={categoryOpen} onOpenChange={setCategoryOpen}>
         <DialogContent className="text-right">
           <DialogHeader>
-            <DialogTitle>{categoryEditing ? "تعديل التصنيف" : "إضافة تصنيف"}</DialogTitle>
+            <DialogTitle>{categoryEditing ? "\u062a\u0639\u062f\u064a\u0644 \u0627\u0644\u062a\u0635\u0646\u064a\u0641" : "\u0625\u0636\u0627\u0641\u0629 \u062a\u0635\u0646\u064a\u0641"}</DialogTitle>
           </DialogHeader>
           <div className="grid gap-3">
             <div>
-              <Label>الاسم</Label>
+              <Label>{"\u0627\u0644\u0627\u0633\u0645"}</Label>
               <Input value={categoryForm.name} onChange={(e) => setCategoryForm({ ...categoryForm, name: e.target.value })} />
             </div>
             <div>
-              <Label>الاسم (عربي)</Label>
+              <Label>{"\u0627\u0644\u0627\u0633\u0645 (\u0639\u0631\u0628\u064a)"}</Label>
               <Input value={categoryForm.nameAr} onChange={(e) => setCategoryForm({ ...categoryForm, nameAr: e.target.value })} />
             </div>
             <div>
-              <Label>التصنيف الأب</Label>
+              <Label>{"\u0627\u0644\u062a\u0635\u0646\u064a\u0641 \u0627\u0644\u0623\u0628"}</Label>
               <Select value={categoryForm.parentId || "__none__"} onValueChange={(value) => setCategoryForm({ ...categoryForm, parentId: value === "__none__" ? "" : value })}>
                 <SelectTrigger className="text-right">
-                  <SelectValue placeholder="بدون" />
+                  <SelectValue placeholder={"\u0628\u062f\u0648\u0646"} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="__none__">بدون</SelectItem>
+                  <SelectItem value="__none__">{"\u0628\u062f\u0648\u0646"}</SelectItem>
                   {categories.map((cat) => (
                     <SelectItem key={cat._id} value={cat._id}>{cat.nameAr || cat.name}</SelectItem>
                   ))}
@@ -894,13 +957,13 @@ export function MaterialsManager() {
               </Select>
             </div>
             <div className="flex items-center justify-between rounded-md border px-2 py-1 text-xs">
-              <span>مفعظ‘ل</span>
+              <span>{"\u0645\u0641\u0639\u0651\u0644"}</span>
               <Switch checked={categoryForm.isActive} onCheckedChange={(checked) => setCategoryForm({ ...categoryForm, isActive: checked })} />
             </div>
           </div>
           <DialogFooter className="flex-row-reverse gap-2">
-            <Button variant="outline" onClick={() => setCategoryOpen(false)}>إلغاء</Button>
-            <Button onClick={submitCategory}>{categoryEditing ? "تحديث" : "إضافة"}</Button>
+            <Button variant="outline" onClick={() => setCategoryOpen(false)}>{"\u0625\u0644\u063a\u0627\u0621"}</Button>
+            <Button onClick={submitCategory}>{categoryEditing ? "\u062a\u062d\u062f\u064a\u062b" : "\u0625\u0636\u0627\u0641\u0629"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -908,30 +971,30 @@ export function MaterialsManager() {
       <Dialog open={materialOpen} onOpenChange={setMaterialOpen}>
         <DialogContent className="text-right max-w-2xl">
           <DialogHeader>
-            <DialogTitle>{materialEditing ? "تعديل مادة" : "إضافة مادة"}</DialogTitle>
+            <DialogTitle>{materialEditing ? "\u062a\u0639\u062f\u064a\u0644 \u0645\u0627\u062f\u0629" : "\u0625\u0636\u0627\u0641\u0629 \u0645\u0627\u062f\u0629"}</DialogTitle>
           </DialogHeader>
           <div className="grid gap-4">
             <div className="grid gap-3 md:grid-cols-2">
               <div>
-                <Label>الاسم</Label>
+                <Label>{"\u0627\u0644\u0627\u0633\u0645"}</Label>
                 <Input value={materialForm.name} onChange={(e) => setMaterialForm({ ...materialForm, name: e.target.value })} />
               </div>
               <div>
-                <Label>الاسم (عربي)</Label>
+                <Label>{"\u0627\u0644\u0627\u0633\u0645 (\u0639\u0631\u0628\u064a)"}</Label>
                 <Input value={materialForm.nameAr} onChange={(e) => setMaterialForm({ ...materialForm, nameAr: e.target.value })} />
               </div>
               <div>
-                <Label>الكود (SKU)</Label>
+                <Label>{"\u0627\u0644\u0643\u0648\u062f (SKU)"}</Label>
                 <Input value={materialForm.sku} onChange={(e) => setMaterialForm({ ...materialForm, sku: e.target.value })} />
               </div>
               <div>
-                <Label>الوحدة الأساسية</Label>
+                <Label>{"\u0627\u0644\u0648\u062d\u062f\u0629 \u0627\u0644\u0623\u0633\u0627\u0633\u064a\u0629"}</Label>
                 <Select value={materialForm.baseUnitId || "__none__"} onValueChange={(value) => setMaterialForm({ ...materialForm, baseUnitId: value === "__none__" ? "" : value })}>
                   <SelectTrigger className="text-right">
-                    <SelectValue placeholder="اختر الوحدة" />
+                    <SelectValue placeholder={"\u0627\u062e\u062a\u0631 \u0627\u0644\u0648\u062d\u062f\u0629"} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="__none__">بدون</SelectItem>
+                    <SelectItem value="__none__">{"\u0628\u062f\u0648\u0646"}</SelectItem>
                     {units.map((unit) => (
                       <SelectItem key={unit._id} value={unit._id}>{unit.nameAr || unit.name}</SelectItem>
                     ))}
@@ -941,7 +1004,7 @@ export function MaterialsManager() {
             </div>
 
             <div className="rounded-lg border p-2">
-              <div className="text-sm font-semibold mb-2">التصنيفات</div>
+              <div className="text-sm font-semibold mb-2">{"\u0627\u0644\u062a\u0635\u0646\u064a\u0641\u0627\u062a"}</div>
               <div className="max-h-40 overflow-y-auto space-y-1">
                 {categories.map((cat) => (
                   <label key={cat._id} className="flex items-center justify-between rounded-md border px-2 py-1 text-xs">
@@ -960,14 +1023,14 @@ export function MaterialsManager() {
                   </label>
                 ))}
                 {categories.length === 0 && (
-                  <div className="text-xs text-muted-foreground">لا توجد تصنيفات.</div>
+                  <div className="text-xs text-muted-foreground">{"\u0644\u0627 \u062a\u0648\u062c\u062f \u062a\u0635\u0646\u064a\u0641\u0627\u062a."}</div>
                 )}
               </div>
             </div>
 
             {materialAttributes.length > 0 && (
               <div className="rounded-lg border p-2 space-y-3">
-                <div className="text-sm font-semibold">خصائص المادة</div>
+                <div className="text-sm font-semibold">{"\u062e\u0635\u0627\u0626\u0635 \u0627\u0644\u0645\u0627\u062f\u0629"}</div>
                 {materialAttributes.map((attr) => {
                   const value = materialAttributeValues[attr._id]
                   return (
@@ -999,7 +1062,7 @@ export function MaterialsManager() {
                           onValueChange={(val) => setMaterialAttributeValues({ ...materialAttributeValues, [attr._id]: val })}
                         >
                           <SelectTrigger className="text-right">
-                            <SelectValue placeholder="اختر" />
+                            <SelectValue placeholder={"\u0627\u062e\u062a\u0631"} />
                           </SelectTrigger>
                           <SelectContent>
                             {(attr.options || []).map((opt) => (
@@ -1010,7 +1073,7 @@ export function MaterialsManager() {
                       )}
                       {attr.type === "boolean" && (
                         <div className="flex items-center justify-between rounded-md border px-2 py-1 text-xs">
-                          <span>{value ? "نعم" : "لا"}</span>
+                          <span>{value ? "\u0646\u0639\u0645" : "\u0644\u0627"}</span>
                           <Switch
                             checked={!!value}
                             onCheckedChange={(checked) => setMaterialAttributeValues({ ...materialAttributeValues, [attr._id]: checked })}
@@ -1024,13 +1087,13 @@ export function MaterialsManager() {
             )}
 
             <div className="flex items-center justify-between rounded-md border px-2 py-1 text-xs">
-              <span>مفعظ‘لة</span>
+              <span>{"\u0645\u0641\u0639\u0651\u0644\u0629"}</span>
               <Switch checked={materialForm.isActive} onCheckedChange={(checked) => setMaterialForm({ ...materialForm, isActive: checked })} />
             </div>
           </div>
           <DialogFooter className="flex-row-reverse gap-2">
-            <Button variant="outline" onClick={() => setMaterialOpen(false)}>إلغاط،</Button>
-            <Button onClick={submitMaterial}>{materialEditing ? "تحديث" : "إضافة"}</Button>
+            <Button variant="outline" onClick={() => setMaterialOpen(false)}>{"\u0625\u0644\u063a\u0627\u0621"}</Button>
+            <Button onClick={submitMaterial}>{materialEditing ? "\u062a\u062d\u062f\u064a\u062b" : "\u0625\u0636\u0627\u0641\u0629"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1038,7 +1101,7 @@ export function MaterialsManager() {
       <Dialog open={unitOpen} onOpenChange={setUnitOpen}>
         <DialogContent className="text-right">
           <DialogHeader>
-            <DialogTitle>وحدات القياس</DialogTitle>
+            <DialogTitle>{"\u0648\u062d\u062f\u0627\u062a \u0627\u0644\u0642\u064a\u0627\u0633"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
             <div className="space-y-2">
@@ -1049,33 +1112,33 @@ export function MaterialsManager() {
                 </div>
               ))}
               {units.length === 0 && (
-                <div className="text-xs text-muted-foreground">لا توجد وحدات.</div>
+                <div className="text-xs text-muted-foreground">{"\u0644\u0627 \u062a\u0648\u062c\u062f \u0648\u062d\u062f\u0627\u062a."}</div>
               )}
             </div>
 
             <div className="space-y-2 rounded-lg border p-2">
-              <div className="text-sm font-semibold">إضافة وحدة</div>
+              <div className="text-sm font-semibold">{"\u0625\u0636\u0627\u0641\u0629 \u0648\u062d\u062f\u0629"}</div>
               <Input
-                placeholder="اسم الوحدة"
+                placeholder={"\u0627\u0633\u0645 \u0627\u0644\u0648\u062d\u062f\u0629"}
                 value={unitForm.name}
                 onChange={(e) => setUnitForm({ ...unitForm, name: e.target.value })}
               />
               <Input
-                placeholder="اسم عربي"
+                placeholder={"\u0627\u0633\u0645 \u0639\u0631\u0628\u064a"}
                 value={unitForm.nameAr}
                 onChange={(e) => setUnitForm({ ...unitForm, nameAr: e.target.value })}
               />
               <Input
-                placeholder="الرمز (مثال: kg)"
+                placeholder={"\u0627\u0644\u0631\u0645\u0632 (\u0645\u062b\u0627\u0644: kg)"}
                 value={unitForm.symbol}
                 onChange={(e) => setUnitForm({ ...unitForm, symbol: e.target.value })}
               />
               <Select value={unitForm.baseUnitId || "__none__"} onValueChange={(value) => setUnitForm({ ...unitForm, baseUnitId: value === "__none__" ? "" : value })}>
                 <SelectTrigger className="text-right">
-                  <SelectValue placeholder="الوحدة الأساسية" />
+                  <SelectValue placeholder={"\u0627\u0644\u0648\u062d\u062f\u0629 \u0627\u0644\u0623\u0633\u0627\u0633\u064a\u0629"} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="__none__">بدون</SelectItem>
+                  <SelectItem value="__none__">{"\u0628\u062f\u0648\u0646"}</SelectItem>
                   {units.map((unit) => (
                     <SelectItem key={unit._id} value={unit._id}>{unit.nameAr || unit.name}</SelectItem>
                   ))}
@@ -1083,19 +1146,19 @@ export function MaterialsManager() {
               </Select>
               <Input
                 type="number"
-                placeholder="معامل التحويل"
+                placeholder={"\u0645\u0639\u0627\u0645\u0644 \u0627\u0644\u062a\u062d\u0648\u064a\u0644"}
                 value={unitForm.factor}
                 onChange={(e) => setUnitForm({ ...unitForm, factor: Number(e.target.value) })}
               />
               <div className="flex items-center justify-between rounded-md border px-2 py-1 text-xs">
-                <span>مفعظ‘لة</span>
+                <span>{"\u0645\u0641\u0639\u0651\u0644\u0629"}</span>
                 <Switch checked={unitForm.isActive} onCheckedChange={(checked) => setUnitForm({ ...unitForm, isActive: checked })} />
               </div>
-              <Button size="sm" onClick={submitUnit}>حفظ الوحدة</Button>
+              <Button size="sm" onClick={submitUnit}>{"\u062d\u0641\u0638 \u0627\u0644\u0648\u062d\u062f\u0629"}</Button>
             </div>
           </div>
           <DialogFooter className="flex-row-reverse gap-2">
-            <Button variant="outline" onClick={() => setUnitOpen(false)}>إغلاق</Button>
+            <Button variant="outline" onClick={() => setUnitOpen(false)}>{"\u0625\u063a\u0644\u0627\u0642"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

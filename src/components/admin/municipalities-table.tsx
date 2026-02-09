@@ -1,6 +1,5 @@
 "use client"
 
-import dynamic from "next/dynamic"
 import { useEffect, useMemo, useState } from "react"
 import { useSession } from "next-auth/react"
 import { apiClient } from "@/lib/api/client"
@@ -13,8 +12,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch"
 import toast from "react-hot-toast"
 import { useLabels } from "@/hooks/use-labels"
+import dynamic from "next/dynamic"
 
-const MapPicker = dynamic(() => import("@/components/ui/map-picker").then((m) => m.MapPicker), { ssr: false })
+const MapPicker = dynamic(
+  () => import("@/components/ui/map-picker").then((mod) => mod.MapPicker),
+  { ssr: false, loading: () => <div className="h-[240px] rounded-lg border animate-pulse bg-muted" /> }
+)
 
 type Branch = {
   _id: string
