@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 
 import { useEffect, useMemo, useState } from "react"
 import { useSession } from "next-auth/react"
@@ -183,7 +183,7 @@ export function PointMaterialsManager() {
     Promise.all([loadMaterials(activeBranchId, selectedPointId), loadUnits(activeBranchId, selectedPointId)])
       .then(() => refreshPointData(activeBranchId, selectedPointId))
       .catch((error: any) => {
-        toast.error(error.message || "حث خطأ")
+        toast.error(error.message || "حدث خطأ")
       })
   }, [activeBranchId, selectedPointId])
 
@@ -547,7 +547,7 @@ export function PointMaterialsManager() {
 
         <Card className="text-right">
           <CardHeader>
-            <CardTitle>ط¢خر الحركات</CardTitle>
+            <CardTitle>آخر الحركات</CardTitle>
           </CardHeader>
           <CardContent>
             {transactions.length === 0 ? (

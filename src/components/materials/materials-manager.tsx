@@ -139,6 +139,7 @@ export function MaterialsManager() {
 
   const [unitOpen, setUnitOpen] = useState(false)
   const [unitForm, setUnitForm] = useState({ ...emptyUnitForm })
+  const [attributesOpen, setAttributesOpen] = useState(false)
 
   const [loading, setLoading] = useState(false)
 
@@ -691,172 +692,104 @@ export function MaterialsManager() {
             <Button size="sm" onClick={openCreateCategory}>{"\u0625\u0636\u0627\u0641\u0629 \u062a\u0635\u0646\u064a\u0641"}</Button>
           </div>
         </CardHeader>
-        <CardContent>
-          <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
-            <div className="space-y-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="text-xs text-muted-foreground">{"\u0625\u062c\u0645\u0627\u0644\u064a \u0627\u0644\u062a\u0635\u0646\u064a\u0641\u0627\u062a:"} {categories.length}</div>
-                <div className="text-xs text-muted-foreground">
-                  {selectedCategory ? `${"\u0627\u0644\u062a\u0635\u0646\u064a\u0641 \u0627\u0644\u0645\u062d\u062f\u062f:"} ${selectedCategory.nameAr || selectedCategory.name}` : "\u0644\u0627 \u064a\u0648\u062c\u062f \u062a\u062d\u062f\u064a\u062f"}
-                </div>
-              </div>
-              <div className="rounded-lg border bg-card/40">
-                <div className="max-h-[420px] overflow-auto">
-                  <table className="w-full text-sm">
-                    <thead className="sticky top-0 z-10 border-b bg-background/90 backdrop-blur">
-                      <tr className="text-right">
-                        <th className="p-2">{"\u0627\u0644\u062a\u0635\u0646\u064a\u0641"}</th>
-                        <th className="p-2 w-[70px] text-center">{"\u0627\u0644\u0639\u0645\u0642"}</th>
-                        <th className="p-2 w-[70px] text-center">{"\u0641\u0631\u0639\u064a"}</th>
-                        <th className="p-2 w-[90px] text-center">{"\u0627\u0644\u062d\u0627\u0644\u0629"}</th>
-                        <th className="p-2 w-[150px] text-center">{"\u0627\u0644\u0625\u062c\u0631\u0627\u0621\u0627\u062a"}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {flatCategoryRows.map(({ node, depth, childrenCount }) => {
-                        const isSelected = selectedCategoryId === node._id
-                        return (
-                          <tr
-                            key={node._id}
-                            className={cn(
-                              "border-b transition-colors",
-                              isSelected ? "bg-primary/10" : "hover:bg-muted/50"
-                            )}
-                          >
-                            <td className="p-2">
-                              <button
-                                className="flex w-full items-center justify-between gap-2 text-right"
-                                onClick={() => setSelectedCategoryId(node._id)}
-                              >
-                                <span
-                                  className="flex-1 truncate"
-                                  style={{ paddingRight: `${depth * 14 + 8}px` }}
-                                >
-                                  {node.nameAr || node.name}
-                                </span>
-                                {node.parentId && <span className="text-[10px] text-muted-foreground">{"\u0641\u0631\u0639\u064a"}</span>}
-                              </button>
-                            </td>
-                            <td className="p-2 text-center">{depth}</td>
-                            <td className="p-2 text-center">{childrenCount}</td>
-                            <td className="p-2 text-center">
-                              <span
-                                className={cn(
-                                  "inline-flex items-center rounded-full border px-2 py-0.5 text-[11px]",
-                                  node.isActive === false
-                                    ? "border-destructive/40 text-destructive"
-                                    : "border-emerald-500/30 text-emerald-300"
-                                )}
-                              >
-                                {node.isActive === false ? "\u0645\u0639\u0637\u0644\u0629" : "\u0645\u0641\u0639\u0644\u0629"}
-                              </span>
-                            </td>
-                            <td className="p-2">
-                              <div className="flex items-center justify-end gap-2">
-                                <Button variant="outline" size="sm" onClick={() => openEditCategory(node)}>
-                                  {"\u062a\u0639\u062f\u064a\u0644"}
-                                </Button>
-                                <Button variant="destructive" size="sm" onClick={() => removeCategory(node)}>
-                                  {"\u062d\u0630\u0641"}
-                                </Button>
-                              </div>
-                            </td>
-                          </tr>
-                        )
-                      })}
-                      {flatCategoryRows.length === 0 && (
-                        <tr>
-                          <td className="p-4 text-center text-muted-foreground" colSpan={5}>
-                            {"\u0644\u0627 \u062a\u0648\u062c\u062f \u062a\u0635\u0646\u064a\u0641\u0627\u062a \u0628\u0639\u062f."}
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-3 border-r pr-4 lg:border-r-0 lg:border-t-0 lg:border-l lg:pl-4">
-              <div className="text-sm font-semibold">{"\u062e\u0635\u0627\u0626\u0635 \u0627\u0644\u062a\u0635\u0646\u064a\u0641"}</div>
-              {selectedCategoryId ? (
-                <>
-                  <div className="space-y-2">
-                    {attributes.length === 0 && (
-                      <div className="text-xs text-muted-foreground">{"\u0644\u0627 \u062a\u0648\u062c\u062f \u062e\u0635\u0627\u0626\u0635."}</div>
-                    )}
-                    {attributes.map((attr) => (
-                      <div key={attr._id} className="flex items-center justify-between rounded-md border px-2 py-1 text-xs">
-                        <div>
-                          {attr.name} ({ATTRIBUTE_TYPES.find((t) => t.value === attr.type)?.label || attr.type})
-                        </div>
-                        <Button variant="ghost" size="sm" onClick={() => removeAttribute(attr)}>
-                          {"\u062d\u0630\u0641"}
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="space-y-2 rounded-lg border p-2">
-                    <div className="text-sm font-medium">{"\u0625\u0636\u0627\u0641\u0629 \u062e\u0627\u0635\u064a\u0629"}</div>
-                    <Input
-                      placeholder={"\u0627\u0633\u0645 \u0627\u0644\u062e\u0627\u0635\u064a\u0629"}
-                      value={attributeForm.name}
-                      onChange={(e) => setAttributeForm({ ...attributeForm, name: e.target.value })}
-                    />
-                    <Select
-                      value={attributeForm.type}
-                      onValueChange={(value) => setAttributeForm({ ...attributeForm, type: value })}
-                    >
-                      <SelectTrigger className="text-right">
-                        <SelectValue placeholder={"\u0646\u0648\u0639 \u0627\u0644\u062e\u0627\u0635\u064a\u0629"} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {ATTRIBUTE_TYPES.map((type) => (
-                          <SelectItem key={type.value} value={type.value}>
-                            {type.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    {attributeForm.type === "select" && (
-                      <Input
-                        placeholder={"\u0627\u0644\u062e\u064a\u0627\u0631\u0627\u062a (\u0645\u0641\u0635\u0648\u0644\u0629 \u0628\u0641\u0648\u0627\u0635\u0644)"}
-                        value={attributeForm.options}
-                        onChange={(e) => setAttributeForm({ ...attributeForm, options: e.target.value })}
-                      />
-                    )}
-                    <Select
-                      value={attributeForm.unitId || "__none__"}
-                      onValueChange={(value) => setAttributeForm({ ...attributeForm, unitId: value === "__none__" ? "" : value })}
-                    >
-                      <SelectTrigger className="text-right">
-                        <SelectValue placeholder={"\u0648\u062d\u062f\u0629 \u0627\u0644\u0642\u064a\u0627\u0633 (\u0627\u062e\u062a\u064a\u0627\u0631\u064a)"} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__none__">{"\u0628\u062f\u0648\u0646"}</SelectItem>
-                        {units.map((unit) => (
-                          <SelectItem key={unit._id} value={unit._id}>
-                            {unit.nameAr || unit.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <div className="flex items-center justify-between rounded-md border px-2 py-1 text-xs">
-                      <span>{"\u0625\u062c\u0628\u0627\u0631\u064a"}</span>
-                      <Switch
-                        checked={attributeForm.required}
-                        onCheckedChange={(checked) => setAttributeForm({ ...attributeForm, required: checked })}
-                      />
-                    </div>
-                    <Button size="sm" onClick={submitAttribute}>{"\u062d\u0641\u0638 \u0627\u0644\u062e\u0627\u0635\u064a\u0629"}</Button>
-                  </div>
-                </>
-              ) : (
-                <div className="text-xs text-muted-foreground">{"\u0627\u062e\u062a\u0631 \u062a\u0635\u0646\u064a\u0641\u064b\u0627 \u0644\u0639\u0631\u0636 \u0627\u0644\u062e\u0635\u0627\u0626\u0635."}</div>
-              )}
+        <CardContent className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="text-xs text-muted-foreground">??? ?????????: {categories.length}</div>
+            <div className="text-xs text-muted-foreground">
+              {selectedCategory ? `??????? ??????: ${selectedCategory.nameAr || selectedCategory.name}` : "????"}
             </div>
           </div>
+
+          {loading ? (
+            <div className="text-sm text-muted-foreground">{"???? ???????..."}</div>
+          ) : (
+            <div className="rounded-lg border bg-card/40 overflow-hidden">
+              <div className="max-h-[520px] overflow-auto">
+                <table className="w-full text-sm">
+                  <thead className="sticky top-0 z-10 border-b bg-background/90 backdrop-blur">
+                    <tr className="text-right">
+                      <th className="p-2">???????</th>
+                      <th className="p-2 w-[80px] text-center">?????</th>
+                      <th className="p-2 w-[80px] text-center">???????</th>
+                      <th className="p-2 w-[100px] text-center">??????</th>
+                      <th className="p-2 w-[220px] text-center">?????????</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {flatCategoryRows.map(({ node, depth, childrenCount }, index) => {
+                      const isSelected = selectedCategoryId === node._id
+                      return (
+                        <tr
+                          key={node._id}
+                          className={cn(
+                            "border-b transition-colors",
+                            index % 2 === 0 && "bg-muted/20",
+                            isSelected ? "bg-primary/10" : "hover:bg-muted/50"
+                          )}
+                        >
+                          <td className="p-2">
+                            <button
+                              className="flex w-full items-center justify-between gap-2 text-right"
+                              onClick={() => setSelectedCategoryId(node._id)}
+                            >
+                              <span
+                                className="flex-1 truncate"
+                                style={{ paddingRight: `${depth * 14 + 8}px` }}
+                              >
+                                {node.nameAr || node.name}
+                              </span>
+{node.parentId && <span className="text-[10px] text-muted-foreground">????</span>}
+                            </button>
+                          </td>
+                          <td className="p-2 text-center">{depth}</td>
+                          <td className="p-2 text-center">{childrenCount}</td>
+                          <td className="p-2 text-center">
+                            <span
+                              className={cn(
+                                "inline-flex items-center rounded-full border px-2 py-0.5 text-[11px]",
+                                node.isActive === false
+                                  ? "border-destructive/40 text-destructive"
+                                  : "border-emerald-500/30 text-emerald-300"
+                              )}
+                            >
+                              {node.isActive === false ? "????" : "????"}
+                            </span>
+                          </td>
+                          <td className="p-2">
+                            <div className="flex items-center justify-center gap-2">
+                              <Button
+                                variant="secondary"
+                                size="sm"
+                                onClick={() => {
+                                  setSelectedCategoryId(node._id)
+setAttributesOpen(true)
+}}
+                              >
+                                ?????
+                              </Button>
+                              <Button variant="outline" size="sm" onClick={() => openEditCategory(node)}>
+                                ?????
+                              </Button>
+                              <Button variant="destructive" size="sm" onClick={() => removeCategory(node)}>
+                                ???
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                    {flatCategoryRows.length === 0 && (
+                      <tr>
+                        <td className="p-4 text-center text-muted-foreground" colSpan={5}>
+                          ?? ???? ??????? ???.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -871,58 +804,82 @@ export function MaterialsManager() {
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div className="grid gap-3 md:grid-cols-2">
-            <Input
-              placeholder={"\u0628\u062d\u062b \u0628\u0627\u0644\u0627\u0633\u0645 \u0623\u0648 \u0627\u0644\u0643\u0648\u062f"}
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-            <div className="text-sm text-muted-foreground flex items-center justify-end">
-              {selectedCategoryId ? "\u0641\u0644\u062a\u0631\u0629 \u062d\u0633\u0628 \u0627\u0644\u062a\u0635\u0646\u064a\u0641 \u0627\u0644\u0645\u062d\u062f\u062f" : "\u0643\u0644 \u0627\u0644\u062a\u0635\u0646\u064a\u0641\u0627\u062a"}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-1 flex-wrap items-center gap-3">
+              <Input
+                placeholder={"??? ?????? ?? ?????"}
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+              <div className="text-xs text-muted-foreground">
+                {selectedCategoryId ? "??? ??????" : "????"}
+              </div>
+            </div>
+            <div className="text-xs text-muted-foreground">
+              ??? ??????: {filteredMaterials.length}
             </div>
           </div>
 
           {loading ? (
-            <div className="text-sm text-muted-foreground">{"\u062c\u0627\u0631\u064a \u0627\u0644\u062a\u062d\u0645\u064a\u0644..."}</div>
+            <div className="text-sm text-muted-foreground">{"???? ???????..."}</div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b text-right">
-                    <th className="p-2">{"\u0627\u0644\u0627\u0633\u0645"}</th>
-                    <th className="p-2">{"\u0627\u0644\u0643\u0648\u062f"}</th>
-                    <th className="p-2">{"\u0627\u0644\u0648\u062d\u062f\u0629"}</th>
-                    <th className="p-2">{"\u0627\u0644\u062a\u0635\u0646\u064a\u0641\u0627\u062a"}</th>
-                    <th className="p-2">{"\u0627\u0644\u062d\u0627\u0644\u0629"}</th>
-                    <th className="p-2">{"\u0627\u0644\u0625\u062c\u0631\u0627\u0621\u0627\u062a"}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredMaterials.map((item) => {
-                    const unit = units.find((u) => u._id === item.baseUnitId)
-                    return (
-                      <tr key={item._id} className="border-b">
-                        <td className="p-2">{item.name}</td>
-                        <td className="p-2">{item.sku}</td>
-                        <td className="p-2">{unit?.nameAr || unit?.name || "-"}</td>
-                        <td className="p-2">{item.categoryIds?.length || 0}</td>
-                        <td className="p-2">{item.isActive === false ? "\u0645\u0639\u0637\u0644\u0629" : "\u0645\u0641\u0639\u0644\u0629"}</td>
-                        <td className="p-2 space-x-2 space-x-reverse">
-                          <Button variant="outline" size="sm" onClick={() => openEditMaterial(item)}>{"\u062a\u0639\u062f\u064a\u0644"}</Button>
-                          <Button variant="destructive" size="sm" onClick={() => removeMaterial(item)}>{"\u062d\u0630\u0641"}</Button>
+            <div className="rounded-lg border bg-card/40 overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="sticky top-0 z-10 border-b bg-background/90 backdrop-blur">
+                    <tr className="text-right">
+                      <th className="p-2">{"?????"}</th>
+                      <th className="p-2 w-[140px]">{"?????"}</th>
+                      <th className="p-2 w-[160px]">{"??????"}</th>
+                      <th className="p-2 w-[120px] text-center">{"?????????"}</th>
+                      <th className="p-2 w-[110px] text-center">{"??????"}</th>
+                      <th className="p-2 w-[160px] text-center">{"?????????"}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredMaterials.map((item, index) => {
+                      const unit = units.find((u) => u._id === item.baseUnitId)
+                      return (
+                        <tr key={item._id} className={cn("border-b", index % 2 === 0 && "bg-muted/20")}>
+                          <td className="p-2">{item.nameAr || item.name}</td>
+                          <td className="p-2">{item.sku}</td>
+                          <td className="p-2">{unit?.nameAr || unit?.name || "-"}</td>
+                          <td className="p-2 text-center">{item.categoryIds?.length || 0}</td>
+                          <td className="p-2 text-center">
+                            <span
+                              className={cn(
+                                "inline-flex items-center rounded-full border px-2 py-0.5 text-[11px]",
+                                item.isActive === false
+                                  ? "border-destructive/40 text-destructive"
+                                  : "border-emerald-500/30 text-emerald-300"
+                              )}
+                            >
+                              {item.isActive === false ? "????" : "????"}
+                            </span>
+                          </td>
+                          <td className="p-2">
+                            <div className="flex items-center justify-center gap-2">
+                              <Button variant="outline" size="sm" onClick={() => openEditMaterial(item)}>
+                                {"?????"}
+                              </Button>
+                              <Button variant="destructive" size="sm" onClick={() => removeMaterial(item)}>
+                                {"???"}
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                    {filteredMaterials.length === 0 && (
+                      <tr>
+                        <td className="p-4 text-center text-muted-foreground" colSpan={6}>
+                          {"?? ???? ???? ???."}
                         </td>
                       </tr>
-                    )
-                  })}
-                  {filteredMaterials.length === 0 && (
-                    <tr>
-                      <td className="p-4 text-center text-muted-foreground" colSpan={6}>
-                        {"\u0644\u0627 \u062a\u0648\u062c\u062f \u0645\u0648\u0627\u062f \u0644\u0639\u0631\u0636\u0647\u0627"}
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </CardContent>
@@ -965,6 +922,94 @@ export function MaterialsManager() {
             <Button variant="outline" onClick={() => setCategoryOpen(false)}>{"\u0625\u0644\u063a\u0627\u0621"}</Button>
             <Button onClick={submitCategory}>{categoryEditing ? "\u062a\u062d\u062f\u064a\u062b" : "\u0625\u0636\u0627\u0641\u0629"}</Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={attributesOpen} onOpenChange={setAttributesOpen}>
+        <DialogContent className="text-right max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>
+              {selectedCategory
+                ? `????? ???????: ${selectedCategory.nameAr || selectedCategory.name}`
+                : "????? ???????"}
+            </DialogTitle>
+          </DialogHeader>
+          {selectedCategoryId ? (
+            <div className="grid gap-4 md:grid-cols-[1.2fr_0.8fr]">
+              <div className="space-y-2">
+                {attributes.length === 0 && (
+                  <div className="text-xs text-muted-foreground">?? ????? ???.</div>
+                )}
+                {attributes.map((attr) => (
+                  <div key={attr._id} className="flex items-center justify-between rounded-md border px-2 py-1 text-xs">
+                    <div>
+                      {attr.name} ({ATTRIBUTE_TYPES.find((t) => t.value === attr.type)?.label || attr.type})
+                    </div>
+                    <Button variant="ghost" size="sm" onClick={() => removeAttribute(attr)}>
+                      ???
+                    </Button>
+                  </div>
+                ))}
+              </div>
+
+              <div className="space-y-2 rounded-lg border p-3">
+                <div className="text-sm font-medium">??? ???????</div>
+                <Input
+                  placeholder="??? ???????"
+                  value={attributeForm.name}
+                  onChange={(e) => setAttributeForm({ ...attributeForm, name: e.target.value })}
+                />
+                <Select
+                  value={attributeForm.type}
+                  onValueChange={(value) => setAttributeForm({ ...attributeForm, type: value })}
+                >
+                  <SelectTrigger className="text-right">
+                    <SelectValue placeholder="??? ???????" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ATTRIBUTE_TYPES.map((type) => (
+                      <SelectItem key={type.value} value={type.value}>
+                        {type.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {attributeForm.type === "select" && (
+                  <Input
+                    placeholder="?????? (?????? ??????)"
+                    value={attributeForm.options}
+                    onChange={(e) => setAttributeForm({ ...attributeForm, options: e.target.value })}
+                  />
+                )}
+                <Select
+                  value={attributeForm.unitId || "__none__"}
+                  onValueChange={(value) => setAttributeForm({ ...attributeForm, unitId: value === "__none__" ? "" : value })}
+                >
+                  <SelectTrigger className="text-right">
+                    <SelectValue placeholder="?????? (???????)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">????</SelectItem>
+                    {units.map((unit) => (
+                      <SelectItem key={unit._id} value={unit._id}>
+                        {unit.nameAr || unit.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <div className="flex items-center justify-between rounded-md border px-2 py-1 text-xs">
+                  <span>?????</span>
+                  <Switch
+                    checked={attributeForm.required}
+                    onCheckedChange={(checked) => setAttributeForm({ ...attributeForm, required: checked })}
+                  />
+                </div>
+                <Button size="sm" onClick={submitAttribute}>????? ?????</Button>
+              </div>
+            </div>
+          ) : (
+            <div className="text-xs text-muted-foreground">???? ??????? ???? ?? ????? ???????.</div>
+          )}
         </DialogContent>
       </Dialog>
 

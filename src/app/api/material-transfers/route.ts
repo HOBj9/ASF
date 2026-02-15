@@ -1,4 +1,4 @@
-﻿import { NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import mongoose from 'mongoose';
 import connectDB from '@/lib/mongodb';
 import { requirePermission, handleApiError } from '@/lib/middleware/api-auth.middleware';
@@ -165,7 +165,7 @@ export async function POST(request: Request) {
     const sourceQuantity = sourceStock?.quantity || 0;
     const nextSourceQuantity = sourceQuantity - quantityBase;
     if (nextSourceQuantity < 0) {
-      return NextResponse.json({ error: 'الرصيد غير كافظچ في نقطة المصدر' }, { status: 400 });
+      return NextResponse.json({ error: 'الرصيد غير كافٍ في نقطة المصدر' }, { status: 400 });
     }
 
     const destStock = await MaterialStock.findOne({
