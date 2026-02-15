@@ -1,7 +1,9 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import { useSession } from "next-auth/react"
 import { apiClient } from "@/lib/api/client"
+import { isAdmin, isOrganizationAdmin } from "@/lib/permissions"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -11,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch"
 import toast from "react-hot-toast"
 import { useLabels } from "@/hooks/use-labels"
+import { Loading } from "@/components/ui/loading"
 import { ExportExcelDialog, type ExportColumn } from "@/components/municipality/export-excel-dialog"
 
 type Driver = {
@@ -23,6 +26,8 @@ type Driver = {
 }
 
 type Vehicle = { _id: string; name: string }
+type Organization = { _id: string; name: string }
+type Branch = { _id: string; name: string; nameAr?: string; organizationId: string }
 
 const emptyForm: Partial<Driver> = {
   name: "",
@@ -34,9 +39,16 @@ const emptyForm: Partial<Driver> = {
 
 export function DriversManager() {
   const PAGE_SIZE = 10
+  const { data: session } = useSession()
+  const { labels } = useLabels()
 
   const [items, setItems] = useState<Driver[]>([])
   const [vehicles, setVehicles] = useState<Vehicle[]>([])
+
+  const [organizations, setOrganizations] = useState<Organization[]>([])
+  const [branches, setBranches] = useState<Branch[]>([])
+  const [selectedOrganizationId, setSelectedOrganizationId] = useState("")
+  const [selectedBranchId, setSelectedBranchId] = useState("")
 
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
@@ -47,27 +59,105 @@ export function DriversManager() {
   const [editing, setEditing] = useState<Driver | null>(null)
   const [form, setForm] = useState<Partial<Driver>>(emptyForm)
   const [loading, setLoading] = useState(false)
-  const { labels } = useLabels()
 
-  const load = async () => {
+  const userIsAdmin = useMemo(() => isAdmin(session?.user?.role as any), [session?.user?.role])
+  const userIsOrgAdmin = useMemo(() => isOrganizationAdmin(session?.user?.role as any), [session?.user?.role])
+  const sessionBranchId = (session?.user as any)?.branchId ?? null
+  const needsBranchSelector = userIsAdmin || (userIsOrgAdmin && !sessionBranchId)
+  const resolvedBranchId = selectedBranchId || sessionBranchId
+
+  const loadOrganizations = async () => {
+    try {
+      const res = await apiClient.get("/organizations").catch(() => ({ organizations: [] } as any))
+      const list = res.organizations || res.data?.organizations || []
+      setOrganizations(list)
+      return list
+    } catch {
+      return []
+    }
+  }
+
+  const loadBranches = async (organizationId: string | null) => {
+    if (!organizationId) {
+      setBranches([])
+      return
+    }
+    try {
+      const res = await apiClient.get(`/branches?organizationId=${organizationId}`)
+      const list = res.branches || res.data?.branches || []
+      setBranches(list)
+    } catch {
+      setBranches([])
+    }
+  }
+
+  const loadBranchesForOrgUser = async () => {
+    try {
+      const res = await apiClient.get("/branches")
+      const list = res.branches || res.data?.branches || []
+      setBranches(list)
+      if (list.length === 1 && !selectedBranchId) setSelectedBranchId(list[0]._id)
+    } catch {
+      setBranches([])
+    }
+  }
+
+  const load = async (branchId: string | null) => {
+    if (needsBranchSelector && !branchId) {
+      setItems([])
+      setVehicles([])
+      return
+    }
     setLoading(true)
     try {
+      const suffix = branchId ? `?branchId=${branchId}` : ""
       const [driversRes, vehiclesRes] = await Promise.all([
-        apiClient.get("/drivers"),
-        apiClient.get("/vehicles"),
+        apiClient.get(`/drivers${suffix}`),
+        apiClient.get(`/vehicles${suffix}`),
       ])
       setItems(driversRes.drivers || driversRes.data?.drivers || [])
       setVehicles(vehiclesRes.vehicles || vehiclesRes.data?.vehicles || [])
     } catch (error: any) {
       toast.error(error.message || `فشل تحميل ${labels.driverLabel}`)
+      setItems([])
+      setVehicles([])
     } finally {
       setLoading(false)
     }
   }
 
   useEffect(() => {
-    load()
-  }, [])
+    if (session === undefined) return
+    if (userIsAdmin) {
+      loadOrganizations().then((list) => {
+        if (list.length === 1 && !selectedOrganizationId) setSelectedOrganizationId(list[0]._id)
+      })
+    } else if (userIsOrgAdmin && !sessionBranchId) {
+      loadBranchesForOrgUser()
+    } else {
+      load(null)
+    }
+  }, [session?.user])
+
+  useEffect(() => {
+    if (userIsAdmin && selectedOrganizationId) {
+      loadBranches(selectedOrganizationId)
+      setSelectedBranchId("")
+    }
+  }, [userIsAdmin, selectedOrganizationId])
+
+  useEffect(() => {
+    if (!needsBranchSelector) return
+    if (resolvedBranchId) load(resolvedBranchId)
+    else {
+      setItems([])
+      setVehicles([])
+    }
+  }, [needsBranchSelector, resolvedBranchId])
+
+  useEffect(() => {
+    if (!needsBranchSelector && session?.user) load(null)
+  }, [needsBranchSelector, session?.user])
 
   const filteredItems = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -122,16 +212,18 @@ export function DriversManager() {
       toast.error("الاسم مطلوب")
       return
     }
+    const payload = { ...form } as Record<string, unknown>
+      if (resolvedBranchId) payload.branchId = resolvedBranchId
     try {
       if (editing) {
-        await apiClient.patch(`/drivers/${editing._id}`, form)
+        await apiClient.patch(`/drivers/${editing._id}`, payload)
         toast.success(`تم تحديث ${labels.driverLabel}`)
       } else {
-        await apiClient.post("/drivers", form)
+        await apiClient.post("/drivers", payload as any)
         toast.success(`تم إضافة ${labels.driverLabel}`)
       }
       setOpen(false)
-      await load()
+      await load(resolvedBranchId || null)
     } catch (error: any) {
       toast.error(error.message || "حدث خطأ")
     }
@@ -143,6 +235,7 @@ export function DriversManager() {
       await apiClient.delete(`/drivers/${item._id}`)
       setItems((prev) => prev.filter((i) => i._id !== item._id))
       toast.success(`تم حذف ${labels.driverLabel}`)
+      await load(resolvedBranchId || null)
     } catch (error: any) {
       toast.error(error.message || "حدث خطأ")
     }
@@ -180,6 +273,43 @@ export function DriversManager() {
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
+        {needsBranchSelector && (
+          <div className="flex flex-wrap items-center gap-3 rounded-lg border p-3">
+            {userIsAdmin && (
+              <>
+                <span className="text-sm text-muted-foreground">المؤسسة:</span>
+                <Select value={selectedOrganizationId} onValueChange={setSelectedOrganizationId}>
+                  <SelectTrigger className="w-[200px] text-right">
+                    <SelectValue placeholder="يرجى تحديد المؤسسة" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {organizations.map((org) => (
+                      <SelectItem key={org._id} value={org._id}>{org.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </>
+            )}
+            <span className="text-sm text-muted-foreground">{labels.branchLabel || "الفرع"}:</span>
+            <Select
+              value={selectedBranchId}
+              onValueChange={setSelectedBranchId}
+              disabled={userIsAdmin && !selectedOrganizationId}
+            >
+              <SelectTrigger className="w-[220px] text-right">
+                <SelectValue placeholder={`يرجى تحديد ${labels.branchLabel || "الفرع"}`} />
+              </SelectTrigger>
+              <SelectContent>
+                {branches.map((b) => (
+                  <SelectItem key={b._id} value={b._id}>{b.nameAr || b.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {!resolvedBranchId && (
+              <span className="text-sm text-muted-foreground">يرجى تحديد {labels.branchLabel || "الفرع"} لتحميل البيانات</span>
+            )}
+          </div>
+        )}
         <div className="grid gap-3 md:grid-cols-3">
           <Input
             placeholder={`بحث في ${labels.driverLabel}...`}
@@ -205,7 +335,7 @@ export function DriversManager() {
         </div>
 
         {loading ? (
-          <div className="text-sm text-muted-foreground">جاري التحميل...</div>
+          <Loading />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">

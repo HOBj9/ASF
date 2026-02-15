@@ -10,6 +10,7 @@ import { getRequest, postRequest, patchRequest, deleteRequest } from "@/lib/api/
 import { Key, Copy, RefreshCw, Trash2, Eye, EyeOff, AlertTriangle } from "lucide-react"
 import toast from "react-hot-toast"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Loading } from "@/components/ui/loading"
 
 interface ApiKeyManagerProps {
   onApiKeyChange?: (apiKey: string | null) => void
@@ -133,9 +134,7 @@ export function ApiKeyManager({ onApiKeyChange }: ApiKeyManagerProps) {
         </CardHeader>
         <CardContent className="space-y-6">
           {isLoading ? (
-            <div className="text-center py-8 text-muted-foreground">
-              جاري التحميل...
-            </div>
+            <Loading />
           ) : !apiKeyExists ? (
             <div className="space-y-4">
               <p className="text-sm text-muted-foreground">

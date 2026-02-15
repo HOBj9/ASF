@@ -12,6 +12,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch"
 import toast from "react-hot-toast"
 import { useLabels } from "@/hooks/use-labels"
+import { isAdmin } from "@/lib/permissions"
+import { Loading } from "@/components/ui/loading"
 import dynamic from "next/dynamic"
 
 const MapPicker = dynamic(
@@ -31,6 +33,8 @@ type Branch = {
   centerLng: number
   timezone: string
   atharKey?: string
+  fuelPricePerKmGasoline?: number | null
+  fuelPricePerKmDiesel?: number | null
   isActive: boolean
 }
 
@@ -67,6 +71,8 @@ const emptyBranch: Partial<Branch> = {
   centerLng: 0,
   timezone: "Asia/Damascus",
   atharKey: "",
+  fuelPricePerKmGasoline: undefined,
+  fuelPricePerKmDiesel: undefined,
   isActive: true,
 }
 
@@ -85,8 +91,10 @@ export function MunicipalitiesTable() {
   const [editing, setEditing] = useState<Branch | null>(null)
   const [form, setForm] = useState<Partial<Branch>>(emptyBranch)
   const [adminUser, setAdminUser] = useState<AdminUserForm>(emptyAdminUser)
+  const [selectedOrganizationId, setSelectedOrganizationId] = useState<string>("")
   const { labels } = useLabels()
 
+  const userIsAdmin = useMemo(() => isAdmin(session?.user?.role as any), [session?.user?.role])
   const isSuperAdmin = useMemo(() => {
     const role = session?.user?.role as any
     return role?.name === "super_admin"
@@ -98,36 +106,69 @@ export function MunicipalitiesTable() {
     return org?.labels?.branchLabel || labels.branchLabel || "الفرع"
   }, [form.organizationId, organizations, labels.branchLabel])
 
-  const load = async () => {
+  const loadOrganizations = async () => {
+    try {
+      const orgRes = await apiClient.get("/organizations").catch(() => ({ organizations: [] as Organization[] } as any))
+      const orgList = orgRes.organizations || orgRes.data?.organizations || []
+      setOrganizations(orgList)
+      return orgList
+    } catch {
+      return []
+    }
+  }
+
+  const loadBranches = async (organizationId?: string | null) => {
     setLoading(true)
     try {
-      const [branchesRes, orgRes] = await Promise.all([
-        apiClient.get("/branches"),
-        apiClient.get("/organizations").catch(() => ({ organizations: [] as Organization[] } as any)),
-      ])
-
-      const branchList = branchesRes.branches || branchesRes.data?.branches || []
-      const orgList = orgRes.organizations || orgRes.data?.organizations || []
-
-      setItems(branchList)
-      setOrganizations(orgList)
-
-      if (!editing && !form.organizationId && orgList.length === 1) {
-        setForm((prev) => ({ ...prev, organizationId: orgList[0]._id }))
+      if (userIsAdmin && !organizationId) {
+        setItems([])
+        setLoading(false)
+        return
       }
+      const url = organizationId ? `/branches?organizationId=${organizationId}` : "/branches"
+      const branchesRes = await apiClient.get(url)
+      const branchList = branchesRes.branches || branchesRes.data?.branches || []
+      setItems(branchList)
     } catch (error: any) {
       toast.error(error.message || `فشل تحميل ${labels.branchLabel}`)
+      setItems([])
     } finally {
       setLoading(false)
     }
   }
 
   useEffect(() => {
-    load()
-  }, [])
+    if (session === undefined) return
+    let cancelled = false
+    const run = async () => {
+      const orgList = await loadOrganizations()
+      if (cancelled) return
+      if (userIsAdmin) {
+        setItems([])
+        if (!selectedOrganizationId && orgList.length === 1) {
+          setSelectedOrganizationId(orgList[0]._id)
+        }
+      } else {
+        await loadBranches(null)
+      }
+    }
+    run()
+    return () => { cancelled = true }
+  }, [session?.user])
+
+  useEffect(() => {
+    if (!userIsAdmin) return
+    if (selectedOrganizationId) {
+      loadBranches(selectedOrganizationId)
+    } else {
+      setItems([])
+    }
+  }, [userIsAdmin, selectedOrganizationId])
 
   const openCreate = () => {
-    const defaultOrgId = organizations.length === 1 ? organizations[0]._id : ""
+    const defaultOrgId = userIsAdmin
+      ? selectedOrganizationId || (organizations.length === 1 ? organizations[0]._id : "")
+      : organizations.length === 1 ? organizations[0]._id : ""
     setEditing(null)
     setForm({ ...emptyBranch, organizationId: defaultOrgId })
     setAdminUser({ ...emptyAdminUser })
@@ -143,6 +184,8 @@ export function MunicipalitiesTable() {
       governorate: item.governorate || "",
       areaName: item.areaName || "",
       addressText: item.addressText || "",
+      fuelPricePerKmGasoline: item.fuelPricePerKmGasoline ?? undefined,
+      fuelPricePerKmDiesel: item.fuelPricePerKmDiesel ?? undefined,
     })
     setAdminUser({ ...emptyAdminUser })
     setOpen(true)
@@ -191,7 +234,8 @@ export function MunicipalitiesTable() {
         toast.success(`تم إنشاء ${labels.branchLabel}`)
       }
       setOpen(false)
-      await load()
+      if (userIsAdmin) await loadBranches(selectedOrganizationId)
+      else await loadBranches(null)
     } catch (error: any) {
       toast.error(error.message || "حدث خطأ")
     }
@@ -203,6 +247,7 @@ export function MunicipalitiesTable() {
       await apiClient.delete(`/branches/${item._id}`)
       setItems((prev) => prev.filter((i) => i._id !== item._id))
       toast.success(`تم حذف ${labels.branchLabel}`)
+      if (userIsAdmin) await loadBranches(selectedOrganizationId)
     } catch (error: any) {
       toast.error(error.message || "حدث خطأ")
     }
@@ -217,8 +262,29 @@ export function MunicipalitiesTable() {
         </div>
       </CardHeader>
       <CardContent>
+        {userIsAdmin && (
+          <div className="mb-4 flex flex-wrap items-center gap-2">
+            <span className="text-sm text-muted-foreground">المؤسسة:</span>
+            <Select
+              value={selectedOrganizationId || ""}
+              onValueChange={(value) => setSelectedOrganizationId(value)}
+            >
+              <SelectTrigger className="w-[220px] text-right">
+                <SelectValue placeholder="يرجى تحديد المؤسسة" />
+              </SelectTrigger>
+              <SelectContent>
+                {organizations.map((org) => (
+                  <SelectItem key={org._id} value={org._id}>{org.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {!selectedOrganizationId && (
+              <span className="text-sm text-muted-foreground">يرجى تحديد المؤسسة لتحميل {labels.branchLabel}</span>
+            )}
+          </div>
+        )}
         {loading ? (
-          <div className="text-sm text-muted-foreground">جاري التحميل...</div>
+          <Loading />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -332,6 +398,34 @@ export function MunicipalitiesTable() {
             <div>
               <Label>Athar Key</Label>
               <Input value={form.atharKey || ""} onChange={(e) => setForm({ ...form, atharKey: e.target.value })} />
+            </div>
+
+            <div className="pt-2 border-t">
+              <div className="text-sm text-muted-foreground mb-2">أسعار الوقود (سعر الكيلو متر - للأمثال)</div>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label>سعر الكيلو متر - بنزين</Label>
+                <Input
+                  type="number"
+                  step="any"
+                  min="0"
+                  placeholder="اختياري"
+                  value={form.fuelPricePerKmGasoline ?? ""}
+                  onChange={(e) => setForm({ ...form, fuelPricePerKmGasoline: e.target.value === "" ? undefined : Number(e.target.value) })}
+                />
+              </div>
+              <div>
+                <Label>سعر الكيلو متر - مازوت</Label>
+                <Input
+                  type="number"
+                  step="any"
+                  min="0"
+                  placeholder="اختياري"
+                  value={form.fuelPricePerKmDiesel ?? ""}
+                  onChange={(e) => setForm({ ...form, fuelPricePerKmDiesel: e.target.value === "" ? undefined : Number(e.target.value) })}
+                />
+              </div>
             </div>
 
             {!editing && (

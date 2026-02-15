@@ -1,7 +1,9 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
+import { useSession } from "next-auth/react"
 import { apiClient } from "@/lib/api/client"
+import { isAdmin, isOrganizationAdmin } from "@/lib/permissions"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -13,6 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import toast from "react-hot-toast"
 import { useLabels } from "@/hooks/use-labels"
 import { ExportExcelDialog, type ExportColumn } from "@/components/municipality/export-excel-dialog"
+import { Loading } from "@/components/ui/loading"
 import dynamic from "next/dynamic"
 
 const MapPicker = dynamic(
@@ -68,10 +71,20 @@ const pointTypeLabels: Record<string, string> = {
   other: "أخرى",
 }
 
+type Organization = { _id: string; name: string }
+type Branch = { _id: string; name: string; nameAr?: string; organizationId: string }
+
 export function PointsManager() {
   const PAGE_SIZE = 10
+  const { data: session } = useSession()
+  const { labels } = useLabels()
 
   const [activeTab, setActiveTab] = useState("local")
+
+  const [organizations, setOrganizations] = useState<Organization[]>([])
+  const [branches, setBranches] = useState<Branch[]>([])
+  const [selectedOrganizationId, setSelectedOrganizationId] = useState("")
+  const [selectedBranchId, setSelectedBranchId] = useState("")
 
   const [localPoints, setLocalPoints] = useState<Point[]>([])
   const [markers, setMarkers] = useState<AtharMarker[]>([])
@@ -99,16 +112,66 @@ export function PointsManager() {
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState<Point | null>(null)
   const [form, setForm] = useState<Partial<Point>>(emptyForm)
+  const [importingMarkers, setImportingMarkers] = useState(false)
+  const [importingExcel, setImportingExcel] = useState(false)
+  const [creatingZoneId, setCreatingZoneId] = useState<string | null>(null)
+  const excelFileInputRef = useRef<HTMLInputElement | null>(null)
 
-  const { labels } = useLabels()
+  const userIsAdmin = useMemo(() => isAdmin(session?.user?.role as any), [session?.user?.role])
+  const userIsOrgAdmin = useMemo(() => isOrganizationAdmin(session?.user?.role as any), [session?.user?.role])
+  const sessionBranchId = (session?.user as any)?.branchId ?? null
+  const needsBranchSelector = userIsAdmin || (userIsOrgAdmin && !sessionBranchId)
+  const resolvedBranchId = selectedBranchId || sessionBranchId
 
-  const loadLocalPoints = async () => {
+  const loadOrganizations = async () => {
+    try {
+      const res = await apiClient.get("/organizations").catch(() => ({ organizations: [] } as any))
+      const list = res.organizations || res.data?.organizations || []
+      setOrganizations(list)
+      return list
+    } catch {
+      return []
+    }
+  }
+
+  const loadBranches = async (organizationId: string | null) => {
+    if (!organizationId) {
+      setBranches([])
+      return
+    }
+    try {
+      const res = await apiClient.get(`/branches?organizationId=${organizationId}`)
+      const list = res.branches || res.data?.branches || []
+      setBranches(list)
+    } catch {
+      setBranches([])
+    }
+  }
+
+  const loadBranchesForOrgUser = async () => {
+    try {
+      const res = await apiClient.get("/branches")
+      const list = res.branches || res.data?.branches || []
+      setBranches(list)
+      if (list.length === 1 && !selectedBranchId) setSelectedBranchId(list[0]._id)
+    } catch {
+      setBranches([])
+    }
+  }
+
+  const loadLocalPoints = async (branchId: string | null) => {
+    if (needsBranchSelector && !branchId) {
+      setLocalPoints([])
+      return
+    }
     setLoadingLocal(true)
     try {
-      const res: any = await apiClient.get("/points")
+      const url = branchId ? `/points?branchId=${branchId}` : "/points"
+      const res: any = await apiClient.get(url)
       setLocalPoints(res.points || res.data?.points || [])
     } catch (error: any) {
       toast.error(error.message || `فشل تحميل ${labels.pointLabel}`)
+      setLocalPoints([])
     } finally {
       setLoadingLocal(false)
     }
@@ -141,8 +204,34 @@ export function PointsManager() {
   }
 
   useEffect(() => {
-    loadLocalPoints()
-  }, [])
+    if (session === undefined) return
+    if (userIsAdmin) {
+      loadOrganizations().then((list) => {
+        if (list.length === 1 && !selectedOrganizationId) setSelectedOrganizationId(list[0]._id)
+      })
+    } else if (userIsOrgAdmin && !sessionBranchId) {
+      loadBranchesForOrgUser()
+    } else {
+      loadLocalPoints(null)
+    }
+  }, [session?.user])
+
+  useEffect(() => {
+    if (userIsAdmin && selectedOrganizationId) {
+      loadBranches(selectedOrganizationId)
+      setSelectedBranchId("")
+    }
+  }, [userIsAdmin, selectedOrganizationId])
+
+  useEffect(() => {
+    if (!needsBranchSelector) return
+    if (resolvedBranchId) loadLocalPoints(resolvedBranchId)
+    else setLocalPoints([])
+  }, [needsBranchSelector, resolvedBranchId])
+
+  useEffect(() => {
+    if (!needsBranchSelector && session?.user) loadLocalPoints(null)
+  }, [needsBranchSelector, session?.user])
 
   const onTabChange = (value: string) => {
     setActiveTab(value)
@@ -254,8 +343,10 @@ export function PointsManager() {
       return
     }
 
+    const payload: Record<string, unknown> = { ...form, lat, lng }
+      if (resolvedBranchId) payload.branchId = resolvedBranchId
+      if (userIsAdmin && selectedOrganizationId) payload.organizationId = selectedOrganizationId
     try {
-      const payload = { ...form, lat, lng }
       if (editing) {
         await apiClient.patch(`/points/${editing._id}`, payload)
         toast.success(`تم تحديث ${labels.pointLabel}`)
@@ -264,7 +355,7 @@ export function PointsManager() {
         toast.success(`تم إضافة ${labels.pointLabel}`)
       }
       setOpen(false)
-      await loadLocalPoints()
+      await loadLocalPoints(resolvedBranchId || null)
     } catch (error: any) {
       toast.error(error.message || "حدث خطأ")
     }
@@ -276,8 +367,70 @@ export function PointsManager() {
       await apiClient.delete(`/points/${item._id}`)
       setLocalPoints((prev) => prev.filter((i) => i._id !== item._id))
       toast.success(`تم حذف ${labels.pointLabel}`)
+      await loadLocalPoints(resolvedBranchId || null)
     } catch (error: any) {
       toast.error(error.message || "حدث خطأ")
+    }
+  }
+
+  const importMarkersToSystem = async () => {
+    if (!resolvedBranchId || filteredMarkers.length === 0) return
+    setImportingMarkers(true)
+    try {
+      const payload = { branchId: resolvedBranchId, markers: filteredMarkers }
+      const res: any = await apiClient.post("/points/import-from-athar", payload)
+      const imported = res.imported ?? 0
+      const skipped = res.skipped ?? 0
+      toast.success(`تم استيراد ${imported} نقطة، وتخطي ${skipped} موجودة مسبقاً`)
+      await loadLocalPoints(resolvedBranchId)
+    } catch (error: any) {
+      toast.error(error.message || "فشل استيراد النقاط")
+    } finally {
+      setImportingMarkers(false)
+    }
+  }
+
+  const handleExcelImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ""
+    if (!file || !resolvedBranchId) return
+    setImportingExcel(true)
+    try {
+      const formData = new FormData()
+      formData.append("file", file)
+      formData.append("branchId", resolvedBranchId)
+      const res: any = await apiClient.postFormData("/points/import-from-excel", formData)
+      const data = res?.data ?? res
+      const imported = data.imported ?? 0
+      const skipped = data.skipped ?? 0
+      const errs = data.errors
+      toast.success(`تم استيراد ${imported} نقطة، وتخطي ${skipped}`)
+      if (Array.isArray(errs) && errs.length > 0) {
+        errs.slice(0, 3).forEach((msg: string) => toast.error(msg))
+      }
+      await loadLocalPoints(resolvedBranchId)
+    } catch (error: any) {
+      toast.error(error?.message || "فشل استيراد الملف")
+    } finally {
+      setImportingExcel(false)
+    }
+  }
+
+  const createAtharZone = async (item: Point) => {
+    if (!resolvedBranchId) return
+    setCreatingZoneId(item._id)
+    try {
+      await apiClient.post(`/points/${item._id}/create-athar-zone`, { branchId: resolvedBranchId })
+      toast.success("تم إنشاء المنطقة في أثر وربطها بالنقطة")
+      await loadLocalPoints(resolvedBranchId)
+      if (editing?._id === item._id) {
+        setEditing(null)
+        setOpen(false)
+      }
+    } catch (error: any) {
+      toast.error(error.message || "فشل إنشاء المنطقة في أثر")
+    } finally {
+      setCreatingZoneId(null)
     }
   }
 
@@ -301,7 +454,29 @@ export function PointsManager() {
         <div className="flex items-center justify-between flex-row-reverse">
           <CardTitle>{labels.pointLabel}</CardTitle>
           {activeTab === "local" && (
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                ref={excelFileInputRef}
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                className="hidden"
+                onChange={handleExcelImport}
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => excelFileInputRef.current?.click()}
+                disabled={!resolvedBranchId || importingExcel}
+              >
+                {importingExcel ? "جاري الاستيراد..." : "استيراد من Excel"}
+              </Button>
+              <a
+                href="/samples/points-import-sample.csv"
+                download="points-import-sample.csv"
+                className="text-sm text-primary underline"
+              >
+                تحميل ملف مثال
+              </a>
               <ExportExcelDialog
                 title={`Export ${labels.pointLabel} to Excel`}
                 rows={filteredLocalPoints}
@@ -314,6 +489,43 @@ export function PointsManager() {
         </div>
       </CardHeader>
       <CardContent>
+        {needsBranchSelector && (
+          <div className="mb-4 flex flex-wrap items-center gap-3 rounded-lg border p-3">
+            {userIsAdmin && (
+              <>
+                <span className="text-sm text-muted-foreground">المؤسسة:</span>
+                <Select value={selectedOrganizationId} onValueChange={setSelectedOrganizationId}>
+                  <SelectTrigger className="w-[200px] text-right">
+                    <SelectValue placeholder="يرجى تحديد المؤسسة" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {organizations.map((org) => (
+                      <SelectItem key={org._id} value={org._id}>{org.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </>
+            )}
+            <span className="text-sm text-muted-foreground">{labels.branchLabel || "الفرع"}:</span>
+            <Select
+              value={selectedBranchId}
+              onValueChange={setSelectedBranchId}
+              disabled={userIsAdmin && !selectedOrganizationId}
+            >
+              <SelectTrigger className="w-[220px] text-right">
+                <SelectValue placeholder={`يرجى تحديد ${labels.branchLabel || "الفرع"}`} />
+              </SelectTrigger>
+              <SelectContent>
+                {branches.map((b) => (
+                  <SelectItem key={b._id} value={b._id}>{b.nameAr || b.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {!resolvedBranchId && (
+              <span className="text-sm text-muted-foreground">يرجى تحديد {labels.branchLabel || "الفرع"} لتحميل البيانات</span>
+            )}
+          </div>
+        )}
         <Tabs value={activeTab} onValueChange={onTabChange}>
           <TabsList className="mb-4">
             <TabsTrigger value="markers">نقاط أثر (Markers)</TabsTrigger>
@@ -349,7 +561,7 @@ export function PointsManager() {
             </div>
 
             {loadingLocal ? (
-              <div className="text-sm text-muted-foreground">جاري تحميل نقاط النظام...</div>
+              <Loading text="جاري تحميل نقاط النظام..." />
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
@@ -374,6 +586,16 @@ export function PointsManager() {
                         <td className="p-2">{item.zoneId || "-"}</td>
                         <td className="p-2">{item.isActive ? "مفعّل" : "معطّل"}</td>
                         <td className="p-2 space-x-2 space-x-reverse">
+                          {!item.zoneId && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => createAtharZone(item)}
+                              disabled={creatingZoneId === item._id}
+                            >
+                              {creatingZoneId === item._id ? "جاري..." : "إنشاء منطقة في أثر"}
+                            </Button>
+                          )}
                           <Button variant="outline" onClick={() => openEdit(item)}>تعديل</Button>
                           <Button variant="destructive" onClick={() => remove(item)}>حذف</Button>
                         </td>
@@ -404,14 +626,23 @@ export function PointsManager() {
           </TabsContent>
 
           <TabsContent value="markers" className="space-y-3">
-            <Input
-              placeholder="بحث في نقاط أثر بالاسم أو المعرف..."
-              value={markersSearch}
-              onChange={(e) => setMarkersSearch(e.target.value)}
-            />
+            <div className="flex flex-wrap items-center gap-3">
+              <Input
+                className="flex-1 min-w-[200px]"
+                placeholder="بحث في نقاط أثر بالاسم أو المعرف..."
+                value={markersSearch}
+                onChange={(e) => setMarkersSearch(e.target.value)}
+              />
+              <Button
+                onClick={importMarkersToSystem}
+                disabled={!resolvedBranchId || filteredMarkers.length === 0 || importingMarkers}
+              >
+                {importingMarkers ? "جاري الاستيراد..." : "تحويل إلى نقاط النظام"}
+              </Button>
+            </div>
 
             {loadingMarkers ? (
-              <div className="text-sm text-muted-foreground">جاري تحميل نقاط أثر...</div>
+              <Loading text="جاري تحميل نقاط أثر..." />
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
@@ -474,7 +705,7 @@ export function PointsManager() {
             </div>
 
             {loadingZones ? (
-              <div className="text-sm text-muted-foreground">جاري تحميل المناطق من أثر...</div>
+              <Loading text="جاري تحميل المناطق من أثر..." />
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
@@ -591,6 +822,18 @@ export function PointsManager() {
               <span>مفعّل</span>
               <Switch checked={!!form.isActive} onCheckedChange={(checked) => setForm({ ...form, isActive: checked })} />
             </div>
+            {editing && !editing.zoneId && (
+              <div className="border-t pt-3">
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => createAtharZone(editing)}
+                  disabled={!!creatingZoneId}
+                >
+                  {creatingZoneId === editing._id ? "جاري إنشاء المنطقة..." : "إنشاء منطقة في أثر لهذه النقطة"}
+                </Button>
+              </div>
+            )}
           </div>
           <DialogFooter className="flex-row-reverse gap-2">
             <Button variant="outline" onClick={() => setOpen(false)}>إلغاء</Button>

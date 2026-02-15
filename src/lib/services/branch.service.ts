@@ -18,6 +18,8 @@ export interface CreateBranchData {
   centerLng: number;
   timezone?: string;
   atharKey?: string;
+  fuelPricePerKmGasoline?: number;
+  fuelPricePerKmDiesel?: number;
   isActive?: boolean;
 }
 
@@ -32,6 +34,8 @@ export interface UpdateBranchData {
   centerLng?: number;
   timezone?: string;
   atharKey?: string;
+  fuelPricePerKmGasoline?: number;
+  fuelPricePerKmDiesel?: number;
   isActive?: boolean;
 }
 
@@ -50,6 +54,8 @@ export class BranchService {
       centerLng: data.centerLng,
       timezone: data.timezone || 'Asia/Damascus',
       atharKey: data.atharKey || null,
+      fuelPricePerKmGasoline: data.fuelPricePerKmGasoline ?? null,
+      fuelPricePerKmDiesel: data.fuelPricePerKmDiesel ?? null,
       isActive: data.isActive ?? true,
     });
 
@@ -75,6 +81,8 @@ export class BranchService {
     if (data.areaName !== undefined && data.areaName === '') updateData.areaName = null;
     if (data.addressText !== undefined && data.addressText === '') updateData.addressText = null;
     if (data.atharKey !== undefined && data.atharKey === '') updateData.atharKey = null;
+    if (data.fuelPricePerKmGasoline !== undefined && (data.fuelPricePerKmGasoline === '' || data.fuelPricePerKmGasoline == null)) updateData.fuelPricePerKmGasoline = null;
+    if (data.fuelPricePerKmDiesel !== undefined && (data.fuelPricePerKmDiesel === '' || data.fuelPricePerKmDiesel == null)) updateData.fuelPricePerKmDiesel = null;
 
     return Branch.findByIdAndUpdate(id, updateData, {
       new: true,

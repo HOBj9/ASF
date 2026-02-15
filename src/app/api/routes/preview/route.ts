@@ -45,6 +45,7 @@ export async function POST(request: Request) {
 
     let geometry = fallbackGeometry;
     let source: 'osrm' | 'fallback' = 'fallback';
+    let distanceKm: number | null = null;
 
     const baseUrl = process.env.OSRM_BASE_URL || 'https://router.project-osrm.org';
     const coordString = coords.map((c) => `${c[0]},${c[1]}`).join(';');
@@ -54,19 +55,41 @@ export async function POST(request: Request) {
       const response = await fetch(url);
       if (response.ok) {
         const data = await response.json();
-        const osrmGeometry = data?.routes?.[0]?.geometry;
+        const route = data?.routes?.[0];
+        const osrmGeometry = route?.geometry;
         if (osrmGeometry?.type === 'LineString' && Array.isArray(osrmGeometry.coordinates)) {
           geometry = osrmGeometry;
           source = 'osrm';
+        }
+        if (route?.distance != null && Number.isFinite(route.distance)) {
+          distanceKm = Number(route.distance) / 1000;
         }
       }
     } catch {
       // fall back to straight line preview
     }
 
+    if (distanceKm == null && coords.length >= 2) {
+      let d = 0;
+      for (let i = 0; i < coords.length - 1; i++) {
+        const [lng1, lat1] = coords[i];
+        const [lng2, lat2] = coords[i + 1];
+        const R = 6371e3;
+        const φ1 = (lat1 * Math.PI) / 180;
+        const φ2 = (lat2 * Math.PI) / 180;
+        const Δφ = ((lat2 - lat1) * Math.PI) / 180;
+        const Δλ = ((lng2 - lng1) * Math.PI) / 180;
+        const a = Math.sin(Δφ / 2) ** 2 + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) ** 2;
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        d += R * c;
+      }
+      distanceKm = d / 1000;
+    }
+
     return NextResponse.json({
       geometry,
       source,
+      distanceKm: distanceKm ?? undefined,
       points: orderedPoints.map((p: any) => ({
         _id: String(p._id),
         name: p.name,

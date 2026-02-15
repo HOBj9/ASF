@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { isAdmin, isOrganizationAdmin } from "@/lib/permissions"
+import { Loading } from "@/components/ui/loading"
 
 type Point = {
   _id: string
@@ -274,7 +275,7 @@ export function MaterialTransfersManager() {
         </div>
 
         {loading ? (
-          <div className="text-sm text-muted-foreground">جاري التحميل...</div>
+          <Loading />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">

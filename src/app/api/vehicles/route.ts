@@ -31,7 +31,7 @@ export async function POST(request: Request) {
     const body = await request.json();
     const branchId = resolveBranchId(session, body.branchId);
 
-    const { name, plateNumber, imei, atharObjectId, driverId, routeId, isActive } = body;
+    const { name, plateNumber, imei, fuelType, fuelPricePerKm, atharObjectId, driverId, routeId, isActive } = body;
     if (!name || !imei) {
       return NextResponse.json(
         { error: 'الاسم ورقم IMEI مطلوبان' },
@@ -44,6 +44,8 @@ export async function POST(request: Request) {
       name,
       plateNumber,
       imei,
+      fuelType: fuelType === 'diesel' ? 'diesel' : 'gasoline',
+      fuelPricePerKm: fuelPricePerKm != null && fuelPricePerKm !== '' ? Number(fuelPricePerKm) : undefined,
       atharObjectId,
       driverId,
       routeId,

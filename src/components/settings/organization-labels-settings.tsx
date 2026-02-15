@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import toast from "react-hot-toast"
+import { Loading } from "@/components/ui/loading"
 
 type OrganizationLabels = {
   branchLabel: string
@@ -95,7 +96,7 @@ export function OrganizationLabelsSettings() {
       </CardHeader>
       <CardContent className="space-y-4">
         {loading ? (
-          <p className="text-sm text-muted-foreground">جاري تحميل التسميات...</p>
+          <Loading text="جاري تحميل التسميات..." />
         ) : (
           <>
             <div>

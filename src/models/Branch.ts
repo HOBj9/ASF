@@ -12,6 +12,8 @@ export interface IBranch extends Document {
   centerLng: number;
   timezone: string;
   atharKey?: string;
+  fuelPricePerKmGasoline?: number;
+  fuelPricePerKmDiesel?: number;
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -73,6 +75,14 @@ const BranchSchema: Schema = new Schema(
     },
     atharKey: {
       type: String,
+      default: null,
+    },
+    fuelPricePerKmGasoline: {
+      type: Number,
+      default: null,
+    },
+    fuelPricePerKmDiesel: {
+      type: Number,
       default: null,
     },
     isActive: {

@@ -29,6 +29,7 @@ export interface UpdatePointData {
   lat?: number;
   lng?: number;
   radiusMeters?: number;
+  zoneId?: string;
   addressText?: string;
   isActive?: boolean;
 }
@@ -89,6 +90,7 @@ export class PointService {
     if (data.name !== undefined) updateData.name = data.name.trim();
     if (data.nameAr !== undefined && data.nameAr === '') updateData.nameAr = null;
     if (data.nameEn !== undefined && data.nameEn === '') updateData.nameEn = null;
+    if (data.zoneId !== undefined) updateData.zoneId = data.zoneId ?? null;
     if (data.addressText !== undefined && data.addressText === '') updateData.addressText = null;
 
     const updated = await Point.findByIdAndUpdate(point._id, updateData, {
@@ -105,6 +107,56 @@ export class PointService {
     await connectDB();
     const deleted = await Point.findOneAndDelete({ _id: id, branchId }).exec();
     return !!deleted;
+  }
+
+  /**
+   * Import Athar markers as local points without calling Athar API.
+   * Deduplicates by branchId + zoneId (marker.id). Skips markers that already have a local point.
+   */
+  async importFromAtharMarkers(
+    branchId: string,
+    markers: Array<{ id: string; lat: number; lng: number; name?: string }>
+  ): Promise<{ imported: number; skipped: number }> {
+    await connectDB();
+
+    const branch = await Branch.findById(branchId).lean();
+    if (!branch) {
+      throw new Error('الفرع غير موجود');
+    }
+
+    let imported = 0;
+    let skipped = 0;
+
+    for (const m of markers) {
+      const lat = Number(m.lat);
+      const lng = Number(m.lng);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+      const zoneId = String(m.id ?? '').trim();
+      if (!zoneId) continue;
+
+      const existing = await Point.findOne({ branchId, zoneId }).lean().exec();
+      if (existing) {
+        skipped++;
+        continue;
+      }
+
+      const name = (m.name ?? '').trim() || `نقطة أثر ${zoneId}`;
+      await Point.create({
+        branchId,
+        zoneId,
+        name,
+        nameAr: name,
+        nameEn: name,
+        type: 'container',
+        lat,
+        lng,
+        radiusMeters: 500,
+        isActive: true,
+      });
+      imported++;
+    }
+
+    return { imported, skipped };
   }
 
   /**

@@ -1,9 +1,11 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import { useSession } from "next-auth/react"
 import toast from "react-hot-toast"
 import { apiClient } from "@/lib/api/client"
 import { useLabels } from "@/hooks/use-labels"
+import { isAdmin, isOrganizationAdmin } from "@/lib/permissions"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -12,24 +14,49 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { ExportExcelDialog, type ExportColumn } from "@/components/municipality/export-excel-dialog"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { RoutePreviewMap } from "@/components/municipality/route-preview-map"
+import { Loading } from "@/components/ui/loading"
+
+type AtharObject = {
+  id: string
+  imei: string
+  name: string
+  plateNumber: string | null
+  active: boolean
+}
 
 type Vehicle = {
   _id: string
   name: string
   plateNumber?: string
   imei: string
+  fuelType?: "gasoline" | "diesel"
+  fuelPricePerKm?: number
   driverId?: string
   routeId?: string
+  branchId?: string
   isActive: boolean
 }
 
 type Driver = { _id: string; name: string }
 type RouteItem = { _id: string; name: string }
+type Organization = { _id: string; name: string }
+type Branch = {
+  _id: string
+  name: string
+  nameAr?: string
+  organizationId: string
+  fuelPricePerKmGasoline?: number
+  fuelPricePerKmDiesel?: number
+}
 
 const emptyForm: Partial<Vehicle> = {
   name: "",
   plateNumber: "",
   imei: "",
+  fuelType: "gasoline",
+  fuelPricePerKm: undefined,
   driverId: "",
   routeId: "",
   isActive: true,
@@ -37,11 +64,17 @@ const emptyForm: Partial<Vehicle> = {
 
 export function VehiclesManager() {
   const PAGE_SIZE = 10
+  const { data: session } = useSession()
   const { labels } = useLabels()
 
   const [items, setItems] = useState<Vehicle[]>([])
   const [drivers, setDrivers] = useState<Driver[]>([])
   const [routes, setRoutes] = useState<RouteItem[]>([])
+
+  const [organizations, setOrganizations] = useState<Organization[]>([])
+  const [branches, setBranches] = useState<Branch[]>([])
+  const [selectedOrganizationId, setSelectedOrganizationId] = useState("")
+  const [selectedBranchId, setSelectedBranchId] = useState("")
 
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
@@ -56,30 +89,143 @@ export function VehiclesManager() {
   const [assignOpen, setAssignOpen] = useState(false)
   const [assigning, setAssigning] = useState<Vehicle | null>(null)
   const [assignRouteId, setAssignRouteId] = useState("")
+  const [assignPreviewData, setAssignPreviewData] = useState<{ points: Array<{ _id: string; name?: string; nameAr?: string; lat: number; lng: number }>; geometry: { type: string; coordinates: number[][] }; distanceKm?: number } | null>(null)
+  const [assignPreviewLoading, setAssignPreviewLoading] = useState(false)
 
   const [loading, setLoading] = useState(false)
+  const [activeTab, setActiveTab] = useState("local")
+  const [atharObjects, setAtharObjects] = useState<AtharObject[]>([])
+  const [loadingAthar, setLoadingAthar] = useState(false)
+  const [atharLoaded, setAtharLoaded] = useState(false)
+  const [atharSearch, setAtharSearch] = useState("")
+  const [atharPage, setAtharPage] = useState(1)
+  const [importingAthar, setImportingAthar] = useState(false)
 
-  const load = async () => {
+  const userIsAdmin = useMemo(() => isAdmin(session?.user?.role as any), [session?.user?.role])
+  const userIsOrgAdmin = useMemo(() => isOrganizationAdmin(session?.user?.role as any), [session?.user?.role])
+  const sessionBranchId = (session?.user as any)?.branchId ?? null
+  const needsBranchSelector = userIsAdmin || (userIsOrgAdmin && !sessionBranchId)
+  const resolvedBranchId = selectedBranchId || sessionBranchId
+
+  const loadOrganizations = async () => {
+    try {
+      const res = await apiClient.get("/organizations").catch(() => ({ organizations: [] } as any))
+      const list = res.organizations || res.data?.organizations || []
+      setOrganizations(list)
+      return list
+    } catch {
+      return []
+    }
+  }
+
+  const loadBranches = async (organizationId: string | null) => {
+    if (!organizationId) {
+      setBranches([])
+      return
+    }
+    try {
+      const res = await apiClient.get(`/branches?organizationId=${organizationId}`)
+      const list = res.branches || res.data?.branches || []
+      setBranches(list)
+    } catch {
+      setBranches([])
+    }
+  }
+
+  const loadBranchesForOrgUser = async () => {
+    try {
+      const res = await apiClient.get("/branches")
+      const list = res.branches || res.data?.branches || []
+      setBranches(list)
+      if (list.length === 1 && !selectedBranchId) setSelectedBranchId(list[0]._id)
+    } catch {
+      setBranches([])
+    }
+  }
+
+  const load = async (branchId: string | null) => {
+    if (needsBranchSelector && !branchId) {
+      setItems([])
+      setDrivers([])
+      setRoutes([])
+      return
+    }
     setLoading(true)
     try {
+      const suffix = branchId ? `?branchId=${branchId}` : ""
       const [vehiclesRes, driversRes, routesRes] = await Promise.all([
-        apiClient.get("/vehicles"),
-        apiClient.get("/drivers"),
-        apiClient.get("/routes"),
+        apiClient.get(`/vehicles${suffix}`),
+        apiClient.get(`/drivers${suffix}`),
+        apiClient.get(`/routes${suffix}`),
       ])
       setItems(vehiclesRes.vehicles || vehiclesRes.data?.vehicles || [])
       setDrivers(driversRes.drivers || driversRes.data?.drivers || [])
       setRoutes(routesRes.routes || routesRes.data?.routes || [])
     } catch (error: any) {
       toast.error(error.message || `فشل تحميل ${labels.vehicleLabel}`)
+      setItems([])
+      setDrivers([])
+      setRoutes([])
     } finally {
       setLoading(false)
     }
   }
 
   useEffect(() => {
-    load()
-  }, [])
+    if (session === undefined) return
+    if (userIsAdmin) {
+      loadOrganizations().then((list) => {
+        if (list.length === 1 && !selectedOrganizationId) setSelectedOrganizationId(list[0]._id)
+      })
+    } else if (userIsOrgAdmin && !sessionBranchId) {
+      loadBranchesForOrgUser()
+    } else {
+      load(null)
+    }
+  }, [session?.user])
+
+  useEffect(() => {
+    if (userIsAdmin && selectedOrganizationId) {
+      loadBranches(selectedOrganizationId)
+      setSelectedBranchId("")
+    }
+  }, [userIsAdmin, selectedOrganizationId])
+
+  useEffect(() => {
+    if (!needsBranchSelector) return
+    if (resolvedBranchId) load(resolvedBranchId)
+    else {
+      setItems([])
+      setDrivers([])
+      setRoutes([])
+    }
+  }, [needsBranchSelector, resolvedBranchId])
+
+  useEffect(() => {
+    if (!needsBranchSelector && session?.user) load(null)
+  }, [needsBranchSelector, session?.user])
+
+  const loadAtharObjects = async () => {
+    if (!resolvedBranchId) return
+    setLoadingAthar(true)
+    try {
+      const res: any = await apiClient.get(`/athar/objects?branchId=${resolvedBranchId}`)
+      setAtharObjects(res.objects || res.data?.objects || [])
+      setAtharLoaded(true)
+    } catch (error: any) {
+      toast.error(error.message || "فشل تحميل سيارات أثر")
+      setAtharObjects([])
+    } finally {
+      setLoadingAthar(false)
+    }
+  }
+
+  const onTabChange = (value: string) => {
+    setActiveTab(value)
+    if (value === "athar" && !atharLoaded && !loadingAthar && resolvedBranchId) {
+      loadAtharObjects()
+    }
+  }
 
   const filteredItems = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -110,6 +256,49 @@ export function VehiclesManager() {
     return filteredItems.slice(start, start + PAGE_SIZE)
   }, [filteredItems, page])
 
+  const filteredAtharObjects = useMemo(() => {
+    const q = atharSearch.trim().toLowerCase()
+    if (!q) return atharObjects
+    return atharObjects.filter(
+      (item) =>
+        `${item.name || ""} ${item.id} ${item.imei || ""} ${item.plateNumber || ""}`.toLowerCase().includes(q)
+    )
+  }, [atharObjects, atharSearch])
+  const totalAtharPages = Math.max(1, Math.ceil(filteredAtharObjects.length / PAGE_SIZE))
+  const paginatedAtharObjects = useMemo(() => {
+    const start = (atharPage - 1) * PAGE_SIZE
+    return filteredAtharObjects.slice(start, start + PAGE_SIZE)
+  }, [filteredAtharObjects, atharPage])
+
+  useEffect(() => {
+    setAtharPage(1)
+  }, [atharSearch])
+  useEffect(() => {
+    if (atharPage > totalAtharPages) setAtharPage(totalAtharPages)
+  }, [atharPage, totalAtharPages])
+
+  const importAtharToSystem = async () => {
+    if (!resolvedBranchId || filteredAtharObjects.length === 0) return
+    setImportingAthar(true)
+    try {
+      const objects = filteredAtharObjects.map((o) => ({
+        id: o.id,
+        imei: o.imei,
+        name: o.name || undefined,
+        plateNumber: o.plateNumber ?? undefined,
+      }))
+      const res: any = await apiClient.post("/vehicles/import-from-athar", { branchId: resolvedBranchId, objects })
+      const imported = res.imported ?? 0
+      const skipped = res.skipped ?? 0
+      toast.success(`تم استيراد ${imported}، تخطي ${skipped} موجودة مسبقاً`)
+      await load(resolvedBranchId)
+    } catch (error: any) {
+      toast.error(error.message || "فشل استيراد المركبات")
+    } finally {
+      setImportingAthar(false)
+    }
+  }
+
   useEffect(() => {
     setPage(1)
   }, [search, statusFilter, driverFilter, routeFilter])
@@ -129,6 +318,8 @@ export function VehiclesManager() {
     setForm({
       ...item,
       plateNumber: item.plateNumber || "",
+      fuelType: item.fuelType || "gasoline",
+      fuelPricePerKm: item.fuelPricePerKm,
       driverId: item.driverId || "",
       routeId: item.routeId || "",
     })
@@ -136,16 +327,20 @@ export function VehiclesManager() {
   }
 
   const submit = async () => {
-    const payload: Partial<Vehicle> = {
+    const payload: Partial<Vehicle> & { branchId?: string } = {
       ...form,
+      fuelType: form.fuelType === "diesel" ? "diesel" : "gasoline",
       driverId: form.driverId === "none" ? "" : form.driverId,
       routeId: form.routeId === "none" ? "" : form.routeId,
+      fuelPricePerKm: form.fuelPricePerKm != null && form.fuelPricePerKm !== "" ? Number(form.fuelPricePerKm) : null,
     }
 
     if (!payload.name || !payload.imei) {
       toast.error("الاسم ورقم IMEI مطلوبان")
       return
     }
+
+    if (resolvedBranchId) payload.branchId = resolvedBranchId
 
     try {
       if (editing) {
@@ -156,7 +351,7 @@ export function VehiclesManager() {
         toast.success(`تم إضافة ${labels.vehicleLabel}`)
       }
       setOpen(false)
-      await load()
+      await load(resolvedBranchId || null)
     } catch (error: any) {
       toast.error(error.message || "حدث خطأ")
     }
@@ -165,8 +360,42 @@ export function VehiclesManager() {
   const openAssignRoute = (item: Vehicle) => {
     setAssigning(item)
     setAssignRouteId(item.routeId || "")
+    setAssignPreviewData(null)
     setAssignOpen(true)
   }
+
+  useEffect(() => {
+    if (!assignOpen || !assignRouteId || !resolvedBranchId) {
+      setAssignPreviewData(null)
+      return
+    }
+    let cancelled = false
+    setAssignPreviewLoading(true)
+    ;(async () => {
+      try {
+        const branchParam = resolvedBranchId ? `?branchId=${resolvedBranchId}` : ""
+        const pointsRes: any = await apiClient.get(`/routes/${assignRouteId}/points${branchParam}`)
+        const routePoints = pointsRes.routePoints || []
+        const pointIds = routePoints.map((rp: { pointId: string }) => rp.pointId).filter(Boolean)
+        if (pointIds.length < 2) {
+          if (!cancelled) setAssignPreviewData(null)
+          return
+        }
+        const previewRes: any = await apiClient.post("/routes/preview", { branchId: resolvedBranchId, pointIds })
+        if (cancelled) return
+        setAssignPreviewData({
+          points: previewRes.points || [],
+          geometry: previewRes.geometry || { type: "LineString", coordinates: [] },
+          distanceKm: previewRes.distanceKm,
+        })
+      } catch {
+        if (!cancelled) setAssignPreviewData(null)
+      } finally {
+        if (!cancelled) setAssignPreviewLoading(false)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [assignOpen, assignRouteId, resolvedBranchId])
 
   const submitAssignRoute = async () => {
     if (!assigning) return
@@ -181,7 +410,7 @@ export function VehiclesManager() {
       setAssignOpen(false)
       setAssigning(null)
       setAssignRouteId("")
-      await load()
+      await load(resolvedBranchId || null)
     } catch (error: any) {
       toast.error(error.message || "حدث خطأ أثناء ربط المركبة بالمسار")
     }
@@ -193,6 +422,7 @@ export function VehiclesManager() {
       await apiClient.delete(`/vehicles/${item._id}`)
       setItems((prev) => prev.filter((i) => i._id !== item._id))
       toast.success(`تم حذف ${labels.vehicleLabel}`)
+      await load(resolvedBranchId || null)
     } catch (error: any) {
       toast.error(error.message || "حدث خطأ")
     }
@@ -203,6 +433,7 @@ export function VehiclesManager() {
       { key: "name", label: `اسم ${labels.vehicleLabel}`, value: (row) => row.name },
       { key: "plate", label: "رقم اللوحة", value: (row) => row.plateNumber || "-" },
       { key: "imei", label: "رقم IMEI", value: (row) => row.imei },
+      { key: "fuelType", label: "نوع الوقود", value: (row) => (row.fuelType === "diesel" ? "مازوت" : "بنزين") },
       {
         key: "driver",
         label: labels.driverLabel,
@@ -236,6 +467,50 @@ export function VehiclesManager() {
       </CardHeader>
 
       <CardContent className="space-y-3">
+        {needsBranchSelector && (
+          <div className="flex flex-wrap items-center gap-3 rounded-lg border p-3">
+            {userIsAdmin && (
+              <>
+                <span className="text-sm text-muted-foreground">المؤسسة:</span>
+                <Select value={selectedOrganizationId} onValueChange={setSelectedOrganizationId}>
+                  <SelectTrigger className="w-[200px] text-right">
+                    <SelectValue placeholder="يرجى تحديد المؤسسة" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {organizations.map((org) => (
+                      <SelectItem key={org._id} value={org._id}>{org.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </>
+            )}
+            <span className="text-sm text-muted-foreground">{labels.branchLabel || "الفرع"}:</span>
+            <Select
+              value={selectedBranchId}
+              onValueChange={setSelectedBranchId}
+              disabled={userIsAdmin && !selectedOrganizationId}
+            >
+              <SelectTrigger className="w-[220px] text-right">
+                <SelectValue placeholder={`يرجى تحديد ${labels.branchLabel || "الفرع"}`} />
+              </SelectTrigger>
+              <SelectContent>
+                {branches.map((b) => (
+                  <SelectItem key={b._id} value={b._id}>{b.nameAr || b.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {!resolvedBranchId && (
+              <span className="text-sm text-muted-foreground">يرجى تحديد {labels.branchLabel || "الفرع"} لتحميل البيانات</span>
+            )}
+          </div>
+        )}
+        <Tabs value={activeTab} onValueChange={onTabChange}>
+          <TabsList className="mb-4">
+            <TabsTrigger value="local">مركبات النظام</TabsTrigger>
+            <TabsTrigger value="athar">سيارات أثر</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="local" className="space-y-3">
         <div className="grid gap-3 md:grid-cols-4">
           <Input
             placeholder={`بحث في ${labels.vehicleLabel}...`}
@@ -278,7 +553,7 @@ export function VehiclesManager() {
         </div>
 
         {loading ? (
-          <div className="text-sm text-muted-foreground">جاري التحميل...</div>
+          <Loading />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -287,6 +562,7 @@ export function VehiclesManager() {
                   <th className="p-2">اسم {labels.vehicleLabel}</th>
                   <th className="p-2">رقم اللوحة</th>
                   <th className="p-2">رقم IMEI</th>
+                  <th className="p-2">نوع الوقود</th>
                   <th className="p-2">{labels.driverLabel}</th>
                   <th className="p-2">{labels.routeLabel}</th>
                   <th className="p-2">الحالة</th>
@@ -299,6 +575,7 @@ export function VehiclesManager() {
                     <td className="p-2">{item.name}</td>
                     <td className="p-2">{item.plateNumber || "-"}</td>
                     <td className="p-2">{item.imei}</td>
+                    <td className="p-2">{item.fuelType === "diesel" ? "مازوت" : "بنزين"}</td>
                     <td className="p-2">{drivers.find((d) => d._id === item.driverId)?.name || "-"}</td>
                     <td className="p-2">{routes.find((r) => r._id === item.routeId)?.name || "-"}</td>
                     <td className="p-2">{item.isActive ? "مفعّلة" : "معطّلة"}</td>
@@ -312,7 +589,7 @@ export function VehiclesManager() {
 
                 {paginatedItems.length === 0 && (
                   <tr>
-                    <td className="p-4 text-center text-muted-foreground" colSpan={7}>
+                    <td className="p-4 text-center text-muted-foreground" colSpan={8}>
                       لا توجد نتائج
                     </td>
                   </tr>
@@ -333,6 +610,71 @@ export function VehiclesManager() {
             </Button>
           </div>
         </div>
+          </TabsContent>
+
+          <TabsContent value="athar" className="space-y-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <Input
+                className="flex-1 min-w-[200px]"
+                placeholder="بحث في سيارات أثر بالاسم أو المعرف أو IMEI أو اللوحة..."
+                value={atharSearch}
+                onChange={(e) => setAtharSearch(e.target.value)}
+              />
+              <Button
+                onClick={importAtharToSystem}
+                disabled={!resolvedBranchId || filteredAtharObjects.length === 0 || importingAthar}
+              >
+                {importingAthar ? "جاري الاستيراد..." : "تحويل إلى مركبات النظام"}
+              </Button>
+            </div>
+            {loadingAthar ? (
+              <Loading text="جاري تحميل سيارات أثر..." />
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b text-right">
+                      <th className="p-2">المعرف</th>
+                      <th className="p-2">الاسم</th>
+                      <th className="p-2">اللوحة</th>
+                      <th className="p-2">IMEI</th>
+                      <th className="p-2">الحالة</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paginatedAtharObjects.map((item) => (
+                      <tr key={item.id} className="border-b">
+                        <td className="p-2">{item.id}</td>
+                        <td className="p-2">{item.name || "-"}</td>
+                        <td className="p-2">{item.plateNumber || "-"}</td>
+                        <td className="p-2">{item.imei}</td>
+                        <td className="p-2">{item.active ? "نشطة" : "غير نشطة"}</td>
+                      </tr>
+                    ))}
+                    {paginatedAtharObjects.length === 0 && (
+                      <tr>
+                        <td className="p-4 text-center text-muted-foreground" colSpan={5}>
+                          لا توجد نتائج
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <div className="flex items-center justify-between rounded-lg border p-2">
+              <span className="text-sm text-muted-foreground">صفحة {atharPage} من {totalAtharPages}</span>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" onClick={() => setAtharPage((p) => p + 1)} disabled={atharPage >= totalAtharPages}>
+                  التالي
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => setAtharPage((p) => p - 1)} disabled={atharPage <= 1}>
+                  السابق
+                </Button>
+              </div>
+            </div>
+          </TabsContent>
+        </Tabs>
       </CardContent>
 
       <Dialog open={open} onOpenChange={setOpen}>
@@ -353,6 +695,33 @@ export function VehiclesManager() {
             <div>
               <Label>رقم IMEI</Label>
               <Input value={form.imei || ""} onChange={(e) => setForm({ ...form, imei: e.target.value })} />
+            </div>
+            <div>
+              <Label>نوع الوقود</Label>
+              <Select
+                value={form.fuelType || "gasoline"}
+                onValueChange={(value: "gasoline" | "diesel") => setForm({ ...form, fuelType: value })}
+              >
+                <SelectTrigger className="text-right">
+                  <SelectValue placeholder="نوع الوقود" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="gasoline">بنزين</SelectItem>
+                  <SelectItem value="diesel">مازوت</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>سعر الكيلو متر للشاحنة (اختياري)</Label>
+              <Input
+                type="number"
+                min={0}
+                step={0.01}
+                placeholder="مثال: 500"
+                value={form.fuelPricePerKm ?? ""}
+                onChange={(e) => setForm({ ...form, fuelPricePerKm: e.target.value === "" ? undefined : Number(e.target.value) })}
+                className="text-right"
+              />
             </div>
             <div>
               <Label>{labels.driverLabel}</Label>
@@ -398,7 +767,7 @@ export function VehiclesManager() {
       </Dialog>
 
       <Dialog open={assignOpen} onOpenChange={setAssignOpen}>
-        <DialogContent className="text-right">
+        <DialogContent className="text-right max-w-4xl">
           <DialogHeader>
             <DialogTitle>{`ربط ${labels.vehicleLabel} بـ ${labels.routeLabel}`}</DialogTitle>
           </DialogHeader>
@@ -420,6 +789,67 @@ export function VehiclesManager() {
                 </SelectContent>
               </Select>
             </div>
+            {assignRouteId && (
+              <>
+                {assignPreviewLoading ? (
+                  <div className="h-[40vh] rounded-lg border bg-muted/50 flex items-center justify-center">
+                    <Loading text="جاري تحميل المسار..." className="min-h-0" />
+                  </div>
+                ) : assignPreviewData && assignPreviewData.points.length >= 2 ? (
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <Card>
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-base">المسافة المقطوعة</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <p className="text-2xl font-semibold tabular-nums">
+                            {assignPreviewData.distanceKm != null
+                              ? `${assignPreviewData.distanceKm.toFixed(2)} كم`
+                              : "—"}
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-1">للمسار المحدد (حسب الطرق)</p>
+                        </CardContent>
+                      </Card>
+                      {assigning && assignPreviewData.distanceKm != null && (() => {
+                        const pricePerKm = assigning.fuelPricePerKm != null && assigning.fuelPricePerKm > 0
+                          ? assigning.fuelPricePerKm
+                          : (assigning.fuelType === "diesel"
+                            ? branches.find((b) => b._id === (assigning.branchId || resolvedBranchId))?.fuelPricePerKmDiesel
+                            : branches.find((b) => b._id === (assigning.branchId || resolvedBranchId))?.fuelPricePerKmGasoline)
+                        const cost = pricePerKm != null ? assignPreviewData.distanceKm! * pricePerKm : null
+                        const sourceLabel = assigning.fuelPricePerKm != null && assigning.fuelPricePerKm > 0
+                          ? "من إعدادات تكلفة المركبة"
+                          : `من إعدادات الفرع (${assigning.fuelType === "diesel" ? "مازوت" : "بنزين"})`
+                        return cost != null ? (
+                          <Card>
+                            <CardHeader className="pb-2">
+                              <CardTitle className="text-base">كلفة الوقود لهذا المسار</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                              <p className="text-2xl font-semibold tabular-nums">{cost.toFixed(0)} ل.س</p>
+                              <p className="text-xs text-muted-foreground mt-1">{sourceLabel}</p>
+                            </CardContent>
+                          </Card>
+                        ) : (
+                          <Card>
+                            <CardHeader className="pb-2">
+                              <CardTitle className="text-base">كلفة الوقود لهذا المسار</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                              <p className="text-sm text-muted-foreground">غير متاحة — حدّث أسعار الفرع أو سعر الكيلو للمركبة</p>
+                            </CardContent>
+                          </Card>
+                        )
+                      })()}
+                    </div>
+                    <RoutePreviewMap points={assignPreviewData.points} geometry={assignPreviewData.geometry} />
+                  </div>
+                ) : assignPreviewData === null && !assignPreviewLoading ? (
+                  <div className="text-xs text-muted-foreground">المسار المحدد لا يحتوي على نقطتين أو أكثر، أو فشل تحميل المعاينة.</div>
+                ) : null}
+              </>
+            )}
             <p className="text-xs text-muted-foreground">
               عند الربط سيتم إنشاء أحداث الدخول والخروج على Athar لكل نقاط المسار المرتبطة بمناطق.
             </p>

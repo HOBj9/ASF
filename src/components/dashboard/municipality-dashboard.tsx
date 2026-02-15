@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { MunicipalityMap, type MapTab } from "./municipality-map";
 import { cn } from "@/lib/utils";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Loading } from "@/components/ui/loading";
 import { Info, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -164,10 +164,15 @@ export function MunicipalityDashboard() {
   const [events, setEvents] = useState<EventItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeMapTab, setActiveMapTab] = useState<MapTab>("live");
-  const [showEvents, setShowEvents] = useState(true);
+  const [mapPointsOnly, setMapPointsOnly] = useState(true);
+  const [showEvents, setShowEvents] = useState(false);
   const [dailyDays, setDailyDays] = useState<7 | 14 | 30>(14);
   const [monthlyMonths, setMonthlyMonths] = useState<6 | 12>(12);
   const [pointsLoaded, setPointsLoaded] = useState(false);
+  const [atharMarkers, setAtharMarkers] = useState<
+    Array<{ id: string; lat: number; lng: number; name?: string; icon?: string }>
+  >([]);
+  const [markersLoaded, setMarkersLoaded] = useState(false);
   const [zonesLoaded, setZonesLoaded] = useState(false);
   const [objectsLoaded, setObjectsLoaded] = useState(false);
   const [vehiclesLoaded, setVehiclesLoaded] = useState(false);
@@ -177,7 +182,7 @@ export function MunicipalityDashboard() {
   const chartPalette = ["#22c55e", "#0ea5e9", "#f97316", "#a855f7", "#facc15", "#14b8a6"];
   const mapTabLoading: Partial<Record<MapTab, boolean>> = {
     live: activeMapTab === "live" && !liveLoaded,
-    points: activeMapTab === "points" && !pointsLoaded,
+    points: activeMapTab === "points" && (!pointsLoaded || !markersLoaded),
     zones: activeMapTab === "zones" && !zonesLoaded,
     objects: activeMapTab === "objects" && !objectsLoaded,
   };
@@ -245,6 +250,69 @@ export function MunicipalityDashboard() {
     };
   }, [dailyDays, monthlyMonths]);
 
+  // Preload map data in background after initial page load (non-blocking)
+  useEffect(() => {
+    if (loading) return;
+    if (!liveLoaded) {
+      fetch("/api/vehicles/locations")
+        .then((res) => res.json())
+        .then((data) => {
+          setLiveVehicles(data.data || []);
+          setLiveLoaded(true);
+        })
+        .catch(() => setLiveLoaded(true));
+    }
+    if (!pointsLoaded) {
+      fetch("/api/points")
+        .then((res) => res.json())
+        .then((data) => {
+          setPoints(data.points || []);
+          setPointsLoaded(true);
+        })
+        .catch(() => setPointsLoaded(true));
+    }
+    if (!markersLoaded) {
+      fetch("/api/athar/markers")
+        .then((res) => res.json())
+        .then((data) => {
+          setAtharMarkers(data.markers || []);
+          setMarkersLoaded(true);
+        })
+        .catch(() => setMarkersLoaded(true));
+    }
+    if (!zonesLoaded) {
+      fetch("/api/athar/zones?sync=false")
+        .then((res) => res.json())
+        .then((data) => {
+          setZones(data.zones || []);
+          if (Array.isArray(data.points) && data.points.length && !pointsLoaded) {
+            setPoints(data.points);
+            setPointsLoaded(true);
+          }
+          setZonesLoaded(true);
+        })
+        .catch(() => setZonesLoaded(true));
+    }
+    if (!objectsLoaded) {
+      fetch("/api/athar/objects")
+        .then((res) => res.json())
+        .then((data) => {
+          setAtharObjects(data.objects || []);
+          setObjectsLoaded(true);
+        })
+        .catch(() => setObjectsLoaded(true));
+    }
+    if (!vehiclesLoaded) {
+      fetch("/api/vehicles")
+        .then((res) => res.json())
+        .then((data) => {
+          setVehicles(data.vehicles || []);
+          setVehiclesLoaded(true);
+        })
+        .catch(() => setVehiclesLoaded(true));
+    }
+  }, [loading, liveLoaded, pointsLoaded, markersLoaded, zonesLoaded, objectsLoaded, vehiclesLoaded]);
+
   function exportChartAsPng(containerId: string, filename: string) {
     const container = document.getElementById(containerId);
     const svg = container?.querySelector("svg");
@@ -311,16 +379,25 @@ export function MunicipalityDashboard() {
       return;
     }
 
-    if (activeMapTab === "points" && !pointsLoaded) {
-      fetch("/api/points")
-        .then((res) => res.json())
-        .then((data) => {
-          setPoints(data.points || []);
-          setPointsLoaded(true);
-        })
-        .catch(() => {
-          setPointsLoaded(true);
-        });
+    if (activeMapTab === "points" && (!pointsLoaded || !markersLoaded)) {
+      if (!pointsLoaded) {
+        fetch("/api/points")
+          .then((res) => res.json())
+          .then((data) => {
+            setPoints(data.points || []);
+            setPointsLoaded(true);
+          })
+          .catch(() => setPointsLoaded(true));
+      }
+      if (!markersLoaded) {
+        fetch("/api/athar/markers")
+          .then((res) => res.json())
+          .then((data) => {
+            setAtharMarkers(data.markers || []);
+            setMarkersLoaded(true);
+          })
+          .catch(() => setMarkersLoaded(true));
+      }
       return;
     }
 
@@ -365,7 +442,7 @@ export function MunicipalityDashboard() {
           setVehiclesLoaded(true);
         });
     }
-  }, [activeMapTab, liveLoaded, pointsLoaded, zonesLoaded, objectsLoaded, vehiclesLoaded]);
+  }, [activeMapTab, liveLoaded, pointsLoaded, markersLoaded, zonesLoaded, objectsLoaded, vehiclesLoaded]);
 
   const pointTypeData = analytics?.pointTypes || [];
   const vehicleStatusData = [
@@ -380,40 +457,8 @@ export function MunicipalityDashboard() {
 
   if (loading && !branch && !stats) {
     return (
-      <div className="space-y-6">
-        <div className="rounded-2xl border bg-card p-6">
-          <Skeleton className="h-4 w-28 mb-3" />
-          <Skeleton className="h-8 w-72 mb-2" />
-          <Skeleton className="h-4 w-96" />
-        </div>
-
-        <div className="grid gap-4 md:grid-cols-4">
-          {Array.from({ length: 4 }).map((_, idx) => (
-            <div key={`kpi-loading-${idx}`} className="rounded-xl border bg-card p-4">
-              <Skeleton className="h-4 w-28 mb-3" />
-              <Skeleton className="h-7 w-20" />
-            </div>
-          ))}
-        </div>
-
-        <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
-          <div className="rounded-2xl border bg-card p-4">
-            <Skeleton className="h-5 w-44 mb-4" />
-            <Skeleton className="h-[520px] w-full rounded-xl" />
-          </div>
-          <div className="rounded-2xl border bg-card p-4">
-            <Skeleton className="h-5 w-32 mb-4" />
-            <div className="space-y-3">
-              {Array.from({ length: 6 }).map((_, idx) => (
-                <div key={`event-loading-${idx}`} className="rounded-lg border p-3">
-                  <Skeleton className="h-3 w-32 mb-2" />
-                  <Skeleton className="h-4 w-full mb-1" />
-                  <Skeleton className="h-3 w-2/3" />
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <Loading />
       </div>
     );
   }
@@ -448,7 +493,7 @@ export function MunicipalityDashboard() {
               </Button>
             </div>
             <div className="text-sm text-muted-foreground">
-              {points.length} {labels.pointLabel} â€¢ {zones.length} مناطق â€¢ {routes.length} {labels.routeLabel} â€¢ {atharObjects.length} سيارات أثر
+              {points.length} {labels.pointLabel} • {atharMarkers.length} نقاط أثر • {zones.length} مناطق • {routes.length} {labels.routeLabel} • {atharObjects.length} سيارات أثر
             </div>
           </div>
           <MunicipalityMap
@@ -459,9 +504,12 @@ export function MunicipalityDashboard() {
             routes={routes}
             zones={zones}
             points={points}
+            atharMarkers={atharMarkers}
             activeTab={activeMapTab}
             onTabChange={setActiveMapTab}
             tabLoading={mapTabLoading}
+            showZonesWithPoints={!mapPointsOnly}
+            onToggleMapView={() => setMapPointsOnly((p) => !p)}
           />
         </div>
 

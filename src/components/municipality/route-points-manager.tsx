@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import toast from "react-hot-toast"
 import { useLabels } from "@/hooks/use-labels"
+import { Loading } from "@/components/ui/loading"
 
 type Point = { _id: string; name: string; nameAr?: string }
 type RoutePoint = { pointId: string; order: number }
@@ -75,7 +76,7 @@ export function RoutePointsManager({ routeId }: { routeId: string }) {
       </CardHeader>
       <CardContent>
         {loading ? (
-          <div className="text-sm text-muted-foreground">جاري التحميل...</div>
+          <Loading />
         ) : (
           <>
             <div className="space-y-2">

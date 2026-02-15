@@ -1,9 +1,11 @@
-﻿"use client"
+"use client"
 
 import { useState, useEffect } from "react"
+import { useSession } from "next-auth/react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
+import { isAdmin } from "@/lib/permissions"
 import {
   Dialog,
   DialogContent,
@@ -44,6 +46,11 @@ interface Branch {
   name: string
 }
 
+interface Organization {
+  _id: string
+  name: string
+}
+
 interface UserFormProps {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -51,12 +58,16 @@ interface UserFormProps {
 }
 
 export function UserForm({ open, onOpenChange, onSuccess }: UserFormProps) {
+  const { data: session } = useSession()
   const [roles, setRoles] = useState<Role[]>([])
+  const [organizations, setOrganizations] = useState<Organization[]>([])
   const [branches, setBranches] = useState<Branch[]>([])
+  const [selectedOrganizationId, setSelectedOrganizationId] = useState("")
   const [loadingRoles, setLoadingRoles] = useState(false)
   const [loadingBranches, setLoadingBranches] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const { labels } = useLabels()
+  const userIsAdmin = isAdmin(session?.user?.role as any)
 
   const form = useForm<UserFormValues>({
     resolver: zodResolver(userFormSchema),
@@ -74,9 +85,23 @@ export function UserForm({ open, onOpenChange, onSuccess }: UserFormProps) {
   useEffect(() => {
     if (open) {
       fetchRoles()
-      fetchBranches()
+      if (userIsAdmin) {
+        fetchOrganizations()
+        setSelectedOrganizationId("")
+        setBranches([])
+      } else {
+        fetchBranches(null)
+      }
     }
-  }, [open])
+  }, [open, userIsAdmin])
+
+  useEffect(() => {
+    if (open && userIsAdmin && selectedOrganizationId) {
+      fetchBranches(selectedOrganizationId)
+    } else if (open && userIsAdmin && !selectedOrganizationId) {
+      setBranches([])
+    }
+  }, [open, userIsAdmin, selectedOrganizationId])
 
   const fetchRoles = async () => {
     setLoadingRoles(true)
@@ -94,17 +119,37 @@ export function UserForm({ open, onOpenChange, onSuccess }: UserFormProps) {
     }
   }
 
-  const fetchBranches = async () => {
+  const fetchOrganizations = async () => {
+    try {
+      const res = await apiClient.get("/organizations").catch(() => ({ organizations: [] } as any))
+      const list = res.organizations || res.data?.organizations || []
+      setOrganizations(list)
+    } catch (error) {
+      console.error("Failed to fetch organizations:", error)
+      toast.error("فشل في تحميل المؤسسات")
+    }
+  }
+
+  const fetchBranches = async (organizationId: string | null) => {
     setLoadingBranches(true)
     try {
-      const response = await apiClient.get("/branches")
+      if (userIsAdmin && !organizationId) {
+        setBranches([])
+        setLoadingBranches(false)
+        return
+      }
+      const url = organizationId ? `/branches?organizationId=${organizationId}` : "/branches"
+      const response = await apiClient.get(url)
       const data = response.branches || response.data?.branches || response.data?.data?.branches
       if (Array.isArray(data)) {
         setBranches(data)
+      } else {
+        setBranches([])
       }
     } catch (error) {
       console.error("Failed to fetch branches:", error)
       toast.error(`فشل في تحميل ${labels.branchLabel}`)
+      setBranches([])
     } finally {
       setLoadingBranches(false)
     }
@@ -113,11 +158,11 @@ export function UserForm({ open, onOpenChange, onSuccess }: UserFormProps) {
   const onSubmit = async (values: UserFormValues) => {
     setSubmitting(true)
     try {
-      if (!values.branchId) {
-        delete (values as any).branchId
-      }
+      const payload = { ...values }
+      if (!payload.branchId) delete (payload as any).branchId
+      if (userIsAdmin && selectedOrganizationId) (payload as any).organizationId = selectedOrganizationId
 
-      const data = await apiClient.post("/admin/users", values)
+      const data = await apiClient.post("/admin/users", payload)
       if (!data.data) {
         throw new Error(data.error || "حدث خطأ")
       }
@@ -227,15 +272,43 @@ export function UserForm({ open, onOpenChange, onSuccess }: UserFormProps) {
               )}
             </div>
 
+            {userIsAdmin && (
+              <div className="space-y-2">
+                <Label className="text-right">المؤسسة</Label>
+                <Select
+                  value={selectedOrganizationId}
+                  onValueChange={(v) => {
+                    setSelectedOrganizationId(v)
+                    form.setValue("branchId", "")
+                  }}
+                  disabled={submitting}
+                >
+                  <SelectTrigger className="text-right">
+                    <SelectValue placeholder="اختر المؤسسة" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {organizations.map((org) => (
+                      <SelectItem key={org._id} value={org._id}>{org.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div className="space-y-2">
               <Label htmlFor="branchId" className="text-right">{labels.branchLabel}</Label>
               <Select
                 onValueChange={(value) => form.setValue("branchId", value)}
-                defaultValue={form.watch("branchId")}
-                disabled={submitting || loadingBranches}
+                value={form.watch("branchId")}
+                disabled={submitting || loadingBranches || (userIsAdmin && !selectedOrganizationId)}
               >
                 <SelectTrigger id="branchId" className="text-right">
-                  <SelectValue placeholder={loadingBranches ? "جاري التحميل..." : `اختيار ${labels.branchLabel} (اختياري)`} />
+                  <SelectValue placeholder={
+                    userIsAdmin && !selectedOrganizationId
+                      ? "اختر المؤسسة أولاً"
+                      : loadingBranches
+                        ? "جاري التحميل..."
+                        : `اختيار ${labels.branchLabel} (اختياري)`
+                  } />
                 </SelectTrigger>
                 <SelectContent>
                   {branches.map((branch) => (

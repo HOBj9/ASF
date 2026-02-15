@@ -151,29 +151,34 @@ export class AtharService {
   }
 
   /** Normalized marker shape for map display */
-  static normalizeMarker(m: any): { id: string; lat: number; lng: number; name?: string } | null {
+  static normalizeMarker(m: any): { id: string; lat: number; lng: number; name?: string; icon?: string } | null {
     const lat = Number(m.lat ?? m.latitude ?? m.y);
     const lng = Number(m.lng ?? m.longitude ?? m.x);
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
     const id = String(m.id ?? m.marker_id ?? m._id ?? `${lat}-${lng}`);
     const name = m.name ?? m.nameAr ?? m.title ?? '';
-    return { id, lat, lng, name };
+    const icon = typeof m.icon === 'string' && m.icon.trim() ? m.icon.trim() : undefined;
+    return { id, lat, lng, name, icon };
   }
 
-  async getMarkers(): Promise<Array<{ id: string; lat: number; lng: number; name?: string }>> {
+  async getMarkers(): Promise<Array<{ id: string; lat: number; lng: number; name?: string; icon?: string }>> {
     const response = await this.makeRequest({ cmd: 'USER_GET_MARKERS' });
     if (!response) {
       console.log('[Athar] getMarkers: empty response');
       return [];
     }
-    const raw = Array.isArray(response.markers)
-      ? response.markers
-      : Array.isArray(response.data)
-        ? response.data
-        : Array.isArray(response)
-          ? response
-          : [];
-    type NormMarker = { id: string; lat: number; lng: number; name?: string };
+    const source = response.markers ?? response.data ?? response;
+    let raw: any[] = [];
+    if (Array.isArray(source)) {
+      raw = source;
+    } else if (source && typeof source === 'object' && !Array.isArray(source)) {
+      // Athar often returns markers as object keyed by id: { "27208": { name, lat, lng, ... }, ... }
+      raw = Object.entries(source).map(([key, value]) => {
+        const m = (value && typeof value === 'object' ? value : {}) as Record<string, any>;
+        return { ...m, id: m.id ?? m.marker_id ?? key };
+      });
+    }
+    type NormMarker = { id: string; lat: number; lng: number; name?: string; icon?: string };
     const markers = raw
       .map((m: any) => AtharService.normalizeMarker(m))
       .filter((m: NormMarker | null): m is NormMarker => m != null);

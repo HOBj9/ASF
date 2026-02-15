@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { isAdmin, isOrganizationAdmin } from "@/lib/permissions"
+import { Loading } from "@/components/ui/loading"
 
 const ATTRIBUTE_TYPES = [
   { value: "text", label: "\u0646\u0635" },
@@ -701,7 +702,7 @@ export function MaterialsManager() {
           </div>
 
           {loading ? (
-            <div className="text-sm text-muted-foreground">{"???? ???????..."}</div>
+            <Loading />
           ) : (
             <div className="rounded-lg border bg-card/40 overflow-hidden">
               <div className="max-h-[520px] overflow-auto">
@@ -821,7 +822,7 @@ setAttributesOpen(true)
           </div>
 
           {loading ? (
-            <div className="text-sm text-muted-foreground">{"???? ???????..."}</div>
+            <Loading />
           ) : (
             <div className="rounded-lg border bg-card/40 overflow-hidden">
               <div className="overflow-x-auto">

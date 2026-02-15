@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Loading } from "@/components/ui/loading"
 import toast from "react-hot-toast"
 
 const loginSchema = z.object({
@@ -42,11 +43,7 @@ export default function LoginPage() {
 
   // Show loading state while checking session
   if (status === "loading") {
-    return (
-      <div className="relative flex min-h-screen items-center justify-center overflow-hidden px-4">
-        <div className="text-center">جاري التحميل...</div>
-      </div>
-    )
+    return <Loading fullScreen />
   }
 
   // Don't render login form if already authenticated (will redirect)

@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Loading } from "@/components/ui/loading"
 import toast from "react-hot-toast"
 import Link from "next/link"
 
@@ -40,11 +41,7 @@ export default function RegisterPage() {
 
   // Show loading state while checking session
   if (status === "loading") {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background px-4">
-        <div className="text-center">جاري التحميل...</div>
-      </div>
-    )
+    return <Loading fullScreen />
   }
 
   // Don't render register form if already authenticated (will redirect)

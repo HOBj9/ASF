@@ -1,10 +1,14 @@
-﻿import mongoose, { Schema, Document, Model } from 'mongoose';
+import mongoose, { Schema, Document, Model } from 'mongoose';
+
+export type VehicleFuelType = 'gasoline' | 'diesel';
 
 export interface IVehicle extends Document {
   branchId: mongoose.Types.ObjectId;
   name: string;
   plateNumber?: string;
   imei: string;
+  fuelType?: VehicleFuelType;
+  fuelPricePerKm?: number;
   atharObjectId?: string;
   driverId?: mongoose.Types.ObjectId;
   routeId?: mongoose.Types.ObjectId;
@@ -35,6 +39,15 @@ const VehicleSchema: Schema = new Schema(
       type: String,
       required: true,
       trim: true,
+    },
+    fuelType: {
+      type: String,
+      enum: ['gasoline', 'diesel'],
+      default: 'gasoline',
+    },
+    fuelPricePerKm: {
+      type: Number,
+      default: null,
     },
     atharObjectId: {
       type: String,

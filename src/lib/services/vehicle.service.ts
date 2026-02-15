@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Vehicle Service
  * Business logic for vehicle management
  */
@@ -17,6 +17,8 @@ export interface CreateVehicleData {
   name: string;
   plateNumber?: string;
   imei: string;
+  fuelType?: 'gasoline' | 'diesel';
+  fuelPricePerKm?: number;
   atharObjectId?: string;
   driverId?: string;
   routeId?: string;
@@ -27,7 +29,9 @@ export interface UpdateVehicleData {
   name?: string;
   plateNumber?: string;
   imei?: string;
-  atharObjectId?: string;
+  fuelType?: 'gasoline' | 'diesel';
+  fuelPricePerKm?: number | null;
+  atharObjectId?: string | null;
   driverId?: string | null;
   routeId?: string | null;
   isActive?: boolean;
@@ -97,6 +101,8 @@ export class VehicleService {
       name: data.name,
       plateNumber: data.plateNumber || null,
       imei: data.imei,
+      fuelType: data.fuelType || 'gasoline',
+      fuelPricePerKm: data.fuelPricePerKm ?? null,
       atharObjectId: data.atharObjectId || null,
       driverId: data.driverId || null,
       routeId: data.routeId || null,
@@ -113,6 +119,54 @@ export class VehicleService {
   async getAll(branchId: string): Promise<IVehicle[]> {
     await connectDB();
     return Vehicle.find({ branchId }).lean().exec();
+  }
+
+  /**
+   * Import vehicles from Athar objects (no Athar API calls).
+   * Skips objects that already have a vehicle in this branch with same imei or atharObjectId.
+   */
+  async importFromAtharObjects(
+    branchId: string,
+    objects: Array<{ id: string; imei: string; name?: string; plateNumber?: string | null }>
+  ): Promise<{ imported: number; skipped: number }> {
+    await connectDB();
+
+    const branch = await Branch.findById(branchId).lean();
+    if (!branch) {
+      throw new Error('الفرع غير موجود');
+    }
+
+    let imported = 0;
+    let skipped = 0;
+
+    for (const obj of objects) {
+      if (!obj.id || !obj.imei) continue;
+
+      const existing = await Vehicle.findOne({
+        branchId,
+        $or: [{ imei: obj.imei }, { atharObjectId: obj.id }],
+      }).lean();
+
+      if (existing) {
+        skipped += 1;
+        continue;
+      }
+
+      await Vehicle.create({
+        branchId,
+        name: obj.name || `مركبة أثر ${obj.id}`,
+        plateNumber: obj.plateNumber ?? null,
+        imei: obj.imei,
+        fuelType: 'gasoline',
+        atharObjectId: obj.id,
+        driverId: null,
+        routeId: null,
+        isActive: true,
+      });
+      imported += 1;
+    }
+
+    return { imported, skipped };
   }
 
   async getById(id: string, branchId: string): Promise<IVehicle | null> {
@@ -141,9 +195,16 @@ export class VehicleService {
     }
 
     const updateData: any = { ...data };
+    delete updateData.branchId;
     if (data.plateNumber !== undefined && data.plateNumber === '') updateData.plateNumber = null;
     if (data.atharObjectId !== undefined && data.atharObjectId === '') updateData.atharObjectId = null;
-    if (data.routeId !== undefined && data.routeId === '') updateData.routeId = null;
+    if (data.driverId !== undefined && (data.driverId === '' || data.driverId == null)) updateData.driverId = null;
+    if (data.routeId !== undefined && (data.routeId === '' || data.routeId == null)) updateData.routeId = null;
+    if (data.fuelPricePerKm !== undefined) {
+      updateData.fuelPricePerKm = (data.fuelPricePerKm === '' || data.fuelPricePerKm == null)
+        ? null
+        : Number(data.fuelPricePerKm);
+    }
 
     if (data.routeId) {
       const route = await Route.findOne({ _id: data.routeId, branchId }).lean();

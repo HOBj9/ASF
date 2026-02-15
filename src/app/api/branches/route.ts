@@ -1,4 +1,4 @@
-﻿import { NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { requirePermission, handleApiError } from '@/lib/middleware/api-auth.middleware';
 import { BranchService } from '@/lib/services/branch.service';
 import { permissionActions, permissionResources } from '@/constants/permissions';
@@ -44,6 +44,8 @@ export async function POST(request: Request) {
       centerLng,
       timezone,
       atharKey,
+      fuelPricePerKmGasoline,
+      fuelPricePerKmDiesel,
       isActive,
       adminUserName,
       adminUserEmail,
@@ -69,6 +71,8 @@ export async function POST(request: Request) {
       centerLng: Number(centerLng),
       timezone,
       atharKey,
+      fuelPricePerKmGasoline: fuelPricePerKmGasoline != null ? Number(fuelPricePerKmGasoline) : undefined,
+      fuelPricePerKmDiesel: fuelPricePerKmDiesel != null ? Number(fuelPricePerKmDiesel) : undefined,
       isActive: isActive ?? true,
     });
 

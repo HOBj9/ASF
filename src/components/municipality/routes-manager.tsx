@@ -1,10 +1,12 @@
 "use client"
 
 import dynamic from "next/dynamic"
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useSession } from "next-auth/react"
 import toast from "react-hot-toast"
 import { apiClient } from "@/lib/api/client"
 import { useLabels } from "@/hooks/use-labels"
+import { isAdmin, isOrganizationAdmin } from "@/lib/permissions"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -13,6 +15,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { ExportExcelDialog, type ExportColumn } from "@/components/municipality/export-excel-dialog"
+import { Loading } from "@/components/ui/loading"
 
 const RoutePreviewMap = dynamic(
   () => import("@/components/municipality/route-preview-map").then((m) => m.RoutePreviewMap),
@@ -45,6 +48,7 @@ type PreviewResponse = {
     coordinates: number[][]
   }
   source: "osrm" | "fallback"
+  distanceKm?: number
   points: PointItem[]
 }
 
@@ -56,10 +60,35 @@ const emptyForm: Partial<RouteItem> = {
   isActive: true,
 }
 
+type Organization = { _id: string; name: string }
+type Branch = {
+  _id: string
+  name: string
+  nameAr?: string
+  organizationId: string
+  fuelPricePerKmGasoline?: number | null
+  fuelPricePerKmDiesel?: number | null
+}
+
+type VehicleItem = {
+  _id: string
+  name: string
+  fuelType?: "gasoline" | "diesel"
+  fuelPricePerKm?: number
+  routeId?: string
+}
+
 export function RoutesManager() {
+  const { data: session } = useSession()
   const { labels } = useLabels()
 
+  const [organizations, setOrganizations] = useState<Organization[]>([])
+  const [branches, setBranches] = useState<Branch[]>([])
+  const [selectedOrganizationId, setSelectedOrganizationId] = useState("")
+  const [selectedBranchId, setSelectedBranchId] = useState("")
+
   const [items, setItems] = useState<RouteItem[]>([])
+  const [vehicles, setVehicles] = useState<VehicleItem[]>([])
   const [loading, setLoading] = useState(false)
 
   const [search, setSearch] = useState("")
@@ -75,39 +104,130 @@ export function RoutesManager() {
   const [pointSearch, setPointSearch] = useState("")
   const [routePoints, setRoutePoints] = useState<RoutePointItem[]>([])
 
-  const [previewOpen, setPreviewOpen] = useState(false)
-  const [previewLoading, setPreviewLoading] = useState(false)
-  const [previewData, setPreviewData] = useState<PreviewResponse | null>(null)
+  const [inlinePreviewLoading, setInlinePreviewLoading] = useState(false)
+  const [inlinePreviewData, setInlinePreviewData] = useState<PreviewResponse | null>(null)
+  const previewDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [startPointId, setStartPointId] = useState<string | null>(null)
+  const [endPointId, setEndPointId] = useState<string | null>(null)
+  const [optimalOrderLoading, setOptimalOrderLoading] = useState(false)
+  const [mapSelectMode, setMapSelectMode] = useState<"start" | "end" | null>(null)
+  const [formVehicleId, setFormVehicleId] = useState<string>("")
+
+  const userIsAdmin = useMemo(() => isAdmin(session?.user?.role as any), [session?.user?.role])
+  const userIsOrgAdmin = useMemo(() => isOrganizationAdmin(session?.user?.role as any), [session?.user?.role])
+  const sessionBranchId = (session?.user as any)?.branchId ?? null
+  const needsBranchSelector = userIsAdmin || (userIsOrgAdmin && !sessionBranchId)
+  const resolvedBranchId = selectedBranchId || sessionBranchId
 
   const pointMap = useMemo(() => new Map(points.map((p) => [p._id, p])), [points])
 
-  const load = async () => {
+  const loadOrganizations = async () => {
+    try {
+      const res = await apiClient.get("/organizations").catch(() => ({ organizations: [] } as any))
+      const list = res.organizations || res.data?.organizations || []
+      setOrganizations(list)
+      return list
+    } catch {
+      return []
+    }
+  }
+
+  const loadBranches = async (organizationId: string | null) => {
+    if (!organizationId) {
+      setBranches([])
+      return
+    }
+    try {
+      const res = await apiClient.get(`/branches?organizationId=${organizationId}`)
+      const list = res.branches || res.data?.branches || []
+      setBranches(list)
+    } catch {
+      setBranches([])
+    }
+  }
+
+  const loadBranchesForOrgUser = async () => {
+    try {
+      const res = await apiClient.get("/branches")
+      const list = res.branches || res.data?.branches || []
+      setBranches(list)
+      if (list.length === 1 && !selectedBranchId) setSelectedBranchId(list[0]._id)
+    } catch {
+      setBranches([])
+    }
+  }
+
+  const load = async (branchId: string | null) => {
+    if (needsBranchSelector && !branchId) {
+      setItems([])
+      setVehicles([])
+      return
+    }
     setLoading(true)
     try {
-      const res = await apiClient.get("/routes")
-      setItems(res.routes || res.data?.routes || [])
+      const suffix = branchId ? `?branchId=${branchId}` : ""
+      const [routesRes, vehiclesRes] = await Promise.all([
+        apiClient.get(`/routes${suffix}`),
+        apiClient.get(`/vehicles${suffix}`),
+      ])
+      setItems(routesRes.routes || routesRes.data?.routes || [])
+      setVehicles(vehiclesRes.vehicles || vehiclesRes.data?.vehicles || [])
     } catch (error: any) {
       toast.error(error.message || `فشل تحميل ${labels.routeLabel}`)
+      setItems([])
+      setVehicles([])
     } finally {
       setLoading(false)
     }
   }
 
-  const loadPoints = async () => {
+  const loadPoints = async (branchId: string | null) => {
+    if (needsBranchSelector && !branchId) {
+      setPoints([])
+      return
+    }
     setPointsLoading(true)
     try {
-      const res: any = await apiClient.get("/points")
+      const url = branchId ? `/points?branchId=${branchId}` : "/points"
+      const res: any = await apiClient.get(url)
       setPoints(res.points || res.data?.points || [])
     } catch (error: any) {
       toast.error(error.message || `فشل تحميل ${labels.pointLabel}`)
+      setPoints([])
     } finally {
       setPointsLoading(false)
     }
   }
 
   useEffect(() => {
-    load()
-  }, [])
+    if (session === undefined) return
+    if (userIsAdmin) {
+      loadOrganizations().then((list) => {
+        if (list.length === 1 && !selectedOrganizationId) setSelectedOrganizationId(list[0]._id)
+      })
+    } else if (userIsOrgAdmin && !sessionBranchId) {
+      loadBranchesForOrgUser()
+    } else {
+      load(null)
+    }
+  }, [session?.user])
+
+  useEffect(() => {
+    if (userIsAdmin && selectedOrganizationId) {
+      loadBranches(selectedOrganizationId)
+      setSelectedBranchId("")
+    }
+  }, [userIsAdmin, selectedOrganizationId])
+
+  useEffect(() => {
+    if (!needsBranchSelector) return
+    if (resolvedBranchId) load(resolvedBranchId)
+    else setItems([])
+  }, [needsBranchSelector, resolvedBranchId])
+
+  useEffect(() => {
+    if (!needsBranchSelector && session?.user) load(null)
+  }, [needsBranchSelector, session?.user])
 
   const filteredItems = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -149,15 +269,103 @@ export function RoutesManager() {
     [routePoints]
   )
 
+  const fetchInlinePreview = useCallback(
+    async (pointIds: string[]) => {
+      if (pointIds.length < 2 || !resolvedBranchId) return
+      setInlinePreviewLoading(true)
+      try {
+        const res: any = await apiClient.post("/routes/preview", { pointIds, branchId: resolvedBranchId })
+        const data = (res.data || res) as PreviewResponse
+        setInlinePreviewData(data)
+      } catch {
+        setInlinePreviewData(null)
+      } finally {
+        setInlinePreviewLoading(false)
+      }
+    },
+    [resolvedBranchId]
+  )
+
+  useEffect(() => {
+    if (!open || routePoints.length < 2) {
+      setInlinePreviewData(null)
+      return
+    }
+    const pointIds = orderedRoutePoints.map((rp) => rp.pointId)
+    if (previewDebounceRef.current) clearTimeout(previewDebounceRef.current)
+    previewDebounceRef.current = setTimeout(() => {
+      fetchInlinePreview(pointIds)
+      previewDebounceRef.current = null
+    }, 450)
+    return () => {
+      if (previewDebounceRef.current) clearTimeout(previewDebounceRef.current)
+    }
+  }, [open, routePoints, orderedRoutePoints, fetchInlinePreview])
+
+  const runOptimalOrder = async () => {
+    if (routePoints.length < 2 || !resolvedBranchId) return
+    setOptimalOrderLoading(true)
+    try {
+      const pointIds = orderedRoutePoints.map((rp) => rp.pointId)
+      const start = startPointId || pointIds[0]
+      const end = endPointId || pointIds[pointIds.length - 1]
+      const res: any = await apiClient.post("/routes/optimal-order", {
+        branchId: resolvedBranchId,
+        pointIds,
+        startPointId: start,
+        endPointId: end,
+      })
+      const data = res.data || res
+      const ordered = (data.orderedPointIds || data.points?.map((p: any) => p._id)) as string[]
+      if (Array.isArray(ordered) && ordered.length > 0) {
+        setRoutePoints(ordered.map((id, idx) => ({ pointId: id, order: idx })))
+        setInlinePreviewData({
+          geometry: data.geometry || { type: "LineString", coordinates: [] },
+          source: data.source || "fallback",
+          distanceKm: data.distanceKm,
+          points: (data.points || []).map((p: any) => ({
+            _id: p._id,
+            name: p.name,
+            nameAr: p.nameAr,
+            lat: p.lat,
+            lng: p.lng,
+          })),
+        })
+      }
+    } catch (error: any) {
+      toast.error(error?.message || "فشل حساب الترتيب الأمثل")
+    } finally {
+      setOptimalOrderLoading(false)
+    }
+  }
+
+  const handleMapPointSelect = useCallback((pointId: string) => {
+    if (mapSelectMode === "start") {
+      setStartPointId(pointId)
+      setMapSelectMode(null)
+    } else if (mapSelectMode === "end") {
+      setEndPointId(pointId)
+      setMapSelectMode(null)
+    }
+  }, [mapSelectMode])
+
+  const currentBranch = useMemo(
+    () => branches.find((b) => b._id === resolvedBranchId),
+    [branches, resolvedBranchId]
+  )
+
   const openCreate = async () => {
     setEditing(null)
     setForm({ ...emptyForm })
+    setFormVehicleId("")
     setRoutePoints([])
     setPointSearch("")
-    setPreviewData(null)
-    setPreviewOpen(false)
+    setInlinePreviewData(null)
+    setStartPointId(null)
+    setEndPointId(null)
+    setMapSelectMode(null)
     setOpen(true)
-    await loadPoints()
+    await loadPoints(resolvedBranchId || null)
   }
 
   const openEdit = async (item: RouteItem) => {
@@ -166,17 +374,22 @@ export function RoutesManager() {
       ...item,
       description: item.description || "",
     })
+    const assignedVehicle = vehicles.find((v) => v.routeId === item._id)
+    setFormVehicleId(assignedVehicle?._id || "")
     setRoutePoints([])
     setPointSearch("")
-    setPreviewData(null)
-    setPreviewOpen(false)
+    setInlinePreviewData(null)
+    setStartPointId(null)
+    setEndPointId(null)
+    setMapSelectMode(null)
     setOpen(true)
 
+    const branchParam = resolvedBranchId ? `?branchId=${resolvedBranchId}` : ""
     await Promise.all([
-      loadPoints(),
+      loadPoints(resolvedBranchId || null),
       (async () => {
         try {
-          const res: any = await apiClient.get(`/routes/${item._id}/points`)
+          const res: any = await apiClient.get(`/routes/${item._id}/points${branchParam}`)
           const list = (res.routePoints || res.data?.routePoints || []) as RoutePointItem[]
           const sorted = list.slice().sort((a, b) => a.order - b.order)
           setRoutePoints(sorted.map((rp, index) => ({ pointId: rp.pointId, order: index })))
@@ -217,43 +430,6 @@ export function RoutesManager() {
     })
   }
 
-  const openPreviewByPointIds = async (pointIds: string[]) => {
-    if (pointIds.length < 2) {
-      toast.error(`\u064a\u062c\u0628 \u0627\u062e\u062a\u064a\u0627\u0631 \u0646\u0642\u0637\u062a\u064a\u0646 \u0639\u0644\u0649 \u0627\u0644\u0623\u0642\u0644 \u0636\u0645\u0646 ${labels.pointLabel}`)
-      return
-    }
-
-    setPreviewLoading(true)
-    setPreviewOpen(true)
-    try {
-      const res: any = await apiClient.post("/routes/preview", { pointIds })
-      const data = (res.data || res) as PreviewResponse
-      setPreviewData(data)
-      if (data.source === "fallback") {
-        toast("\u062a\u0645 \u0639\u0631\u0636 \u062e\u0637 \u0645\u0628\u0627\u0634\u0631 \u0644\u0623\u0646 \u062a\u0648\u0644\u064a\u062f \u0627\u0644\u0645\u0633\u0627\u0631 \u0639\u0644\u0649 \u0627\u0644\u0637\u0631\u0642 \u0644\u0645 \u064a\u0646\u062c\u062d \u062d\u0627\u0644\u064a\u0627\u064b")
-      }
-    } catch (error: any) {
-      setPreviewData(null)
-      toast.error(error.message || "\u0641\u0634\u0644 \u062a\u0648\u0644\u064a\u062f \u0645\u0639\u0627\u064a\u0646\u0629 \u0627\u0644\u0645\u0633\u0627\u0631")
-    } finally {
-      setPreviewLoading(false)
-    }
-  }
-
-  const openPreviewForRoute = async (routeId: string) => {
-    try {
-      const res: any = await apiClient.get(`/routes/${routeId}/points`)
-      const list = (res.routePoints || res.data?.routePoints || []) as RoutePointItem[]
-      const pointIds = list
-        .slice()
-        .sort((a, b) => a.order - b.order)
-        .map((rp) => rp.pointId)
-      await openPreviewByPointIds(pointIds)
-    } catch (error: any) {
-      toast.error(error.message || "\u0641\u0634\u0644 \u062a\u062d\u0645\u064a\u0644 \u0646\u0642\u0627\u0637 \u0627\u0644\u0645\u0633\u0627\u0631")
-    }
-  }
-
   const submit = async () => {
     if (!form.name) {
       toast.error(`اسم ${labels.routeLabel} مطلوب`)
@@ -265,23 +441,36 @@ export function RoutesManager() {
       return
     }
 
+    const routePayload = { ...form } as Record<string, unknown>
+    if (resolvedBranchId) routePayload.branchId = resolvedBranchId
+    const pointsPayload = { points: routePoints } as Record<string, unknown>
+    if (resolvedBranchId) pointsPayload.branchId = resolvedBranchId
     try {
+      let routeId: string
       if (editing) {
-        await apiClient.patch(`/routes/${editing._id}`, form)
-        await apiClient.post(`/routes/${editing._id}/points`, { points: routePoints })
+        await apiClient.patch(`/routes/${editing._id}`, routePayload)
+        await apiClient.post(`/routes/${editing._id}/points`, pointsPayload)
+        routeId = editing._id
+        const previouslyAssigned = vehicles.filter((v) => v.routeId === editing._id)
+        for (const v of previouslyAssigned) {
+          await apiClient.patch(`/vehicles/${v._id}`, { routeId: "", branchId: resolvedBranchId })
+        }
         toast.success(`تم تحديث ${labels.routeLabel}`)
       } else {
-        const createRes: any = await apiClient.post("/routes", form)
+        const createRes: any = await apiClient.post("/routes", routePayload)
         const createdRoute = createRes.route || createRes.data?.route
-        const routeId = createdRoute?._id
+        routeId = createdRoute?._id
         if (!routeId) {
           throw new Error("تعذر الحصول على معرف المسار بعد الإنشاء")
         }
-        await apiClient.post(`/routes/${routeId}/points`, { points: routePoints })
+        await apiClient.post(`/routes/${routeId}/points`, pointsPayload)
         toast.success(`تم إضافة ${labels.routeLabel}`)
       }
+      if (formVehicleId && routeId) {
+        await apiClient.patch(`/vehicles/${formVehicleId}`, { routeId, branchId: resolvedBranchId })
+      }
       setOpen(false)
-      await load()
+      await load(resolvedBranchId || null)
     } catch (error: any) {
       toast.error(error.message || "حدث خطأ")
     }
@@ -290,9 +479,11 @@ export function RoutesManager() {
   const remove = async (item: RouteItem) => {
     if (!confirm(`حذف ${labels.routeLabel} ${item.name}؟`)) return
     try {
-      await apiClient.delete(`/routes/${item._id}`)
+      const url = resolvedBranchId ? `/routes/${item._id}?branchId=${resolvedBranchId}` : `/routes/${item._id}`
+      await apiClient.delete(url)
       setItems((prev) => prev.filter((i) => i._id !== item._id))
       toast.success(`تم حذف ${labels.routeLabel}`)
+      await load(resolvedBranchId || null)
     } catch (error: any) {
       toast.error(error.message || "حدث خطأ")
     }
@@ -325,6 +516,43 @@ export function RoutesManager() {
       </CardHeader>
 
       <CardContent className="space-y-3">
+        {needsBranchSelector && (
+          <div className="flex flex-wrap items-center gap-3 rounded-lg border p-3">
+            {userIsAdmin && (
+              <>
+                <span className="text-sm text-muted-foreground">المؤسسة:</span>
+                <Select value={selectedOrganizationId} onValueChange={setSelectedOrganizationId}>
+                  <SelectTrigger className="w-[200px] text-right">
+                    <SelectValue placeholder="يرجى تحديد المؤسسة" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {organizations.map((org) => (
+                      <SelectItem key={org._id} value={org._id}>{org.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </>
+            )}
+            <span className="text-sm text-muted-foreground">{labels.branchLabel || "الفرع"}:</span>
+            <Select
+              value={selectedBranchId}
+              onValueChange={setSelectedBranchId}
+              disabled={userIsAdmin && !selectedOrganizationId}
+            >
+              <SelectTrigger className="w-[220px] text-right">
+                <SelectValue placeholder={`يرجى تحديد ${labels.branchLabel || "الفرع"}`} />
+              </SelectTrigger>
+              <SelectContent>
+                {branches.map((b) => (
+                  <SelectItem key={b._id} value={b._id}>{b.nameAr || b.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {!resolvedBranchId && (
+              <span className="text-sm text-muted-foreground">يرجى تحديد {labels.branchLabel || "الفرع"} لتحميل البيانات</span>
+            )}
+          </div>
+        )}
         <div className="grid gap-3 md:grid-cols-2">
           <Input
             placeholder={`بحث في ${labels.routeLabel}...`}
@@ -342,7 +570,7 @@ export function RoutesManager() {
         </div>
 
         {loading ? (
-          <div className="text-sm text-muted-foreground">جاري التحميل...</div>
+          <Loading />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -361,9 +589,9 @@ export function RoutesManager() {
                     <td className="p-2">{item.description || "-"}</td>
                     <td className="p-2">{item.isActive ? "مفعّل" : "معطّل"}</td>
                     <td className="p-2 space-x-2 space-x-reverse">
-                      <Button variant="outline" onClick={() => openPreviewForRoute(item._id)}>{"\u0639\u0631\u0636 \u0627\u0644\u0645\u0633\u0627\u0631"}</Button>
-                      <Button variant="outline" onClick={() => openEdit(item)}>{"\u062a\u0639\u062f\u064a\u0644"}</Button>
-                      <Button variant="destructive" onClick={() => remove(item)}>{"\u062d\u0630\u0641"}</Button>
+                      <Button variant="outline" onClick={() => openEdit(item)}>عرض المسار</Button>
+                      <Button variant="outline" onClick={() => openEdit(item)}>تعديل</Button>
+                      <Button variant="destructive" onClick={() => remove(item)}>حذف</Button>
                     </td>
                   </tr>
                 ))}
@@ -389,7 +617,7 @@ export function RoutesManager() {
       </CardContent>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="text-right w-[95vw] max-w-6xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="text-right w-[90vw] max-w-7xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editing ? `تعديل ${labels.routeLabel}` : `إضافة ${labels.routeLabel}`}</DialogTitle>
           </DialogHeader>
@@ -406,6 +634,22 @@ export function RoutesManager() {
               </div>
             </div>
 
+            <div>
+              <Label>المركبة (اختياري)</Label>
+              <Select value={formVehicleId || "none"} onValueChange={(v) => setFormVehicleId(v === "none" ? "" : v)}>
+                <SelectTrigger className="text-right">
+                  <SelectValue placeholder="بدون مركبة" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">بدون مركبة</SelectItem>
+                  {vehicles.map((v) => (
+                    <SelectItem key={v._id} value={v._id}>{v.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground mt-1">يمكنك ربط المسار بمركبة عند الحفظ؛ ستظهر تكلفة الوقود حسب المركبة أدناه.</p>
+            </div>
+
             <div className="grid gap-4 lg:grid-cols-2">
               <div className="border rounded-lg p-3 space-y-3">
                 <div className="font-medium">النقاط المتاحة</div>
@@ -416,7 +660,9 @@ export function RoutesManager() {
                 />
 
                 {pointsLoading ? (
-                  <div className="text-sm text-muted-foreground">جاري تحميل {labels.pointLabel}...</div>
+                  <div className="min-h-[200px] flex items-center justify-center border rounded-lg">
+                    <Loading text={`جاري تحميل ${labels.pointLabel}...`} className="min-h-0 p-4" />
+                  </div>
                 ) : (
                   <div className="max-h-[320px] overflow-y-auto border rounded-lg">
                     {availablePoints.map((point) => (
@@ -460,36 +706,102 @@ export function RoutesManager() {
               <span>مفعّل</span>
               <Switch checked={!!form.isActive} onCheckedChange={(checked) => setForm({ ...form, isActive: checked })} />
             </div>
+
+            {orderedRoutePoints.length >= 2 && (
+              <div className="border-t pt-4 space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="text-sm font-medium">معاينة المسار على الخريطة</div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setMapSelectMode((m) => (m === "start" ? null : "start"))}
+                      className={mapSelectMode === "start" ? "ring-2 ring-primary" : ""}
+                    >
+                      {startPointId ? `البداية: ${pointMap.get(startPointId)?.nameAr || pointMap.get(startPointId)?.name || startPointId}` : "اختر البداية من الخريطة"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setMapSelectMode((m) => (m === "end" ? null : "end"))}
+                      className={mapSelectMode === "end" ? "ring-2 ring-primary" : ""}
+                    >
+                      {endPointId ? `النهاية: ${pointMap.get(endPointId)?.nameAr || pointMap.get(endPointId)?.name || endPointId}` : "اختر النهاية من الخريطة"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="default"
+                      size="sm"
+                      onClick={runOptimalOrder}
+                      disabled={optimalOrderLoading}
+                    >
+                      {optimalOrderLoading ? "جاري الحساب..." : "الترتيب الأمثل للنقاط"}
+                    </Button>
+                  </div>
+                </div>
+                {inlinePreviewLoading ? (
+                  <div className="h-[50vh] rounded-lg border bg-muted/50 flex items-center justify-center">
+                    <Loading text="جاري تحديث المسار..." className="min-h-0" />
+                  </div>
+                ) : inlinePreviewData ? (
+                  <div className="space-y-1">
+                    <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                      <span>مصدر المسار: {inlinePreviewData.source === "osrm" ? "حسب الطرق" : "خط مباشر"}</span>
+                      {inlinePreviewData.distanceKm != null && (
+                        <span>المسافة: {inlinePreviewData.distanceKm.toFixed(2)} كم</span>
+                      )}
+                      {inlinePreviewData.distanceKm != null && currentBranch && (currentBranch.fuelPricePerKmGasoline != null || currentBranch.fuelPricePerKmDiesel != null) && (
+                        <span className="text-foreground">
+                          تكلفة تقديرية (الفرع):{" "}
+                          {currentBranch.fuelPricePerKmGasoline != null && (
+                            <>بنزين: {(inlinePreviewData.distanceKm * currentBranch.fuelPricePerKmGasoline).toFixed(0)} ل.س</>
+                          )}
+                          {currentBranch.fuelPricePerKmGasoline != null && currentBranch.fuelPricePerKmDiesel != null && " / "}
+                          {currentBranch.fuelPricePerKmDiesel != null && (
+                            <>مازوت: {(inlinePreviewData.distanceKm * currentBranch.fuelPricePerKmDiesel).toFixed(0)} ل.س</>
+                          )}
+                        </span>
+                      )}
+                      {inlinePreviewData.distanceKm != null && formVehicleId && (() => {
+                        const vehicle = vehicles.find((v) => v._id === formVehicleId)
+                        if (!vehicle) return null
+                        const pricePerKm = vehicle.fuelPricePerKm != null && vehicle.fuelPricePerKm > 0
+                          ? vehicle.fuelPricePerKm
+                          : (vehicle.fuelType === "diesel"
+                            ? currentBranch?.fuelPricePerKmDiesel
+                            : currentBranch?.fuelPricePerKmGasoline)
+                        if (pricePerKm == null) return null
+                        const cost = inlinePreviewData.distanceKm! * pricePerKm
+                        return (
+                          <span className="text-foreground font-medium">
+                            تكلفة الوقود (المركبة المختارة): {cost.toFixed(0)} ل.س
+                          </span>
+                        )
+                      })()}
+                    </div>
+                    <RoutePreviewMap
+                      points={inlinePreviewData.points}
+                      geometry={inlinePreviewData.geometry}
+                      interactive={true}
+                      onPointSelect={handleMapPointSelect}
+                      selectedStartId={startPointId}
+                      selectedEndId={endPointId}
+                    />
+                  </div>
+                ) : (
+                  <div className="h-[40vh] rounded-lg border bg-muted/30 flex items-center justify-center text-sm text-muted-foreground">
+                    أضف نقطتين أو أكثر لرؤية المعاينة
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <DialogFooter className="flex-row-reverse gap-2">
             <Button variant="outline" onClick={() => setOpen(false)}>إلغاء</Button>
             <Button onClick={submit}>{editing ? "تحديث" : "إضافة"}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-        <DialogContent className="text-right w-[95vw] max-w-6xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>معاينة المسار على الخريطة</DialogTitle>
-          </DialogHeader>
-
-          {previewLoading ? (
-            <div className="text-sm text-muted-foreground">جاري توليد المسار...</div>
-          ) : previewData ? (
-            <div className="space-y-3">
-              <div className="text-sm text-muted-foreground">
-                مصدر المسار: {previewData.source === "osrm" ? "حسب الطرق" : "خط مباشر"}
-              </div>
-              <RoutePreviewMap points={previewData.points} geometry={previewData.geometry} />
-            </div>
-          ) : (
-            <div className="text-sm text-muted-foreground">لا توجد بيانات للمعاينة.</div>
-          )}
-
-          <DialogFooter className="flex-row-reverse">
-            <Button variant="outline" onClick={() => setPreviewOpen(false)}>إغلاق</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

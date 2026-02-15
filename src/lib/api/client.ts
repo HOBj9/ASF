@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Unified API Client
  * Centralized API client with interceptors and error handling
  */
@@ -138,6 +138,28 @@ class ApiClient {
       if (error instanceof Error) {
         throw error
       }
+      throw new Error('حدث خطأ في الشبكة')
+    }
+  }
+
+  /**
+   * POST request with FormData (e.g. file upload). Does not set Content-Type so browser sets multipart boundary.
+   */
+  async postFormData<T = any>(
+    endpoint: string,
+    formData: FormData,
+    options?: RequestInit
+  ): Promise<ApiResponse<T>> {
+    try {
+      const response = await fetch(this.getUrl(endpoint), {
+        method: 'POST',
+        body: formData,
+        credentials: 'include',
+        ...options,
+      })
+      return await this.handleResponse<T>(response)
+    } catch (error) {
+      if (error instanceof Error) throw error
       throw new Error('حدث خطأ في الشبكة')
     }
   }

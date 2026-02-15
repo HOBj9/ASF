@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
@@ -8,7 +8,7 @@ import { Maximize2, BusFront, MapPin, Hexagon, CarFront, X } from "lucide-react"
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Skeleton } from "@/components/ui/skeleton";
+import { LoadingOverlay } from "@/components/ui/loading";
 import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
 import markerIcon from "leaflet/dist/images/marker-icon.png";
 import markerShadow from "leaflet/dist/images/marker-shadow.png";
@@ -21,6 +21,17 @@ type MapPoint = {
   lng: number;
   radiusMeters?: number;
   type?: string;
+  zoneId?: string;
+  addressText?: string;
+  isActive?: boolean;
+};
+
+type AtharMarker = {
+  id: string;
+  lat: number;
+  lng: number;
+  name?: string;
+  icon?: string;
 };
 
 type LiveVehicle = {
@@ -98,6 +109,21 @@ L.Icon.Default.mergeOptions({
   shadowUrl: markerShadow.src,
 });
 
+/** Leaflet icon from Athar marker icon URL (e.g. SVG from API) */
+function getAtharMarkerIcon(iconUrl: string | undefined): L.Icon | L.DivIcon | undefined {
+  if (!iconUrl || !iconUrl.trim()) return undefined;
+  try {
+    return L.icon({
+      iconUrl,
+      iconSize: [32, 32],
+      iconAnchor: [16, 32],
+      popupAnchor: [0, -32],
+    });
+  } catch {
+    return undefined;
+  }
+}
+
 function getBusIcon(status: LiveVehicle["status"], heading: number) {
   const bgColor = status === "moving" ? "#16a34a" : status === "stopped" ? "#f59e0b" : "#6b7280";
   return L.divIcon({
@@ -161,9 +187,12 @@ export function MunicipalityMap({
   routes = [],
   zones = [],
   points,
+  atharMarkers = [],
   activeTab,
   onTabChange,
   tabLoading = {},
+  showZonesWithPoints = false,
+  onToggleMapView,
 }: {
   municipality: MunicipalityInfo | null;
   liveVehicles?: LiveVehicle[];
@@ -172,15 +201,27 @@ export function MunicipalityMap({
   routes?: RouteSummary[];
   zones?: MapZone[];
   points: MapPoint[];
+  atharMarkers?: AtharMarker[];
   activeTab: MapTab;
   onTabChange: (tab: MapTab) => void;
   tabLoading?: Partial<Record<MapTab, boolean>>;
+  showZonesWithPoints?: boolean;
+  onToggleMapView?: () => void;
 }) {
   const [fullscreenOpen, setFullscreenOpen] = useState(false);
   const [objectsPanelOpen, setObjectsPanelOpen] = useState(false);
   const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null);
+  const [selectedPoint, setSelectedPoint] = useState<MapPoint | null>(null);
+  const [selectedMarker, setSelectedMarker] = useState<AtharMarker | null>(null);
+  const [selectedZone, setSelectedZone] = useState<MapZone | null>(null);
   const mapRef = useRef<L.Map | null>(null);
   const currentTabLoading = !!tabLoading[activeTab];
+  const pointDetailsPanelOpen = selectedPoint != null || selectedMarker != null;
+
+  const zonesVisible = activeTab === "zones" || (activeTab === "points" && showZonesWithPoints);
+  useEffect(() => {
+    if (!zonesVisible) setSelectedZone(null);
+  }, [activeTab, showZonesWithPoints, zonesVisible]);
 
   const visibleLiveVehicles = useMemo(
     () => liveVehicles.filter((v) => Array.isArray(v.coordinates) && v.coordinates.length === 2),
@@ -233,6 +274,10 @@ export function MunicipalityMap({
     if (activeTab !== "objects") {
       setObjectsPanelOpen(false);
     }
+    if (activeTab !== "points") {
+      setSelectedPoint(null);
+      setSelectedMarker(null);
+    }
   }, [activeTab]);
 
   useEffect(() => {
@@ -277,8 +322,9 @@ export function MunicipalityMap({
     if (activeTab === "live" && visibleLiveVehicles.length > 0) {
       return visibleLiveVehicles[0].coordinates as [number, number];
     }
-    if (activeTab === "points" && points.length > 0) {
-      return [points[0].lat, points[0].lng] as [number, number];
+    if (activeTab === "points") {
+      if (points.length > 0) return [points[0].lat, points[0].lng] as [number, number];
+      if (atharMarkers.length > 0) return [atharMarkers[0].lat, atharMarkers[0].lng] as [number, number];
     }
     if (activeTab === "zones" && zones.length > 0 && zones[0].center) {
       return [zones[0].center.lat, zones[0].center.lng] as [number, number];
@@ -288,7 +334,7 @@ export function MunicipalityMap({
       if (objectWithCoords) return [Number(objectWithCoords.lat), Number(objectWithCoords.lng)] as [number, number];
     }
     return defaultCenter;
-  }, [municipality, activeTab, visibleLiveVehicles, points, zones, atharObjects]);
+  }, [municipality, activeTab, visibleLiveVehicles, points, atharMarkers, zones, atharObjects]);
 
   const renderMap = (heightClass: string, attachRef = false) => (
     <div className={`${heightClass} w-full overflow-hidden rounded-2xl border bg-background`}>
@@ -363,7 +409,16 @@ export function MunicipalityMap({
             const radius = Number(point.radiusMeters) || 500;
             if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
             return (
-              <Marker key={pointId} position={[lat, lng]}>
+              <Marker
+                key={pointId}
+                position={[lat, lng]}
+                eventHandlers={{
+                  click: () => {
+                    setSelectedPoint(point);
+                    setSelectedMarker(null);
+                  },
+                }}
+              >
                 <Popup>
                   <div className="text-right">
                     <div className="font-semibold">{point.nameAr || point.name || "نقطة"}</div>
@@ -371,6 +426,36 @@ export function MunicipalityMap({
                       {pointTypeLabels[point.type || ""] || point.type || "نقطة"}
                     </div>
                     <div className="text-xs text-muted-foreground">نصف القطر: {radius} م</div>
+                    <div className="text-xs text-muted-foreground mt-1">اضغط للتوسع في التفاصيل</div>
+                  </div>
+                </Popup>
+              </Marker>
+            );
+          })}
+
+        {activeTab === "points" &&
+          atharMarkers.map((marker) => {
+            const lat = Number(marker.lat);
+            const lng = Number(marker.lng);
+            if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+            const customIcon = getAtharMarkerIcon(marker.icon);
+            return (
+              <Marker
+                key={`marker-${marker.id}`}
+                position={[lat, lng]}
+                icon={customIcon ?? undefined}
+                eventHandlers={{
+                  click: () => {
+                    setSelectedMarker(marker);
+                    setSelectedPoint(null);
+                  },
+                }}
+              >
+                <Popup>
+                  <div className="text-right">
+                    <div className="font-semibold">{marker.name || `نقطة أثر ${marker.id}`}</div>
+                    <div className="text-xs text-muted-foreground">نقطة من أثر</div>
+                    <div className="text-xs text-muted-foreground mt-1">اضغط للتوسع في التفاصيل</div>
                   </div>
                 </Popup>
               </Marker>
@@ -394,7 +479,7 @@ export function MunicipalityMap({
             );
           })}
 
-        {activeTab === "zones" &&
+        {(activeTab === "zones" || (activeTab === "points" && showZonesWithPoints)) &&
           zones.map((zone) => {
             const positions = zone.vertices.map((v) => [v.lat, v.lng]) as Array<[number, number]>;
             if (positions.length < 3) return null;
@@ -404,6 +489,7 @@ export function MunicipalityMap({
                 key={`zone-${zone.id}`}
                 positions={positions}
                 pathOptions={{ color, weight: 2, fillColor: color, fillOpacity: 0.12 }}
+                eventHandlers={{ click: () => setSelectedZone(zone) }}
               >
                 <Popup>
                   <div className="text-right">
@@ -494,6 +580,24 @@ export function MunicipalityMap({
         {renderTabSwitcher("w-full max-w-xl")}
       </div>
 
+      {activeTab === "points" && (
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <span className="text-xs text-muted-foreground">
+            اضغط على أي نقطة أو علامة لعرض التفاصيل في القسم من اليمين
+          </span>
+          <div className="flex items-center gap-2">
+            {onToggleMapView && (
+              <Button variant="outline" size="sm" onClick={onToggleMapView}>
+                {showZonesWithPoints ? "عرض النقاط فقط" : "عرض النقاط والمناطق"}
+              </Button>
+            )}
+            <span className="text-xs text-muted-foreground">
+              نقاط النظام: {points.length} • نقاط أثر: {atharMarkers.length}
+            </span>
+          </div>
+        </div>
+      )}
+
       {activeTab === "objects" && (
         <div className="flex items-center justify-between gap-3">
           <Button
@@ -511,21 +615,180 @@ export function MunicipalityMap({
         </div>
       )}
 
-      <div className={`relative ${activeTab === "objects" && objectsPanelOpen ? "lg:flex lg:gap-4" : ""}`}>
+      <div
+        className={`relative ${
+          (activeTab === "objects" && objectsPanelOpen) ||
+          (activeTab === "points" && pointDetailsPanelOpen) ||
+          (zonesVisible && selectedZone != null)
+            ? "lg:flex lg:gap-4"
+            : ""
+        }`}
+      >
         <div
-          className={`${activeTab === "objects" && objectsPanelOpen ? "lg:order-2 lg:flex-1" : ""} relative`}
+          className={`${
+            (activeTab === "objects" && objectsPanelOpen) ||
+            (activeTab === "points" && pointDetailsPanelOpen) ||
+            (zonesVisible && selectedZone != null)
+              ? "lg:order-2 lg:flex-1"
+              : ""
+          } relative`}
         >
           {renderMap("h-[520px]", true)}
           {currentTabLoading && (
-            <div className="absolute inset-0 z-[500] flex items-center justify-center rounded-2xl bg-background/70 backdrop-blur-[1px]">
-              <div className="w-full max-w-md space-y-3 px-6">
-                <Skeleton className="h-5 w-32 mx-auto" />
-                <Skeleton className="h-4 w-full" />
-                <Skeleton className="h-4 w-4/5 mx-auto" />
-              </div>
+            <div className="absolute inset-0 z-[500] rounded-2xl">
+              <LoadingOverlay />
             </div>
           )}
         </div>
+
+        {activeTab === "points" && pointDetailsPanelOpen && (
+          <aside className="mt-3 rounded-2xl border bg-background p-3 text-right shadow-sm lg:order-1 lg:mt-0 lg:w-[340px]">
+            <div className="flex items-center justify-between">
+              <div className="text-sm text-muted-foreground">تفاصيل النقطة</div>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => {
+                  setSelectedPoint(null);
+                  setSelectedMarker(null);
+                }}
+                title="إغلاق"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+
+            <div className="mt-3 max-h-52 overflow-y-auto space-y-1 pr-1">
+              {points.map((point) => {
+                const pointId = point._id != null ? String(point._id) : `${point.lat}-${point.lng}`;
+                const selId = selectedPoint != null ? (selectedPoint._id != null ? String(selectedPoint._id) : `${selectedPoint.lat}-${selectedPoint.lng}`) : "";
+                const isSelected = selectedPoint != null && pointId === selId;
+                return (
+                  <button
+                    key={pointId}
+                    type="button"
+                    onClick={() => {
+                      setSelectedPoint(point);
+                      setSelectedMarker(null);
+                    }}
+                    className={`w-full rounded-md border px-2 py-2 text-xs transition text-right ${
+                      isSelected ? "bg-primary/10 border-primary/40 text-foreground" : "hover:bg-muted"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-muted-foreground">
+                        {Number(point.lat).toFixed(5)}, {Number(point.lng).toFixed(5)}
+                      </span>
+                      <span className="font-medium">{point.nameAr || point.name || "نقطة نظام"}</span>
+                    </div>
+                  </button>
+                );
+              })}
+              {atharMarkers.map((marker) => {
+                const isSelected = selectedMarker?.id === marker.id;
+                return (
+                  <button
+                    key={`marker-${marker.id}`}
+                    type="button"
+                    onClick={() => {
+                      setSelectedMarker(marker);
+                      setSelectedPoint(null);
+                    }}
+                    className={`w-full rounded-md border px-2 py-2 text-xs transition text-right ${
+                      isSelected ? "bg-primary/10 border-primary/40 text-foreground" : "hover:bg-muted"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-muted-foreground">
+                        {Number(marker.lat).toFixed(5)}, {Number(marker.lng).toFixed(5)}
+                      </span>
+                      <span className="font-medium">{marker.name || `نقطة أثر ${marker.id}`}</span>
+                    </div>
+                  </button>
+                );
+              })}
+              {points.length === 0 && atharMarkers.length === 0 && (
+                <div className="text-xs text-muted-foreground">لا توجد نقاط أو علامات.</div>
+              )}
+            </div>
+
+            {selectedPoint ? (
+              <div className="mt-4 border-t pt-3 space-y-2">
+                <div className="font-semibold">{selectedPoint.nameAr || selectedPoint.name || "نقطة"}</div>
+                <div className="grid gap-2 text-[11px] text-muted-foreground">
+                  <div>النوع: {pointTypeLabels[selectedPoint.type || ""] || selectedPoint.type || "—"}</div>
+                  <div>خط العرض: {Number(selectedPoint.lat).toFixed(6)}</div>
+                  <div>خط الطول: {Number(selectedPoint.lng).toFixed(6)}</div>
+                  <div>نصف القطر: {Number(selectedPoint.radiusMeters) || 500} م</div>
+                  {selectedPoint.zoneId && <div>معرف المنطقة: {selectedPoint.zoneId}</div>}
+                  {selectedPoint.addressText && <div>العنوان: {selectedPoint.addressText}</div>}
+                  {selectedPoint._id != null && <div>المعرف: {String(selectedPoint._id)}</div>}
+                </div>
+              </div>
+            ) : selectedMarker ? (
+              <div className="mt-4 border-t pt-3 space-y-2">
+                <div className="font-semibold">{selectedMarker.name || `نقطة أثر ${selectedMarker.id}`}</div>
+                <div className="grid gap-2 text-[11px] text-muted-foreground">
+                  <div>المعرف في أثر: {selectedMarker.id}</div>
+                  <div>خط العرض: {Number(selectedMarker.lat).toFixed(6)}</div>
+                  <div>خط الطول: {Number(selectedMarker.lng).toFixed(6)}</div>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-4 text-xs text-muted-foreground">اختر نقطة أو علامة لعرض التفاصيل.</div>
+            )}
+          </aside>
+        )}
+
+        {zonesVisible && selectedZone != null && (
+          <aside className="mt-3 rounded-2xl border bg-background p-3 text-right shadow-sm lg:order-1 lg:mt-0 lg:w-[340px]">
+            <div className="flex items-center justify-between">
+              <div className="text-sm text-muted-foreground">تفاصيل المنطقة</div>
+              <Button variant="ghost" size="icon" onClick={() => setSelectedZone(null)} title="إغلاق">
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <div className="mt-3 space-y-2">
+              <div className="font-semibold">{selectedZone.name}</div>
+              <div className="grid gap-2 text-[11px] text-muted-foreground">
+                <div>المعرف: {selectedZone.id}</div>
+                {selectedZone.color && (
+                  <div className="flex items-center gap-2">
+                    <span>اللون:</span>
+                    <span
+                      className="inline-block h-4 w-4 rounded border border-border"
+                      style={{ backgroundColor: selectedZone.color }}
+                      title={selectedZone.color}
+                    />
+                    <span>{selectedZone.color}</span>
+                  </div>
+                )}
+                {selectedZone.center && (
+                  <>
+                    <div>خط العرض (المركز): {selectedZone.center.lat.toFixed(6)}</div>
+                    <div>خط الطول (المركز): {selectedZone.center.lng.toFixed(6)}</div>
+                  </>
+                )}
+                <div>عدد الرؤوس: {selectedZone.vertices?.length ?? 0}</div>
+                {selectedZone.vertices && selectedZone.vertices.length > 0 && (
+                  <div className="pt-1">
+                    <div className="text-muted-foreground mb-1">قائمة الرؤوس (أول 5):</div>
+                    <ul className="list-disc list-inside text-[10px] space-y-0.5">
+                      {(selectedZone.vertices.slice(0, 5) as Array<{ lat: number; lng: number }>).map((v, i) => (
+                        <li key={i}>
+                          {v.lat.toFixed(5)}, {v.lng.toFixed(5)}
+                        </li>
+                      ))}
+                    </ul>
+                    {selectedZone.vertices.length > 5 && (
+                      <div className="text-[10px] text-muted-foreground mt-1">وغيرها ({selectedZone.vertices.length - 5} رأس)</div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          </aside>
+        )}
 
         {activeTab === "objects" && objectsPanelOpen && (
           <aside className="mt-3 rounded-2xl border bg-background p-3 text-right shadow-sm lg:order-1 lg:mt-0 lg:w-[340px]">
@@ -644,7 +907,7 @@ export function MunicipalityMap({
                   <DialogTitle className="text-lg">الخريطة التفاعلية</DialogTitle>
                   <div className="text-xs text-muted-foreground mt-1">
                     {activeTab === "live" && `مركبات مباشرة: ${visibleLiveVehicles.length}`}
-                    {activeTab === "points" && `نقاط أثر: ${points.length}`}
+                    {activeTab === "points" && `نقاط: ${points.length} • نقاط أثر: ${atharMarkers.length}`}
                     {activeTab === "zones" && `مناطق أثر: ${zones.length}`}
                     {activeTab === "objects" && `سيارات أثر: ${atharObjects.length}`}
                   </div>
@@ -656,12 +919,8 @@ export function MunicipalityMap({
             <div className="relative flex-1 p-3">
               {renderMap("h-full")}
               {currentTabLoading && (
-                <div className="absolute inset-3 z-[500] flex items-center justify-center rounded-2xl bg-background/70 backdrop-blur-[1px]">
-                  <div className="w-full max-w-md space-y-3 px-6">
-                    <Skeleton className="h-5 w-32 mx-auto" />
-                    <Skeleton className="h-4 w-full" />
-                    <Skeleton className="h-4 w-4/5 mx-auto" />
-                  </div>
+                <div className="absolute inset-3 z-[500] rounded-2xl">
+                  <LoadingOverlay />
                 </div>
               )}
             </div>
