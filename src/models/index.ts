@@ -1,4 +1,4 @@
-﻿// Import all models to ensure they are registered
+// Import all models to ensure they are registered
 import './Permission'
 import './Role'
 import './User'
@@ -19,6 +19,8 @@ import './MaterialAttributeDefinition'
 import './MaterialAttributeValue'
 import './MaterialStock'
 import './MaterialTransaction'
+import './Survey'
+import './SurveySubmission'
 
 // Re-export for convenience
 export { default as Permission } from './Permission'
@@ -41,6 +43,8 @@ export { default as MaterialAttributeDefinition } from './MaterialAttributeDefin
 export { default as MaterialAttributeValue } from './MaterialAttributeValue'
 export { default as MaterialStock } from './MaterialStock'
 export { default as MaterialTransaction } from './MaterialTransaction'
+export { default as Survey } from './Survey'
+export { default as SurveySubmission } from './SurveySubmission'
 
 export type { IPermission } from './Permission'
 export type { IRole } from './Role'
@@ -62,4 +66,6 @@ export type { IMaterialAttributeDefinition } from './MaterialAttributeDefinition
 export type { IMaterialAttributeValue } from './MaterialAttributeValue'
 export type { IMaterialStock } from './MaterialStock'
 export type { IMaterialTransaction } from './MaterialTransaction'
+export type { ISurvey } from './Survey'
+export type { ISurveySubmission } from './SurveySubmission'
 

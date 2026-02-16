@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Fresh Database Script
  *
  * Syncs indexes and ensures default values without deleting data.
@@ -31,6 +31,8 @@ import MaterialAttributeDefinition from "../src/models/MaterialAttributeDefiniti
 import MaterialAttributeValue from "../src/models/MaterialAttributeValue"
 import MaterialStock from "../src/models/MaterialStock"
 import MaterialTransaction from "../src/models/MaterialTransaction"
+import Survey from "../src/models/Survey"
+import SurveySubmission from "../src/models/SurveySubmission"
 
 import { defaultPermissions, defaultRoles } from "../src/constants/permissions"
 
@@ -61,6 +63,8 @@ const models: ModelInfo[] = [
   { name: "MaterialAttributeValue", model: MaterialAttributeValue, collection: "materialattributevalues" },
   { name: "MaterialStock", model: MaterialStock, collection: "materialstocks" },
   { name: "MaterialTransaction", model: MaterialTransaction, collection: "materialtransactions" },
+  { name: "Survey", model: Survey, collection: "surveys" },
+  { name: "SurveySubmission", model: SurveySubmission, collection: "surveysubmissions" },
 ]
 
 async function syncIndexes(modelInfo: ModelInfo): Promise<number> {
@@ -136,21 +140,42 @@ async function syncPermissions(): Promise<{ created: number; updated: number }> 
   return { created, updated }
 }
 
-async function syncRoles(): Promise<number> {
+async function syncRoles(): Promise<{ created: number; updated: number }> {
+  let created = 0
   let updated = 0
   const allPermissions = await Permission.find({}).lean()
-  const permissionsMap = new Map(allPermissions.map((p: any) => [p.name, p._id.toString()]))
+  const permissionsMap = new Map(allPermissions.map((p: any) => [p.name, p._id]))
 
   const roleDefs = Object.values(defaultRoles)
   for (const roleDef of roleDefs) {
-    const role = await Role.findOne({ name: roleDef.name })
-    if (!role) continue
+    let role = await Role.findOne({ name: roleDef.name })
+
+    if (!role) {
+      if (roleDef.name === defaultRoles.superAdmin.name) {
+        role = await Role.create({
+          name: roleDef.name,
+          nameAr: roleDef.nameAr,
+          permissions: allPermissions.map((p: any) => p._id),
+        })
+      } else {
+        const permissionIds = (roleDef.permissions || [])
+          .map((name: string) => permissionsMap.get(name))
+          .filter(Boolean)
+        role = await Role.create({
+          name: roleDef.name,
+          nameAr: roleDef.nameAr,
+          permissions: permissionIds,
+        })
+      }
+      created++
+      continue
+    }
 
     if (roleDef.name === defaultRoles.superAdmin.name) {
       const manageAllPerm = permissionsMap.get("manage_all")
       if (manageAllPerm) {
         const currentPerms = (role.permissions || []).map((p: any) => p.toString())
-        if (!currentPerms.includes(manageAllPerm)) {
+        if (!currentPerms.includes(manageAllPerm.toString())) {
           role.permissions = allPermissions.map((p: any) => p._id)
           await role.save()
           updated++
@@ -161,20 +186,21 @@ async function syncRoles(): Promise<number> {
 
     const permissionIds = (roleDef.permissions || [])
       .map((name: string) => permissionsMap.get(name))
-      .filter(Boolean) as string[]
+      .filter(Boolean) as any[]
 
     if (permissionIds.length > 0) {
       const currentPerms = (role.permissions || []).map((p: any) => p.toString())
-      const missingPerms = permissionIds.filter((id) => !currentPerms.includes(id))
+      const expectedIds = new Set(permissionIds.map((id: any) => id.toString()))
+      const missingPerms = [...expectedIds].filter((id) => !currentPerms.includes(id))
       if (missingPerms.length > 0) {
-        role.permissions = [...new Set([...currentPerms, ...permissionIds])]
+        role.permissions = permissionIds
         await role.save()
         updated++
       }
     }
   }
 
-  return updated
+  return { created, updated }
 }
 
 async function fresh() {
@@ -187,9 +213,9 @@ async function fresh() {
       console.log(`Permissions: created ${permResult.created}, updated ${permResult.updated}`)
     }
 
-    const roleUpdated = await syncRoles()
-    if (roleUpdated) {
-      console.log(`Roles updated: ${roleUpdated}`)
+    const roleResult = await syncRoles()
+    if (roleResult.created || roleResult.updated) {
+      console.log(`Roles: created ${roleResult.created}, updated ${roleResult.updated}`)
     }
 
     let totalIndexes = 0

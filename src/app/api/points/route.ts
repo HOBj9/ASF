@@ -68,6 +68,7 @@ export async function POST(request: Request) {
       zoneId,
       addressText,
       isActive: isActive ?? true,
+      createdByUserId: session?.user?.id ?? null,
     });
 
     const vehicles = await Vehicle.find({

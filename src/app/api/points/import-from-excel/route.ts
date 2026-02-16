@@ -114,6 +114,7 @@ export async function POST(request: Request) {
           radiusMeters: 500,
           type: 'container',
           isActive: true,
+          createdByUserId: session?.user?.id ?? null,
         });
         imported += 1;
       } catch (err: any) {

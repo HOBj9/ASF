@@ -23,14 +23,14 @@ export default async function MaterialsPage() {
   return (
     <div className="text-right">
       <div className="mb-6 lg:mb-8">
-        <h1 className="text-2xl lg:text-3xl font-bold">????? ??????</h1>
-        <p className="text-muted-foreground mt-2">????? ????????? ??????? ???????? ??????????.</p>
+        <h1 className="text-2xl lg:text-3xl font-bold">المواد والمخزون</h1>
+        <p className="text-muted-foreground mt-2">إدارة تصنيفات المواد والرصيد والنقل بين النقاط.</p>
       </div>
       <Tabs defaultValue="catalog" className="space-y-4">
         <TabsList>
-          <TabsTrigger value="catalog">???????? ???????</TabsTrigger>
-          <TabsTrigger value="stock">???????</TabsTrigger>
-          <TabsTrigger value="transfers">?????????</TabsTrigger>
+          <TabsTrigger value="catalog">الكتالوج والتصنيفات</TabsTrigger>
+          <TabsTrigger value="stock">المخزون</TabsTrigger>
+          <TabsTrigger value="transfers">التحويلات</TabsTrigger>
         </TabsList>
         <TabsContent value="catalog">
           <MaterialsManager />

@@ -28,7 +28,9 @@ export default async function DashboardPage() {
   return (
     <div className="text-right">
       <div className="mb-6 lg:mb-8">
-        <h1 className="text-2xl lg:text-3xl font-bold">مرحباً، {session.user.name}</h1>
+        <h1 className="text-2xl lg:text-3xl font-bold">
+          مرحباً، {session.user.name && !/^[\s?]+$/.test(String(session.user.name).trim()) ? session.user.name : 'مستخدم'}
+        </h1>
         <p className="text-muted-foreground mt-2">مرحباً بك في لوحة التحكم</p>
       </div>
 

@@ -1,10 +1,10 @@
-﻿import { getServerSession } from "next-auth"
+import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { redirect } from "next/navigation"
 import { VehiclesManager } from "@/components/municipality/vehicles-manager"
 import { hasPermission, isAdmin } from "@/lib/permissions"
 import { permissionActions, permissionResources } from "@/constants/permissions"
-import { getLabelsForSession } from "@/lib/utils/labels.util"
+import { getLabelsForSession } from "@/lib/utils/labels-server.util"
 
 export default async function VehiclesPage() {
   const session = await getServerSession(authOptions)

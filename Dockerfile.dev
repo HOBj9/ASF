@@ -16,5 +16,6 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3036
 ENV HOSTNAME="0.0.0.0"
 
-CMD ["npm", "run", "dev", "--", "-p", "3036", "-H", "0.0.0.0"]
+# Use Turbopack to reduce ChunkLoadError (chunk timeout) in Docker dev
+CMD ["npm", "run", "dev", "--", "--turbo", "-p", "3036", "-H", "0.0.0.0"]
 

@@ -6,6 +6,7 @@
 import connectDB from '@/lib/mongodb';
 import Point, { IPoint, PointType } from '@/models/Point';
 import Branch from '@/models/Branch';
+import Organization from '@/models/Organization';
 
 export interface CreatePointData {
   branchId: string;
@@ -19,6 +20,20 @@ export interface CreatePointData {
   zoneId?: string;
   addressText?: string;
   isActive?: boolean;
+  createdByUserId?: string | null;
+}
+
+export interface CreateOrgPointData {
+  name: string;
+  nameAr?: string;
+  nameEn?: string;
+  type?: PointType;
+  lat: number;
+  lng: number;
+  radiusMeters?: number;
+  addressText?: string;
+  isActive?: boolean;
+  createdByUserId?: string | null;
 }
 
 export interface UpdatePointData {
@@ -63,6 +78,7 @@ export class PointService {
       zoneId: data.zoneId || null,
       addressText: data.addressText || null,
       isActive: data.isActive ?? true,
+      createdByUserId: data.createdByUserId || null,
     });
 
     return point;
@@ -107,6 +123,128 @@ export class PointService {
     await connectDB();
     const deleted = await Point.findOneAndDelete({ _id: id, branchId }).exec();
     return !!deleted;
+  }
+
+  /** Organization-level point: create at organization (branchId null). */
+  async createAtOrganization(organizationId: string, data: CreateOrgPointData): Promise<IPoint> {
+    await connectDB();
+
+    const org = await Organization.findById(organizationId).lean();
+    if (!org) {
+      throw new Error('المؤسسة غير موجودة');
+    }
+
+    const existing = await Point.findOne({
+      organizationId,
+      branchId: null,
+      name: data.name.trim(),
+    }).lean();
+    if (existing) {
+      throw new Error('النقطة موجودة مسبقاً في المؤسسة');
+    }
+
+    const point = await Point.create({
+      organizationId,
+      branchId: null,
+      name: data.name.trim(),
+      nameAr: data.nameAr || null,
+      nameEn: data.nameEn || null,
+      type: data.type || 'container',
+      lat: data.lat,
+      lng: data.lng,
+      radiusMeters: data.radiusMeters ?? 500,
+      zoneId: null,
+      addressText: data.addressText || null,
+      isActive: data.isActive ?? true,
+      createdByUserId: data.createdByUserId || null,
+    });
+
+    return point;
+  }
+
+  /** Get all organization-level points (branchId null). */
+  async getByOrganization(organizationId: string): Promise<IPoint[]> {
+    await connectDB();
+    return Point.find({ organizationId, branchId: null }).lean().exec();
+  }
+
+  /** Get single org-level point by id. */
+  async getOrgPointById(id: string, organizationId: string): Promise<IPoint | null> {
+    await connectDB();
+    return Point.findOne({ _id: id, organizationId, branchId: null }).lean().exec();
+  }
+
+  /**
+   * Clone all organization-level points to a new branch (e.g. on branch creation).
+   */
+  async cloneOrganizationPointsToBranch(organizationId: string, branchId: string): Promise<number> {
+    await connectDB();
+
+    const branch = await Branch.findById(branchId).lean();
+    if (!branch) {
+      throw new Error('الفرع غير موجود');
+    }
+
+    const orgPoints = await Point.find({ organizationId, branchId: null }).lean().exec();
+    if (orgPoints.length === 0) return 0;
+
+    const toInsert = orgPoints.map((p) => ({
+      organizationId: null,
+      branchId,
+      name: p.name,
+      nameAr: p.nameAr || null,
+      nameEn: p.nameEn || null,
+      type: p.type,
+      lat: p.lat,
+      lng: p.lng,
+      radiusMeters: p.radiusMeters ?? 500,
+      zoneId: null,
+      addressText: p.addressText || null,
+      isActive: p.isActive !== false,
+      createdByUserId: (p as any).createdByUserId || null,
+    }));
+
+    await Point.insertMany(toInsert);
+    return toInsert.length;
+  }
+
+  /**
+   * Push one organization-level point to every existing branch of the organization.
+   */
+  async pushPointToAllBranches(organizationId: string, pointId: string): Promise<number> {
+    await connectDB();
+
+    const orgPoint = await Point.findOne({ _id: pointId, organizationId, branchId: null }).lean();
+    if (!orgPoint) {
+      throw new Error('النقطة غير موجودة على مستوى المؤسسة');
+    }
+
+    const branches = await Branch.find({ organizationId, isActive: true }).lean().exec();
+    let created = 0;
+
+    for (const branch of branches) {
+      const bid = branch._id.toString();
+      const exists = await Point.findOne({ branchId: bid, name: orgPoint.name }).lean();
+      if (exists) continue;
+
+      await Point.create({
+        branchId: bid,
+        name: orgPoint.name,
+        nameAr: orgPoint.nameAr || null,
+        nameEn: orgPoint.nameEn || null,
+        type: orgPoint.type,
+        lat: orgPoint.lat,
+        lng: orgPoint.lng,
+        radiusMeters: orgPoint.radiusMeters ?? 500,
+        zoneId: null,
+        addressText: orgPoint.addressText || null,
+        isActive: orgPoint.isActive !== false,
+        createdByUserId: (orgPoint as any).createdByUserId || null,
+      });
+      created++;
+    }
+
+    return created;
   }
 
   /**

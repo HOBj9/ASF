@@ -1,6 +1,7 @@
 import type { Metadata } from "next"
 import { Cairo } from "next/font/google"
 import "./globals.css"
+import "leaflet/dist/leaflet.css"
 import { AppProviders } from "@/components/providers/app-providers"
 
 const cairo = Cairo({ 

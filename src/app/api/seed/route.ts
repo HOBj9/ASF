@@ -83,6 +83,16 @@ export async function POST() {
       permissions: branchUserPerms,
     })
 
+    const lineSupervisorPerms = validPermissions
+      .filter((p: any) => defaultRoles.lineSupervisor.permissions.includes(p.name))
+      .map((p: any) => p._id.toString())
+
+    await roleService.create({
+      name: defaultRoles.lineSupervisor.name,
+      nameAr: defaultRoles.lineSupervisor.nameAr,
+      permissions: lineSupervisorPerms,
+    })
+
     await userService.create({
       name: appConfig.defaultAdmin.name,
       email: appConfig.defaultAdmin.email,

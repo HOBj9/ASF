@@ -4,8 +4,10 @@ import { BranchService } from '@/lib/services/branch.service';
 import { permissionActions, permissionResources } from '@/constants/permissions';
 import { resolveOrganizationId } from '@/lib/utils/organization.util';
 import { cloneOrganizationMaterialTreeToBranch } from '@/lib/services/material-tree.service';
+import { PointService } from '@/lib/services/point.service';
 
 const branchService = new BranchService();
+const pointService = new PointService();
 
 export async function GET(request: Request) {
   try {
@@ -79,6 +81,7 @@ export async function POST(request: Request) {
     try {
       if (organizationId) {
         await cloneOrganizationMaterialTreeToBranch(organizationId, branch._id.toString());
+        await pointService.cloneOrganizationPointsToBranch(organizationId, branch._id.toString());
       }
 
       if (adminUserName && adminUserEmail && adminUserPassword) {

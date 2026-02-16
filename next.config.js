@@ -10,6 +10,11 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
+  // Keep dev pages in buffer longer to reduce ChunkLoadError when Docker compiles slowly
+  onDemandEntries: {
+    maxInactiveAge: 60 * 1000,
+    pagesBufferLength: 5,
+  },
   // Enable file watching in Docker with relaxed intervals to reduce CPU load
   webpack: (config, { isServer }) => {
     config.watchOptions = {

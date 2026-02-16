@@ -1,10 +1,10 @@
-﻿import { getServerSession } from "next-auth"
+import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { redirect } from "next/navigation"
 import { DriversManager } from "@/components/municipality/drivers-manager"
 import { hasPermission, isAdmin } from "@/lib/permissions"
 import { permissionActions, permissionResources } from "@/constants/permissions"
-import { getLabelsForSession } from "@/lib/utils/labels.util"
+import { getLabelsForSession } from "@/lib/utils/labels-server.util"
 
 export default async function DriversPage() {
   const session = await getServerSession(authOptions)

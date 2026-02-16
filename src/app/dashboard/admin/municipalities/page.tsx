@@ -1,10 +1,10 @@
-﻿import { getServerSession } from "next-auth"
+import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { redirect } from "next/navigation"
 import { hasAnyPermission, isAdmin } from "@/lib/permissions"
 import { MunicipalitiesTable } from "@/components/admin/municipalities-table"
 import { permissionActions, permissionResources } from "@/constants/permissions"
-import { getLabelsForSession } from "@/lib/utils/labels.util"
+import { getLabelsForSession } from "@/lib/utils/labels-server.util"
 
 export default async function BranchesPage() {
   const session = await getServerSession(authOptions)

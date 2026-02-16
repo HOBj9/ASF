@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
@@ -17,6 +17,8 @@ import {
   Route,
   FileText,
   Boxes,
+  ClipboardList,
+  MapPinned,
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -74,6 +76,18 @@ function useDashboardNavItems() {
       href: "/dashboard/points",
       icon: MapPin,
       permissions: [{ resource: permissionResources.POINTS, action: permissionActions.READ }],
+    },
+    {
+      title: "نقاط المؤسسة",
+      href: "/dashboard/organization-points",
+      icon: MapPinned,
+      permissions: [{ resource: permissionResources.POINTS, action: permissionActions.READ }],
+    },
+    {
+      title: "الاستبيانات",
+      href: "/dashboard/surveys",
+      icon: ClipboardList,
+      permissions: [{ resource: permissionResources.FORMS, action: permissionActions.READ }],
     },
     {
       title: labels.routeLabel || "المسارات",

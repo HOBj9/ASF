@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Permission Definitions
  * Centralized permission resource and action definitions
  */
@@ -19,6 +19,8 @@ export const permissionResources = {
   MATERIALS: 'materials',
   MATERIAL_CATEGORIES: 'material_categories',
   UNITS: 'units',
+  FORMS: 'forms',
+  FORM_SUBMISSIONS: 'form_submissions',
 } as const;
 
 export const permissionActions = {
@@ -100,10 +102,21 @@ export const defaultPermissions: PermissionDefinition[] = [
   { name: 'units_create', nameAr: 'إنشاء وحدات القياس', resource: permissionResources.UNITS, action: permissionActions.CREATE },
   { name: 'units_update', nameAr: 'تحديث وحدات القياس', resource: permissionResources.UNITS, action: permissionActions.UPDATE },
   { name: 'units_delete', nameAr: 'حذف وحدات القياس', resource: permissionResources.UNITS, action: permissionActions.DELETE },
+  { name: 'forms_read', nameAr: 'قراءة الاستبيانات', resource: permissionResources.FORMS, action: permissionActions.READ },
+  { name: 'forms_create', nameAr: 'إنشاء الاستبيانات', resource: permissionResources.FORMS, action: permissionActions.CREATE },
+  { name: 'forms_update', nameAr: 'تحديث الاستبيانات', resource: permissionResources.FORMS, action: permissionActions.UPDATE },
+  { name: 'forms_delete', nameAr: 'حذف الاستبيانات', resource: permissionResources.FORMS, action: permissionActions.DELETE },
+  { name: 'form_submissions_read', nameAr: 'قراءة إرسالات الاستبيان', resource: permissionResources.FORM_SUBMISSIONS, action: permissionActions.READ },
+  { name: 'form_submissions_create', nameAr: 'إرسال الاستبيان', resource: permissionResources.FORM_SUBMISSIONS, action: permissionActions.CREATE },
 ];
 
 /**
  * Default Roles
+ * - super_admin: كل الصلاحيات (manage_all)
+ * - organization_admin: المؤسسة والفروع والمستخدمون + الاستبيانات + نقاط المؤسسة + المواد والوحدات (بدون إدارة أدوار النظام)
+ * - line_supervisor: قراءة الاستبيانات + إرسال الاستبيان + قراءة النقاط (للمؤسسة)
+ * - branch_admin: إدارة الفرع (مركبات، سائقون، نقاط، مسارات، تقارير، مواد، وحدات)
+ * - branch_user: قراءة فقط (مركبات، سائقون، نقاط، مسارات، تقارير، مواد، وحدات)
  */
 export const defaultRoles = {
   superAdmin: {
@@ -145,6 +158,24 @@ export const defaultRoles = {
       'units_create',
       'units_update',
       'units_delete',
+      'forms_read',
+      'forms_create',
+      'forms_update',
+      'forms_delete',
+      'form_submissions_read',
+      'points_create',
+      'points_update',
+      'points_delete',
+    ],
+  },
+  lineSupervisor: {
+    name: 'line_supervisor',
+    nameAr: 'مشرف الخط',
+    permissions: [
+      'forms_read',
+      'form_submissions_create',
+      'form_submissions_read',
+      'points_read',
     ],
   },
   branchAdmin: {

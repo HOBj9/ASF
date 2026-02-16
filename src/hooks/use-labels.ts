@@ -1,4 +1,5 @@
-﻿import { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { defaultLabels, sanitizeLabels } from '@/lib/utils/labels.util';
 
 export type Labels = {
   branchLabel: string;
@@ -6,14 +7,6 @@ export type Labels = {
   vehicleLabel: string;
   driverLabel: string;
   routeLabel: string;
-};
-
-const defaultLabels: Labels = {
-  branchLabel: 'فرع',
-  pointLabel: 'نقاط',
-  vehicleLabel: 'مركبات',
-  driverLabel: 'سائقين',
-  routeLabel: 'مسارات',
 };
 
 export function useLabels() {
@@ -29,11 +22,10 @@ export function useLabels() {
       .then((data) => {
         if (!active || !data) return;
         if (data.labels) {
-          setLabels({ ...defaultLabels, ...data.labels });
+          setLabels(sanitizeLabels(data.labels));
         }
-        if (data.organizationName) {
-          setOrganizationName(data.organizationName);
-        }
+        const name = data.organizationName;
+        setOrganizationName(name && !/^[\s?]+$/.test(String(name).trim()) ? name : 'المؤسسة');
       })
       .catch(() => null)
       .finally(() => {

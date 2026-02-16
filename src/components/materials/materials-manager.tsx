@@ -695,9 +695,9 @@ export function MaterialsManager() {
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="text-xs text-muted-foreground">??? ?????????: {categories.length}</div>
+            <div className="text-xs text-muted-foreground">عدد التصنيفات: {categories.length}</div>
             <div className="text-xs text-muted-foreground">
-              {selectedCategory ? `??????? ??????: ${selectedCategory.nameAr || selectedCategory.name}` : "????"}
+              {selectedCategory ? `التصنيف المحدد: ${selectedCategory.nameAr || selectedCategory.name}` : "الكل"}
             </div>
           </div>
 
@@ -709,11 +709,11 @@ export function MaterialsManager() {
                 <table className="w-full text-sm">
                   <thead className="sticky top-0 z-10 border-b bg-background/90 backdrop-blur">
                     <tr className="text-right">
-                      <th className="p-2">???????</th>
-                      <th className="p-2 w-[80px] text-center">?????</th>
-                      <th className="p-2 w-[80px] text-center">???????</th>
-                      <th className="p-2 w-[100px] text-center">??????</th>
-                      <th className="p-2 w-[220px] text-center">?????????</th>
+                      <th className="p-2">التصنيف</th>
+                      <th className="p-2 w-[80px] text-center">المستوى</th>
+                      <th className="p-2 w-[80px] text-center">الفروع</th>
+                      <th className="p-2 w-[100px] text-center">الحالة</th>
+                      <th className="p-2 w-[220px] text-center">الإجراءات</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -739,7 +739,7 @@ export function MaterialsManager() {
                               >
                                 {node.nameAr || node.name}
                               </span>
-{node.parentId && <span className="text-[10px] text-muted-foreground">????</span>}
+{node.parentId && <span className="text-[10px] text-muted-foreground">فرعي</span>}
                             </button>
                           </td>
                           <td className="p-2 text-center">{depth}</td>
@@ -753,7 +753,7 @@ export function MaterialsManager() {
                                   : "border-emerald-500/30 text-emerald-300"
                               )}
                             >
-                              {node.isActive === false ? "????" : "????"}
+                              {node.isActive === false ? "غير نشط" : "نشط"}
                             </span>
                           </td>
                           <td className="p-2">
@@ -766,13 +766,13 @@ export function MaterialsManager() {
 setAttributesOpen(true)
 }}
                               >
-                                ?????
+                                الخصائص
                               </Button>
                               <Button variant="outline" size="sm" onClick={() => openEditCategory(node)}>
-                                ?????
+                                تعديل
                               </Button>
                               <Button variant="destructive" size="sm" onClick={() => removeCategory(node)}>
-                                ???
+                                حذف
                               </Button>
                             </div>
                           </td>
@@ -782,7 +782,7 @@ setAttributesOpen(true)
                     {flatCategoryRows.length === 0 && (
                       <tr>
                         <td className="p-4 text-center text-muted-foreground" colSpan={5}>
-                          ?? ???? ??????? ???.
+                          لا توجد تصنيفات بعد.
                         </td>
                       </tr>
                     )}
@@ -808,16 +808,16 @@ setAttributesOpen(true)
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex flex-1 flex-wrap items-center gap-3">
               <Input
-                placeholder={"??? ?????? ?? ?????"}
+                placeholder={"ابحث بالاسم أو الرمز"}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
               <div className="text-xs text-muted-foreground">
-                {selectedCategoryId ? "??? ??????" : "????"}
+                {selectedCategoryId ? "تصفية حسب التصنيف" : "الكل"}
               </div>
             </div>
             <div className="text-xs text-muted-foreground">
-              ??? ??????: {filteredMaterials.length}
+              عدد المواد: {filteredMaterials.length}
             </div>
           </div>
 
@@ -829,12 +829,12 @@ setAttributesOpen(true)
                 <table className="w-full text-sm">
                   <thead className="sticky top-0 z-10 border-b bg-background/90 backdrop-blur">
                     <tr className="text-right">
-                      <th className="p-2">{"?????"}</th>
-                      <th className="p-2 w-[140px]">{"?????"}</th>
-                      <th className="p-2 w-[160px]">{"??????"}</th>
-                      <th className="p-2 w-[120px] text-center">{"?????????"}</th>
-                      <th className="p-2 w-[110px] text-center">{"??????"}</th>
-                      <th className="p-2 w-[160px] text-center">{"?????????"}</th>
+                      <th className="p-2">{"الاسم"}</th>
+                      <th className="p-2 w-[140px]">{"الرمز"}</th>
+                      <th className="p-2 w-[160px]">{"الوحدة"}</th>
+                      <th className="p-2 w-[120px] text-center">{"التصنيفات"}</th>
+                      <th className="p-2 w-[110px] text-center">{"الحالة"}</th>
+                      <th className="p-2 w-[160px] text-center">{"الإجراءات"}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -855,16 +855,16 @@ setAttributesOpen(true)
                                   : "border-emerald-500/30 text-emerald-300"
                               )}
                             >
-                              {item.isActive === false ? "????" : "????"}
+                              {item.isActive === false ? "غير نشط" : "نشط"}
                             </span>
                           </td>
                           <td className="p-2">
                             <div className="flex items-center justify-center gap-2">
                               <Button variant="outline" size="sm" onClick={() => openEditMaterial(item)}>
-                                {"?????"}
+                                {"تعديل"}
                               </Button>
                               <Button variant="destructive" size="sm" onClick={() => removeMaterial(item)}>
-                                {"???"}
+                                {"حذف"}
                               </Button>
                             </div>
                           </td>
@@ -874,7 +874,7 @@ setAttributesOpen(true)
                     {filteredMaterials.length === 0 && (
                       <tr>
                         <td className="p-4 text-center text-muted-foreground" colSpan={6}>
-                          {"?? ???? ???? ???."}
+                          {"لا توجد مواد بعد."}
                         </td>
                       </tr>
                     )}
@@ -931,15 +931,15 @@ setAttributesOpen(true)
           <DialogHeader>
             <DialogTitle>
               {selectedCategory
-                ? `????? ???????: ${selectedCategory.nameAr || selectedCategory.name}`
-                : "????? ???????"}
+                ? `خصائص التصنيف: ${selectedCategory.nameAr || selectedCategory.name}`
+                : "خصائص التصنيف"}
             </DialogTitle>
           </DialogHeader>
           {selectedCategoryId ? (
             <div className="grid gap-4 md:grid-cols-[1.2fr_0.8fr]">
               <div className="space-y-2">
                 {attributes.length === 0 && (
-                  <div className="text-xs text-muted-foreground">?? ????? ???.</div>
+                  <div className="text-xs text-muted-foreground">لا توجد خصائص بعد.</div>
                 )}
                 {attributes.map((attr) => (
                   <div key={attr._id} className="flex items-center justify-between rounded-md border px-2 py-1 text-xs">
@@ -947,16 +947,16 @@ setAttributesOpen(true)
                       {attr.name} ({ATTRIBUTE_TYPES.find((t) => t.value === attr.type)?.label || attr.type})
                     </div>
                     <Button variant="ghost" size="sm" onClick={() => removeAttribute(attr)}>
-                      ???
+                      حذف
                     </Button>
                   </div>
                 ))}
               </div>
 
               <div className="space-y-2 rounded-lg border p-3">
-                <div className="text-sm font-medium">??? ???????</div>
+                <div className="text-sm font-medium">خاصية جديدة</div>
                 <Input
-                  placeholder="??? ???????"
+                  placeholder="اسم الخاصية"
                   value={attributeForm.name}
                   onChange={(e) => setAttributeForm({ ...attributeForm, name: e.target.value })}
                 />
@@ -965,7 +965,7 @@ setAttributesOpen(true)
                   onValueChange={(value) => setAttributeForm({ ...attributeForm, type: value })}
                 >
                   <SelectTrigger className="text-right">
-                    <SelectValue placeholder="??? ???????" />
+                    <SelectValue placeholder="نوع الخاصية" />
                   </SelectTrigger>
                   <SelectContent>
                     {ATTRIBUTE_TYPES.map((type) => (
@@ -977,7 +977,7 @@ setAttributesOpen(true)
                 </Select>
                 {attributeForm.type === "select" && (
                   <Input
-                    placeholder="?????? (?????? ??????)"
+                    placeholder="خيارات (مفصولة بفاصلة)"
                     value={attributeForm.options}
                     onChange={(e) => setAttributeForm({ ...attributeForm, options: e.target.value })}
                   />
@@ -987,10 +987,10 @@ setAttributesOpen(true)
                   onValueChange={(value) => setAttributeForm({ ...attributeForm, unitId: value === "__none__" ? "" : value })}
                 >
                   <SelectTrigger className="text-right">
-                    <SelectValue placeholder="?????? (???????)" />
+                    <SelectValue placeholder="الوحدة (اختياري)" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="__none__">????</SelectItem>
+                    <SelectItem value="__none__">بدون</SelectItem>
                     {units.map((unit) => (
                       <SelectItem key={unit._id} value={unit._id}>
                         {unit.nameAr || unit.name}
@@ -999,17 +999,17 @@ setAttributesOpen(true)
                   </SelectContent>
                 </Select>
                 <div className="flex items-center justify-between rounded-md border px-2 py-1 text-xs">
-                  <span>?????</span>
+                  <span>مطلوب</span>
                   <Switch
                     checked={attributeForm.required}
                     onCheckedChange={(checked) => setAttributeForm({ ...attributeForm, required: checked })}
                   />
                 </div>
-                <Button size="sm" onClick={submitAttribute}>????? ?????</Button>
+                <Button size="sm" onClick={submitAttribute}>إضافة الخاصية</Button>
               </div>
             </div>
           ) : (
-            <div className="text-xs text-muted-foreground">???? ??????? ???? ?? ????? ???????.</div>
+            <div className="text-xs text-muted-foreground">اختر تصنيفاً أولاً لإدارة الخصائص.</div>
           )}
         </DialogContent>
       </Dialog>

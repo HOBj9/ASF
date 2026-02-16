@@ -1,9 +1,11 @@
-﻿import mongoose, { Schema, Document, Model } from 'mongoose';
+import mongoose, { Schema, Document, Model } from 'mongoose';
 
 export type PointType = 'container' | 'station' | 'facility' | 'other';
 
 export interface IPoint extends Document {
-  branchId: mongoose.Types.ObjectId;
+  organizationId?: mongoose.Types.ObjectId | null;
+  branchId?: mongoose.Types.ObjectId | null;
+  createdByUserId?: mongoose.Types.ObjectId | null;
   name: string;
   nameAr?: string;
   nameEn?: string;
@@ -20,10 +22,23 @@ export interface IPoint extends Document {
 
 const PointSchema: Schema = new Schema(
   {
+    organizationId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Organization',
+      default: null,
+      index: true,
+    },
     branchId: {
       type: Schema.Types.ObjectId,
       ref: 'Branch',
-      required: true,
+      required: false,
+      default: null,
+      index: true,
+    },
+    createdByUserId: {
+      type: Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
       index: true,
     },
     name: {
@@ -86,6 +101,20 @@ const PointSchema: Schema = new Schema(
 PointSchema.index({ branchId: 1, name: 1 });
 PointSchema.index({ branchId: 1, zoneId: 1 });
 PointSchema.index({ branchId: 1, lat: 1, lng: 1 });
+PointSchema.index({ organizationId: 1, branchId: 1 });
+
+PointSchema.pre('validate', function (next) {
+  const hasBranch = this.branchId != null && this.branchId.toString() !== '';
+  const hasOrg = this.organizationId != null && this.organizationId.toString() !== '';
+  if (!hasBranch && !hasOrg) {
+    next(new Error('Point must have either branchId or organizationId'));
+    return;
+  }
+  if (hasOrg && !hasBranch) {
+    this.branchId = undefined;
+  }
+  next();
+});
 
 let Point: Model<IPoint>;
 

@@ -1,6 +1,7 @@
-﻿import { NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { requireAuth, handleApiError } from '@/lib/middleware/api-auth.middleware';
 import { resolveOrganizationId } from '@/lib/utils/organization.util';
+import { sanitizeLabels } from '@/lib/utils/labels.util';
 import Organization from '@/models/Organization';
 
 export async function GET() {
@@ -16,7 +17,12 @@ export async function GET() {
       return NextResponse.json({ error: 'المؤسسة غير موجودة' }, { status: 404 });
     }
 
-    return NextResponse.json({ labels: organization.labels, organizationName: organization.name });
+    const labels = sanitizeLabels(organization.labels);
+    const organizationName = organization.name && !/^[\s?]+$/.test(String(organization.name).trim())
+      ? organization.name
+      : 'المؤسسة';
+
+    return NextResponse.json({ labels, organizationName });
   } catch (error: any) {
     return handleApiError(error);
   }

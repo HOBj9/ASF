@@ -1,14 +1,16 @@
-﻿"use client"
+"use client"
 
 import { SessionProvider } from "./session-provider"
 import { ThemeProvider } from "next-themes"
 import { QueryProvider } from "./query-provider"
 import { ErrorBoundary } from "@/components/error-boundary"
+import { ChunkLoadRecovery } from "@/components/chunk-load-recovery"
 import { Toaster } from "react-hot-toast"
 
 export function AppProviders({ children }: { children: React.ReactNode }) {
   return (
     <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
+      <ChunkLoadRecovery />
       <ErrorBoundary>
         <QueryProvider>
           <SessionProvider>
