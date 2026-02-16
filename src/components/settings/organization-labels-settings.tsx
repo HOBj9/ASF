@@ -15,6 +15,8 @@ type OrganizationLabels = {
   vehicleLabel: string
   driverLabel: string
   routeLabel: string
+  lineSupervisorLabel: string
+  surveyLabel: string
 }
 
 const defaultLabels: OrganizationLabels = {
@@ -23,6 +25,8 @@ const defaultLabels: OrganizationLabels = {
   vehicleLabel: "مركبة",
   driverLabel: "سائق",
   routeLabel: "مسار",
+  lineSupervisorLabel: "مشرفو الخط",
+  surveyLabel: "الاستبيانات",
 }
 
 export function OrganizationLabelsSettings() {
@@ -48,6 +52,8 @@ export function OrganizationLabelsSettings() {
           vehicleLabel: organization.labels?.vehicleLabel || defaultLabels.vehicleLabel,
           driverLabel: organization.labels?.driverLabel || defaultLabels.driverLabel,
           routeLabel: organization.labels?.routeLabel || defaultLabels.routeLabel,
+          lineSupervisorLabel: organization.labels?.lineSupervisorLabel || defaultLabels.lineSupervisorLabel,
+          surveyLabel: organization.labels?.surveyLabel || defaultLabels.surveyLabel,
         })
       } catch (error: any) {
         setAvailable(false)
@@ -132,6 +138,20 @@ export function OrganizationLabelsSettings() {
               <Input
                 value={labels.routeLabel}
                 onChange={(e) => setLabels((prev) => ({ ...prev, routeLabel: e.target.value }))}
+              />
+            </div>
+            <div>
+              <Label>تسمية مشرفي الخط</Label>
+              <Input
+                value={labels.lineSupervisorLabel}
+                onChange={(e) => setLabels((prev) => ({ ...prev, lineSupervisorLabel: e.target.value }))}
+              />
+            </div>
+            <div>
+              <Label>تسمية الاستبيانات</Label>
+              <Input
+                value={labels.surveyLabel}
+                onChange={(e) => setLabels((prev) => ({ ...prev, surveyLabel: e.target.value }))}
               />
             </div>
             <div className="pt-2">

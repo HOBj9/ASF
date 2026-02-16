@@ -19,10 +19,12 @@ import {
   Boxes,
   ClipboardList,
   MapPinned,
+  UserCheck,
+  MessageSquare,
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { hasAnyPermission, isAdmin } from "@/lib/permissions"
+import { hasAnyPermission, hasPermission, isAdmin, isOrganizationAdmin } from "@/lib/permissions"
 import { permissionActions, permissionResources } from "@/constants/permissions"
 import { useLabels } from "@/hooks/use-labels"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -33,6 +35,9 @@ interface NavItem {
   icon: LucideIcon
   adminOnly?: boolean
   superAdminOnly?: boolean
+  organizationAdminOrSuperAdmin?: boolean
+  submissionsOrOrgAdmin?: boolean
+  lineSupervisorCanSee?: boolean
   permissions?: Array<{ resource: string; action: string }>
 }
 
@@ -46,6 +51,7 @@ function useDashboardNavItems() {
       title: "لوحة التحكم",
       href: "/dashboard",
       icon: LayoutDashboard,
+      permissions: [{ resource: permissionResources.DASHBOARD, action: permissionActions.READ }],
     },
     {
       title: "المؤسسات",
@@ -58,6 +64,12 @@ function useDashboardNavItems() {
       href: "/dashboard/admin/municipalities",
       icon: Building2,
       permissions: [{ resource: permissionResources.BRANCHES, action: permissionActions.READ }],
+    },
+    {
+      title: labels.lineSupervisorLabel || "مشرفو الخط",
+      href: "/dashboard/line-supervisors",
+      icon: UserCheck,
+      organizationAdminOrSuperAdmin: true,
     },
     {
       title: labels.vehicleLabel || "المركبات",
@@ -84,10 +96,17 @@ function useDashboardNavItems() {
       permissions: [{ resource: permissionResources.POINTS, action: permissionActions.READ }],
     },
     {
-      title: "الاستبيانات",
+      title: labels.surveyLabel || "الاستبيانات",
       href: "/dashboard/surveys",
       icon: ClipboardList,
       permissions: [{ resource: permissionResources.FORMS, action: permissionActions.READ }],
+      lineSupervisorCanSee: true,
+    },
+    {
+      title: "ردودي",
+      href: "/dashboard/survey-responses",
+      icon: MessageSquare,
+      lineSupervisorCanSee: true,
     },
     {
       title: labels.routeLabel || "المسارات",
@@ -124,7 +143,13 @@ function useDashboardNavItems() {
       icon: Boxes,
       permissions: [{ resource: permissionResources.MATERIALS, action: permissionActions.READ }],
     },
-  ]), [labels.branchLabel, labels.driverLabel, labels.pointLabel, labels.routeLabel, labels.vehicleLabel])
+    {
+      title: `ردود ${labels.surveyLabel || "الاستبيانات"}`,
+      href: "/dashboard/survey-responses",
+      icon: MessageSquare,
+      submissionsOrOrgAdmin: true,
+    },
+  ]), [labels.branchLabel, labels.driverLabel, labels.pointLabel, labels.routeLabel, labels.vehicleLabel, labels.lineSupervisorLabel, labels.surveyLabel])
 
   const userIsAdmin = useMemo(() => {
     const role = session?.user?.role as any
@@ -140,8 +165,24 @@ function useDashboardNavItems() {
     return role?.name === "super_admin"
   }, [session?.user?.role])
 
+  const userIsOrgAdmin = useMemo(() => {
+    return isOrganizationAdmin(session?.user?.role as any)
+  }, [session?.user?.role])
+
   const filteredMenuItems = useMemo(() => (
     menuItems.filter((item) => {
+      if (item.href === "/dashboard") {
+        return hasPermission(session?.user?.role as any, permissionResources.DASHBOARD, permissionActions.READ)
+      }
+      if (item.organizationAdminOrSuperAdmin) return userIsOrgAdmin || userIsAdmin
+      if (item.submissionsOrOrgAdmin)
+        return (
+          userIsOrgAdmin ||
+          userIsAdmin ||
+          hasAnyPermission(session?.user?.role as any, [
+            { resource: permissionResources.FORM_SUBMISSIONS, action: permissionActions.READ },
+          ])
+        )
       if (item.adminOnly && !userIsAdmin) return false
       if (item.superAdminOnly && !userIsSuperAdmin) return false
       if (userIsAdmin) return true
@@ -151,7 +192,7 @@ function useDashboardNavItems() {
       }
       return true
     })
-  ), [menuItems, session?.user?.role, userIsAdmin, userIsSuperAdmin])
+  ), [menuItems, session?.user?.role, userIsAdmin, userIsSuperAdmin, userIsOrgAdmin])
 
   const isLoading = sessionStatus === "loading" || labelsLoading
 

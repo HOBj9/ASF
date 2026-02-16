@@ -1,5 +1,6 @@
 "use client";
 
+import "@/lib/leaflet-patch";
 import { useMemo } from "react";
 import { MapContainer, Marker, Polyline, Popup, TileLayer, Tooltip } from "react-leaflet";
 import L from "leaflet";

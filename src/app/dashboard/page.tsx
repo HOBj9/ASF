@@ -1,7 +1,8 @@
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { redirect } from "next/navigation"
-import { isAdmin } from "@/lib/permissions"
+import { isAdmin, isOrganizationAdmin, hasPermission } from "@/lib/permissions"
+import { permissionActions, permissionResources } from "@/constants/permissions"
 import { AdminOverview } from "@/components/dashboard/admin-overview"
 import { UserDashboard } from "@/components/dashboard/user-dashboard"
 import connectDB from "@/lib/mongodb"
@@ -17,6 +18,10 @@ export default async function DashboardPage() {
 
   const role = session.user.role as any
   const userIsAdmin = isAdmin(role)
+
+  if (!userIsAdmin && !hasPermission(role, permissionResources.DASHBOARD, permissionActions.READ)) {
+    redirect("/dashboard/surveys")
+  }
 
   // Fetch users if admin
   let users: any[] = []
@@ -37,7 +42,10 @@ export default async function DashboardPage() {
       {userIsAdmin ? (
         <AdminOverview initialUsers={JSON.parse(JSON.stringify(users))} />
       ) : (
-        <UserDashboard />
+        <UserDashboard
+          isOrganizationAdmin={isOrganizationAdmin(role)}
+          organizationId={(session.user as any)?.organizationId ?? null}
+        />
       )}
     </div>
   )

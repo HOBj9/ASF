@@ -17,7 +17,8 @@ export type ReportColumnKey =
   | 'status';
 
 export type GenerateReportInput = {
-  branchId: string;
+  branchId?: string | null;
+  organizationId?: string | null;
   period: ReportPeriod;
   from?: Date | null;
   to?: Date | null;
@@ -82,8 +83,12 @@ function getDurationHeader(unit: DurationUnit) {
   return 'مدة البقاء (ثانية)';
 }
 
-function resolveHeaders(labels: LabelsShape, durationUnit: DurationUnit): Record<ReportColumnKey, string> {
-  return {
+function resolveHeaders(
+  labels: LabelsShape,
+  durationUnit: DurationUnit,
+  includeBranchName?: boolean
+): Record<ReportColumnKey, string> & { branchName?: string } {
+  const base: Record<ReportColumnKey, string> = {
     vehicleName: `اسم ${labels.vehicleLabel}`,
     plateNumber: 'رقم اللوحة',
     pointName: `اسم ${labels.pointLabel}`,
@@ -93,6 +98,10 @@ function resolveHeaders(labels: LabelsShape, durationUnit: DurationUnit): Record
     zoneId: 'معرف المنطقة',
     status: 'حالة الزيارة',
   };
+  if (includeBranchName) {
+    return { ...base, branchName: 'الفرع' };
+  }
+  return base;
 }
 
 function toStatusLabel(status: string | null | undefined) {
@@ -102,7 +111,8 @@ function toStatusLabel(status: string | null | undefined) {
 }
 
 export async function generateVisitsReport(input: GenerateReportInput): Promise<{
-  branchId: string;
+  branchId: string | null;
+  organizationId?: string | null;
   timeZone: string;
   period: ReportPeriod;
   range: { start: Date; end: Date };
@@ -110,30 +120,54 @@ export async function generateVisitsReport(input: GenerateReportInput): Promise<
   rows: ReportRow[];
   summary: ReportSummary;
 }> {
-  const branch = await Branch.findById(input.branchId).select('timezone organizationId').lean();
-  if (!branch) {
-    throw new Error('الفرع غير موجود');
+  const useOrgScope = !!input.organizationId && !input.branchId;
+  let timeZone = 'Asia/Damascus';
+  let labels: LabelsShape = { pointLabel: 'نقاط', vehicleLabel: 'مركبات' };
+  let branchIds: string[] = [];
+
+  if (useOrgScope) {
+    const org = await Organization.findById(input.organizationId).select('labels').lean();
+    labels = {
+      pointLabel: org?.labels?.pointLabel || 'نقاط',
+      vehicleLabel: org?.labels?.vehicleLabel || 'مركبات',
+    };
+    const branches = await Branch.find({ organizationId: input.organizationId, isActive: true })
+      .select('_id timezone name nameAr')
+      .lean();
+    if (!branches?.length) {
+      throw new Error('لا توجد فروع لهذه المؤسسة');
+    }
+    branchIds = branches.map((b) => String(b._id));
+    timeZone = branches[0]?.timezone || timeZone;
+  } else if (input.branchId) {
+    const branch = await Branch.findById(input.branchId).select('timezone organizationId').lean();
+    if (!branch) {
+      throw new Error('الفرع غير موجود');
+    }
+    timeZone = branch.timezone || timeZone;
+    const organization = branch.organizationId
+      ? await Organization.findById(branch.organizationId).select('labels').lean()
+      : null;
+    labels = {
+      pointLabel: organization?.labels?.pointLabel || 'نقاط',
+      vehicleLabel: organization?.labels?.vehicleLabel || 'مركبات',
+    };
+    branchIds = [input.branchId];
+  } else {
+    throw new Error('يرجى تحديد الفرع أو المؤسسة');
   }
-
-  const timeZone = branch.timezone || 'Asia/Damascus';
-  const organization = branch.organizationId
-    ? await Organization.findById(branch.organizationId).select('labels').lean()
-    : null;
-
-  const labels: LabelsShape = {
-    pointLabel: organization?.labels?.pointLabel || 'نقاط',
-    vehicleLabel: organization?.labels?.vehicleLabel || 'مركبات',
-  };
 
   const period = input.period || 'daily';
   const durationUnit = input.durationUnit || 'seconds';
   const selectedColumns = input.columns?.length ? input.columns : DEFAULT_COLUMNS;
-  const headersMap = resolveHeaders(labels, durationUnit);
-  const headers = selectedColumns.map((key) => headersMap[key]);
+  const includeBranchName = useOrgScope;
+  const headersMap = resolveHeaders(labels, durationUnit, includeBranchName);
+  const columnKeys = includeBranchName ? ([...selectedColumns, 'branchName'] as const) : selectedColumns;
+  const headers = columnKeys.map((key) => headersMap[key as ReportColumnKey] ?? (headersMap as any).branchName);
   const range = getZonedRangeByPeriod(timeZone, period, input.from, input.to);
 
   const query: Record<string, any> = {
-    branchId: input.branchId,
+    branchId: branchIds.length === 1 ? branchIds[0] : { $in: branchIds },
     entryTime: { $lte: range.end },
     $or: [{ exitTime: { $gte: range.start } }, { exitTime: null }],
   };
@@ -147,6 +181,15 @@ export async function generateVisitsReport(input: GenerateReportInput): Promise<
     .populate('pointId', 'name nameAr')
     .sort({ entryTime: -1 })
     .lean();
+
+  let branchNames: Record<string, string> = {};
+  if (useOrgScope && visits.length > 0) {
+    const ids = [...new Set((visits as any[]).map((v) => String(v.branchId)).filter(Boolean))];
+    const branches = await Branch.find({ _id: { $in: ids } }).select('name nameAr').lean();
+    branchNames = Object.fromEntries(
+      branches.map((b) => [String(b._id), (b as any).nameAr || (b as any).name || String(b._id)])
+    );
+  }
 
   const rows: ReportRow[] = [];
   const vehiclesSet = new Set<string>();
@@ -183,6 +226,9 @@ export async function generateVisitsReport(input: GenerateReportInput): Promise<
     selectedColumns.forEach((columnKey, index) => {
       row[headers[index]] = dataByColumn[columnKey];
     });
+    if (includeBranchName && visit.branchId) {
+      row[headers[headers.length - 1]] = branchNames[String(visit.branchId)] ?? String(visit.branchId);
+    }
     rows.push(row);
   }
 
@@ -197,7 +243,8 @@ export async function generateVisitsReport(input: GenerateReportInput): Promise<
   };
 
   return {
-    branchId: input.branchId,
+    branchId: useOrgScope ? null : (branchIds[0] ?? null),
+    organizationId: useOrgScope ? input.organizationId : undefined,
     timeZone,
     period,
     range,

@@ -7,6 +7,8 @@ export type Labels = {
   vehicleLabel: string;
   driverLabel: string;
   routeLabel: string;
+  lineSupervisorLabel: string;
+  surveyLabel: string;
 };
 
 export function useLabels() {

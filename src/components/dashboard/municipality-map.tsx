@@ -1,5 +1,6 @@
 "use client";
 
+import "@/lib/leaflet-patch";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { MapContainer, TileLayer, Marker, Popup, Circle, Polygon } from "react-leaflet";

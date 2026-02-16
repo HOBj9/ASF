@@ -17,6 +17,8 @@ type OrgLabels = {
   vehicleLabel: string
   driverLabel: string
   routeLabel: string
+  lineSupervisorLabel: string
+  surveyLabel: string
 }
 
 type Organization = {
@@ -34,6 +36,8 @@ const defaultLabels: OrgLabels = {
   vehicleLabel: "مركبة",
   driverLabel: "سائق",
   routeLabel: "مسار",
+  lineSupervisorLabel: "مشرفو الخط",
+  surveyLabel: "الاستبيانات",
 }
 
 const emptyForm: Partial<Organization> = {
@@ -248,6 +252,14 @@ export function OrganizationsTable() {
             <div>
               <Label>تسمية المسارات</Label>
               <Input value={form.labels?.routeLabel || ""} onChange={(e) => updateLabel("routeLabel", e.target.value)} />
+            </div>
+            <div>
+              <Label>تسمية مشرفي الخط</Label>
+              <Input value={form.labels?.lineSupervisorLabel || ""} onChange={(e) => updateLabel("lineSupervisorLabel", e.target.value)} />
+            </div>
+            <div>
+              <Label>تسمية الاستبيانات</Label>
+              <Input value={form.labels?.surveyLabel || ""} onChange={(e) => updateLabel("surveyLabel", e.target.value)} />
             </div>
 
             {!editing && (

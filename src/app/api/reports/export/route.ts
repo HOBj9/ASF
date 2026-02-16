@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requirePermission, handleApiError } from '@/lib/middleware/api-auth.middleware';
 import { permissionActions, permissionResources } from '@/constants/permissions';
-import { resolveBranchId } from '@/lib/utils/municipality.util';
+import { resolveReportScope } from '@/lib/utils/municipality.util';
 import { toCsv } from '@/lib/utils/csv.util';
 import {
   generateVisitsReport,
@@ -62,7 +62,7 @@ export async function GET(request: Request) {
     const { session } = authResult;
     const { searchParams } = new URL(request.url);
 
-    const branchId = resolveBranchId(session, searchParams.get('branchId'));
+    const scope = resolveReportScope(session, searchParams.get('branchId') || undefined);
     const period = parsePeriod(searchParams.get('period'));
     const from = parseDate(searchParams.get('from'));
     const to = parseDate(searchParams.get('to'));
@@ -73,7 +73,8 @@ export async function GET(request: Request) {
     const columns = parseColumns(searchParams.get('columns'));
 
     const report = await generateVisitsReport({
-      branchId,
+      branchId: scope.branchId ?? undefined,
+      organizationId: scope.organizationId ?? undefined,
       period,
       from,
       to,

@@ -4,6 +4,7 @@ import { useSession } from "next-auth/react"
 import { useMemo, useEffect, useState } from "react"
 import Link from "next/link"
 import { apiClient } from "@/lib/api/client"
+import { useLabels } from "@/hooks/use-labels"
 import { hasPermission, isAdmin, isOrganizationAdmin } from "@/lib/permissions"
 import { permissionResources, permissionActions } from "@/constants/permissions"
 import { toast } from "react-hot-toast"
@@ -16,7 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { ClipboardList, Plus, Edit, FileQuestion } from "lucide-react"
+import { ClipboardList, Plus, Edit, FileQuestion, MessageSquare } from "lucide-react"
 
 type Survey = {
   _id: string
@@ -31,6 +32,7 @@ type Organization = { _id: string; name: string }
 
 export function SurveysListManager() {
   const { data: session } = useSession()
+  const { labels } = useLabels()
   const [organizations, setOrganizations] = useState<Organization[]>([])
   const [selectedOrgId, setSelectedOrgId] = useState("")
   const [surveys, setSurveys] = useState<Survey[]>([])
@@ -42,6 +44,13 @@ export function SurveysListManager() {
     () =>
       userIsAdmin ||
       (userIsOrgAdmin && hasPermission(session?.user?.role as any, permissionResources.FORMS, permissionActions.CREATE)),
+    [userIsAdmin, userIsOrgAdmin, session?.user?.role]
+  )
+  const canReadSubmissions = useMemo(
+    () =>
+      userIsAdmin ||
+      userIsOrgAdmin ||
+      hasPermission(session?.user?.role as any, permissionResources.FORM_SUBMISSIONS, permissionActions.READ),
     [userIsAdmin, userIsOrgAdmin, session?.user?.role]
   )
   const orgId = useMemo(() => {
@@ -72,7 +81,7 @@ export function SurveysListManager() {
       const res: any = await apiClient.get(url)
       setSurveys(res.surveys || res.data?.surveys || [])
     } catch (e: any) {
-      toast.error(e?.message || "فشل تحميل الاستبيانات")
+      toast.error(e?.message || `فشل تحميل ${labels.surveyLabel}`)
       setSurveys([])
     } finally {
       setLoading(false)
@@ -118,13 +127,13 @@ export function SurveysListManager() {
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-lg flex items-center gap-2">
               <ClipboardList className="h-5 w-5" />
-              {canManage ? "قائمة الاستبيانات" : "استبيانات جاهزة للإجابة"}
+              {canManage ? `قائمة ${labels.surveyLabel}` : `${labels.surveyLabel} جاهزة للإجابة`}
             </CardTitle>
             {canManage && (
               <Button asChild>
                 <Link href="/dashboard/surveys/new">
                   <Plus className="h-4 w-4 ml-2" />
-                  إنشاء استبيان
+                  إنشاء {labels.surveyLabel}
                 </Link>
               </Button>
             )}
@@ -134,7 +143,7 @@ export function SurveysListManager() {
               <p className="text-muted-foreground">جاري التحميل...</p>
             ) : surveys.length === 0 ? (
               <p className="text-muted-foreground">
-                {canManage ? "لا توجد استبيانات. أنشئ استبياناً جديداً." : "لا توجد استبيانات نشطة للإجابة."}
+                {canManage ? `لا توجد ${labels.surveyLabel}. أنشئ ${labels.surveyLabel} جديداً.` : `لا توجد ${labels.surveyLabel} نشطة للإجابة.`}
               </p>
             ) : (
               <ul className="space-y-3">
@@ -175,6 +184,14 @@ export function SurveysListManager() {
                           <Link href={`/dashboard/surveys/${s._id}/answer`}>
                             <FileQuestion className="h-4 w-4 ml-2" />
                             معاينة
+                          </Link>
+                        </Button>
+                      )}
+                      {canReadSubmissions && (
+                        <Button variant="outline" size="sm" asChild>
+                          <Link href={`/dashboard/survey-responses?surveyId=${s._id}`}>
+                            <MessageSquare className="h-4 w-4 ml-2" />
+                            ردود {labels.surveyLabel}
                           </Link>
                         </Button>
                       )}

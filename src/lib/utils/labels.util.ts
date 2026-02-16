@@ -9,6 +9,8 @@ export type Labels = {
   vehicleLabel: string;
   driverLabel: string;
   routeLabel: string;
+  lineSupervisorLabel: string;
+  surveyLabel: string;
 };
 
 export const defaultLabels: Labels = {
@@ -17,6 +19,8 @@ export const defaultLabels: Labels = {
   vehicleLabel: 'مركبات',
   driverLabel: 'سائقين',
   routeLabel: 'مسارات',
+  lineSupervisorLabel: 'مشرفو الخط',
+  surveyLabel: 'الاستبيانات',
 };
 
 /** Returns true if the string is empty or only question marks/spaces (corrupted encoding). */
@@ -35,5 +39,7 @@ export function sanitizeLabels(labels: Partial<Labels> | null | undefined): Labe
     vehicleLabel: isCorruptedLabel(merged.vehicleLabel) ? defaultLabels.vehicleLabel : merged.vehicleLabel!,
     driverLabel: isCorruptedLabel(merged.driverLabel) ? defaultLabels.driverLabel : merged.driverLabel!,
     routeLabel: isCorruptedLabel(merged.routeLabel) ? defaultLabels.routeLabel : merged.routeLabel!,
+    lineSupervisorLabel: isCorruptedLabel(merged.lineSupervisorLabel) ? defaultLabels.lineSupervisorLabel : merged.lineSupervisorLabel!,
+    surveyLabel: isCorruptedLabel(merged.surveyLabel) ? defaultLabels.surveyLabel : merged.surveyLabel!,
   };
 }

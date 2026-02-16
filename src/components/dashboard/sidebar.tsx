@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
@@ -18,13 +18,16 @@ import {
   Route,
   FileText,
   Boxes,
+  UserCheck,
+  MessageSquare,
+  ClipboardList,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { apiClient } from "@/lib/api/client"
 import { cn } from "@/lib/utils"
 import { useSidebarStore } from "@/store/sidebar-store"
 import { useEffect, useState, useMemo } from "react"
-import { hasAnyPermission, isAdmin } from "@/lib/permissions"
+import { hasAnyPermission, hasPermission, isAdmin, isOrganizationAdmin } from "@/lib/permissions"
 import { permissionActions, permissionResources } from "@/constants/permissions"
 import { useLabels } from "@/hooks/use-labels"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -72,6 +75,10 @@ export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarP
     if (!role) return false
     if (typeof role === "string") return role === "super_admin"
     return role?.name === "super_admin"
+  }, [session?.user?.role])
+
+  const userIsOrgAdmin = useMemo(() => {
+    return isOrganizationAdmin(session?.user?.role as any)
   }, [session?.user?.role])
 
   // Fetch role name when role changes
@@ -123,6 +130,7 @@ export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarP
       title: "لوحة التحكم",
       href: "/dashboard",
       icon: LayoutDashboard,
+      permissions: [{ resource: permissionResources.DASHBOARD, action: permissionActions.READ }],
     },
     {
       title: "المؤسسات",
@@ -135,6 +143,12 @@ export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarP
       href: "/dashboard/admin/municipalities",
       icon: Building2,
       permissions: [{ resource: permissionResources.BRANCHES, action: permissionActions.READ }],
+    },
+    {
+      title: labels.lineSupervisorLabel || "مشرفو الخط",
+      href: "/dashboard/line-supervisors",
+      icon: UserCheck,
+      organizationAdminOrSuperAdmin: true,
     },
     {
       title: labels.vehicleLabel || "المركبات",
@@ -167,6 +181,19 @@ export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarP
       permissions: [{ resource: permissionResources.REPORTS, action: permissionActions.READ }],
     },
     {
+      title: labels.surveyLabel || "الاستبيانات",
+      href: "/dashboard/surveys",
+      icon: ClipboardList,
+      permissions: [{ resource: permissionResources.FORMS, action: permissionActions.READ }],
+      lineSupervisorCanSee: true,
+    },
+    {
+      title: "ردودي",
+      href: "/dashboard/survey-responses",
+      icon: MessageSquare,
+      lineSupervisorCanSee: true,
+    },
+    {
       title: "المستخدمون",
       href: "/dashboard/admin/users",
       icon: UserCog,
@@ -189,10 +216,31 @@ export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarP
       icon: Boxes,
       permissions: [{ resource: permissionResources.MATERIALS, action: permissionActions.READ }],
     },
-  ]), [labels.branchLabel, labels.driverLabel, labels.pointLabel, labels.routeLabel, labels.vehicleLabel])
+    {
+      title: `ردود ${labels.surveyLabel || "الاستبيانات"}`,
+      href: "/dashboard/survey-responses",
+      icon: MessageSquare,
+      submissionsOrOrgAdmin: true,
+    },
+  ]), [labels.branchLabel, labels.driverLabel, labels.pointLabel, labels.routeLabel, labels.vehicleLabel, labels.lineSupervisorLabel, labels.surveyLabel])
 
   const filteredMenuItems = menuItems.filter(
     (item) => {
+      if (item.href === "/dashboard") {
+        return hasPermission(session?.user?.role as any, permissionResources.DASHBOARD, permissionActions.READ)
+      }
+      if ((item as any).organizationAdminOrSuperAdmin) {
+        return userIsOrgAdmin || userIsAdmin
+      }
+      if ((item as any).submissionsOrOrgAdmin) {
+        return (
+          userIsOrgAdmin ||
+          userIsAdmin ||
+          hasAnyPermission(session?.user?.role as any, [
+            { resource: permissionResources.FORM_SUBMISSIONS, action: permissionActions.READ },
+          ])
+        )
+      }
       // Show admin-only items only for admin
       if (item.adminOnly && !userIsAdmin) return false
       if ((item as any).superAdminOnly && !userIsSuperAdmin) return false

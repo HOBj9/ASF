@@ -85,15 +85,21 @@ export function SurveyAnswerForm({ surveyId }: { surveyId: string }) {
     loadSurvey()
   }, [loadSurvey])
 
-  const captureDeviceLocation = useCallback(() => {
+  const captureDeviceLocation = useCallback((alsoSetMap = false) => {
     if (!navigator.geolocation) {
       toast.error("المتصفح لا يدعم الموقع")
       return
     }
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        setDeviceLat(pos.coords.latitude)
-        setDeviceLng(pos.coords.longitude)
+        const lat = pos.coords.latitude
+        const lng = pos.coords.longitude
+        setDeviceLat(lat)
+        setDeviceLng(lng)
+        if (alsoSetMap) {
+          setMapLat(lat)
+          setMapLng(lng)
+        }
         toast.success("تم أخذ الموقع الحالي")
       },
       () => toast.error("لم يتم الحصول على الموقع"),
@@ -162,7 +168,7 @@ export function SurveyAnswerForm({ surveyId }: { surveyId: string }) {
       setAnswer(`question_${index}_lng`, deviceLng)
       toast.success("تم استخدام الموقع الحالي")
     } else {
-      captureDeviceLocation()
+      captureDeviceLocation(true)
     }
   }
 
@@ -218,9 +224,9 @@ export function SurveyAnswerForm({ surveyId }: { surveyId: string }) {
                 <div className="flex items-center gap-2">
                   <Button
                     type="button"
-                    variant="outline"
                     size="sm"
                     onClick={() => confirmCurrentLocationForQuestion(index)}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white border-0"
                   >
                     <MapPin className="h-4 w-4 ml-2" />
                     أخذ الموقع الحالي
@@ -256,7 +262,12 @@ export function SurveyAnswerForm({ surveyId }: { surveyId: string }) {
         </div>
 
         <div className="flex items-center gap-2">
-          <Button type="button" variant="outline" size="sm" onClick={captureDeviceLocation}>
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => captureDeviceLocation(true)}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white border-0"
+          >
             <MapPin className="h-4 w-4 ml-2" />
             تسجيل موقع الجهاز الحالي
           </Button>

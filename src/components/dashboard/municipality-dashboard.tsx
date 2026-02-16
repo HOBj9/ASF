@@ -24,6 +24,13 @@ import {
   CartesianGrid,
 } from "recharts";
 import { useLabels } from "@/hooks/use-labels";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 type BranchInfo = {
   _id: string;
@@ -151,8 +158,18 @@ function StatCard({
   );
 }
 
-export function MunicipalityDashboard() {
+type MunicipalityDashboardProps = {
+  isOrganizationAdmin?: boolean;
+  organizationId?: string | null;
+};
+
+export function MunicipalityDashboard({
+  isOrganizationAdmin = false,
+  organizationId: _organizationId,
+}: MunicipalityDashboardProps = {}) {
   const [branch, setBranch] = useState<BranchInfo | null>(null);
+  const [orgBranches, setOrgBranches] = useState<Array<{ _id: string; name?: string; nameAr?: string }>>([]);
+  const [selectedBranchId, setSelectedBranchId] = useState("");
   const [liveVehicles, setLiveVehicles] = useState<LiveVehicle[]>([]);
   const [atharObjects, setAtharObjects] = useState<AtharObject[]>([]);
   const [zones, setZones] = useState<AtharZone[]>([]);
@@ -179,6 +196,10 @@ export function MunicipalityDashboard() {
   const [liveLoaded, setLiveLoaded] = useState(false);
   const { labels } = useLabels();
 
+  const branchQuery =
+    isOrganizationAdmin && selectedBranchId ? `?branchId=${encodeURIComponent(selectedBranchId)}` : "";
+  const canLoadBranchData = !isOrganizationAdmin || !!selectedBranchId;
+
   const chartPalette = ["#22c55e", "#0ea5e9", "#f97316", "#a855f7", "#facc15", "#14b8a6"];
   const mapTabLoading: Partial<Record<MapTab, boolean>> = {
     live: activeMapTab === "live" && !liveLoaded,
@@ -188,17 +209,49 @@ export function MunicipalityDashboard() {
   };
 
   useEffect(() => {
+    if (!isOrganizationAdmin) return;
+    fetch("/api/branches")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        const list = data?.branches ?? [];
+        setOrgBranches(
+          list.map((b: any) => ({
+            _id: String(b._id),
+            name: b.name,
+            nameAr: b.nameAr,
+          }))
+        );
+      })
+      .catch(() => setOrgBranches([]));
+  }, [isOrganizationAdmin]);
+
+  useEffect(() => {
+    if (isOrganizationAdmin && selectedBranchId) {
+      setPointsLoaded(false);
+      setMarkersLoaded(false);
+      setZonesLoaded(false);
+      setObjectsLoaded(false);
+      setVehiclesLoaded(false);
+      setLiveLoaded(false);
+    }
+  }, [isOrganizationAdmin, selectedBranchId]);
+
+  useEffect(() => {
     let active = true;
 
     async function loadInitial() {
+      if (isOrganizationAdmin && !selectedBranchId) {
+        if (active) setLoading(false);
+        return;
+      }
       try {
         const [branchRes, routesRes, statsRes, eventsRes, analyticsRes] =
           await Promise.all([
-            fetch("/api/municipality"),
-            fetch("/api/routes"),
-            fetch("/api/dashboard/stats"),
-            fetch("/api/events?limit=8"),
-            fetch(`/api/dashboard/analytics?dailyDays=${dailyDays}&monthlyMonths=${monthlyMonths}`),
+            fetch(`/api/municipality${branchQuery}`),
+            fetch(`/api/routes${branchQuery}`),
+            fetch(`/api/dashboard/stats${branchQuery}`),
+            fetch(`/api/events?limit=8${branchQuery ? "&" + branchQuery.slice(1) : ""}`),
+            fetch(`/api/dashboard/analytics?dailyDays=${dailyDays}&monthlyMonths=${monthlyMonths}${branchQuery ? "&" + branchQuery.slice(1) : ""}`),
           ]);
 
         if (!active) return;
@@ -229,16 +282,17 @@ export function MunicipalityDashboard() {
     }
 
     loadInitial();
+    if (!canLoadBranchData) return;
     const interval = setInterval(() => {
-      fetch("/api/dashboard/stats")
+      fetch(`/api/dashboard/stats${branchQuery}`)
         .then((res) => res.json())
         .then((data) => setStats(data))
         .catch(() => null);
-      fetch("/api/events?limit=8")
+      fetch(`/api/events?limit=8${branchQuery ? "&" + branchQuery.slice(1) : ""}`)
         .then((res) => res.json())
         .then((data) => setEvents(data.events || []))
         .catch(() => null);
-      fetch(`/api/dashboard/analytics?dailyDays=${dailyDays}&monthlyMonths=${monthlyMonths}`)
+      fetch(`/api/dashboard/analytics?dailyDays=${dailyDays}&monthlyMonths=${monthlyMonths}${branchQuery ? "&" + branchQuery.slice(1) : ""}`)
         .then((res) => res.json())
         .then((data) => setAnalytics(data))
         .catch(() => null);
@@ -248,13 +302,14 @@ export function MunicipalityDashboard() {
       active = false;
       clearInterval(interval);
     };
-  }, [dailyDays, monthlyMonths]);
+  }, [dailyDays, monthlyMonths, isOrganizationAdmin, selectedBranchId, branchQuery, canLoadBranchData]);
 
   // Preload map data in background after initial page load (non-blocking)
   useEffect(() => {
-    if (loading) return;
+    if (!canLoadBranchData || loading) return;
+    const zonesSuffix = branchQuery ? "&" + branchQuery.slice(1) : "";
     if (!liveLoaded) {
-      fetch("/api/vehicles/locations")
+      fetch(`/api/vehicles/locations${branchQuery}`)
         .then((res) => res.json())
         .then((data) => {
           setLiveVehicles(data.data || []);
@@ -263,7 +318,7 @@ export function MunicipalityDashboard() {
         .catch(() => setLiveLoaded(true));
     }
     if (!pointsLoaded) {
-      fetch("/api/points")
+      fetch(`/api/points${branchQuery}`)
         .then((res) => res.json())
         .then((data) => {
           setPoints(data.points || []);
@@ -272,7 +327,7 @@ export function MunicipalityDashboard() {
         .catch(() => setPointsLoaded(true));
     }
     if (!markersLoaded) {
-      fetch("/api/athar/markers")
+      fetch(`/api/athar/markers${branchQuery}`)
         .then((res) => res.json())
         .then((data) => {
           setAtharMarkers(data.markers || []);
@@ -281,7 +336,7 @@ export function MunicipalityDashboard() {
         .catch(() => setMarkersLoaded(true));
     }
     if (!zonesLoaded) {
-      fetch("/api/athar/zones?sync=false")
+      fetch(`/api/athar/zones?sync=false${zonesSuffix}`)
         .then((res) => res.json())
         .then((data) => {
           setZones(data.zones || []);
@@ -294,7 +349,7 @@ export function MunicipalityDashboard() {
         .catch(() => setZonesLoaded(true));
     }
     if (!objectsLoaded) {
-      fetch("/api/athar/objects")
+      fetch(`/api/athar/objects${branchQuery}`)
         .then((res) => res.json())
         .then((data) => {
           setAtharObjects(data.objects || []);
@@ -303,7 +358,7 @@ export function MunicipalityDashboard() {
         .catch(() => setObjectsLoaded(true));
     }
     if (!vehiclesLoaded) {
-      fetch("/api/vehicles")
+      fetch(`/api/vehicles${branchQuery}`)
         .then((res) => res.json())
         .then((data) => {
           setVehicles(data.vehicles || []);
@@ -311,7 +366,7 @@ export function MunicipalityDashboard() {
         })
         .catch(() => setVehiclesLoaded(true));
     }
-  }, [loading, liveLoaded, pointsLoaded, markersLoaded, zonesLoaded, objectsLoaded, vehiclesLoaded]);
+  }, [canLoadBranchData, loading, branchQuery, liveLoaded, pointsLoaded, markersLoaded, zonesLoaded, objectsLoaded, vehiclesLoaded]);
 
   function exportChartAsPng(containerId: string, filename: string) {
     const container = document.getElementById(containerId);
@@ -344,8 +399,9 @@ export function MunicipalityDashboard() {
   }
 
   useEffect(() => {
-    if (activeMapTab !== "live") return;
-    const source = new EventSource("/api/vehicles/locations/websocket");
+    if (activeMapTab !== "live" || !canLoadBranchData) return;
+    const wsUrl = `/api/vehicles/locations/websocket${branchQuery}`;
+    const source = new EventSource(wsUrl);
     source.onmessage = (event) => {
       try {
         const payload = JSON.parse(event.data);
@@ -363,11 +419,13 @@ export function MunicipalityDashboard() {
     };
 
     return () => source.close();
-  }, [activeMapTab]);
+  }, [activeMapTab, canLoadBranchData, branchQuery]);
 
   useEffect(() => {
+    if (!canLoadBranchData) return;
+    const zonesSuffix = branchQuery ? "&" + branchQuery.slice(1) : "";
     if (activeMapTab === "live" && !liveLoaded) {
-      fetch("/api/vehicles/locations")
+      fetch(`/api/vehicles/locations${branchQuery}`)
         .then((res) => res.json())
         .then((data) => {
           setLiveVehicles(data.data || []);
@@ -381,7 +439,7 @@ export function MunicipalityDashboard() {
 
     if (activeMapTab === "points" && (!pointsLoaded || !markersLoaded)) {
       if (!pointsLoaded) {
-        fetch("/api/points")
+        fetch(`/api/points${branchQuery}`)
           .then((res) => res.json())
           .then((data) => {
             setPoints(data.points || []);
@@ -390,7 +448,7 @@ export function MunicipalityDashboard() {
           .catch(() => setPointsLoaded(true));
       }
       if (!markersLoaded) {
-        fetch("/api/athar/markers")
+        fetch(`/api/athar/markers${branchQuery}`)
           .then((res) => res.json())
           .then((data) => {
             setAtharMarkers(data.markers || []);
@@ -402,11 +460,10 @@ export function MunicipalityDashboard() {
     }
 
     if (activeMapTab === "zones" && !zonesLoaded) {
-      fetch("/api/athar/zones?sync=false")
+      fetch(`/api/athar/zones?sync=false${zonesSuffix}`)
         .then((res) => res.json())
         .then((data) => {
           setZones(data.zones || []);
-          // keep points if returned, useful fallback
           if (Array.isArray(data.points) && data.points.length && !pointsLoaded) {
             setPoints(data.points);
             setPointsLoaded(true);
@@ -420,7 +477,7 @@ export function MunicipalityDashboard() {
     }
 
     if (activeMapTab === "objects" && !objectsLoaded) {
-      fetch("/api/athar/objects")
+      fetch(`/api/athar/objects${branchQuery}`)
         .then((res) => res.json())
         .then((data) => {
           setAtharObjects(data.objects || []);
@@ -432,7 +489,7 @@ export function MunicipalityDashboard() {
     }
 
     if (activeMapTab === "objects" && !vehiclesLoaded) {
-      fetch("/api/vehicles")
+      fetch(`/api/vehicles${branchQuery}`)
         .then((res) => res.json())
         .then((data) => {
           setVehicles(data.vehicles || []);
@@ -442,7 +499,7 @@ export function MunicipalityDashboard() {
           setVehiclesLoaded(true);
         });
     }
-  }, [activeMapTab, liveLoaded, pointsLoaded, markersLoaded, zonesLoaded, objectsLoaded, vehiclesLoaded]);
+  }, [activeMapTab, canLoadBranchData, branchQuery, liveLoaded, pointsLoaded, markersLoaded, zonesLoaded, objectsLoaded, vehiclesLoaded]);
 
   const pointTypeData = analytics?.pointTypes || [];
   const vehicleStatusData = [
@@ -462,14 +519,67 @@ export function MunicipalityDashboard() {
       </div>
     );
   }
+
+  if (isOrganizationAdmin && !selectedBranchId) {
+    return (
+      <div className="space-y-6">
+        <div className="rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-emerald-950/60 via-emerald-900/30 to-cyan-900/20 p-6 shadow-sm text-right">
+          <div className="text-sm text-muted-foreground">{labels.branchLabel || "الفرع"}</div>
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <span className="text-sm font-medium">اختر الفرع لعرض البيانات على الخريطة:</span>
+            <Select
+              value={selectedBranchId}
+              onValueChange={(v) => setSelectedBranchId(v)}
+            >
+              <SelectTrigger className="w-[280px]">
+                <SelectValue placeholder="اختر الفرع" />
+              </SelectTrigger>
+              <SelectContent>
+                {orgBranches.map((b) => (
+                  <SelectItem key={b._id} value={b._id}>
+                    {b.nameAr || b.name || b._id}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <div className="rounded-xl border bg-muted/30 p-8 text-center text-muted-foreground">
+          اختر فرعاً من القائمة أعلاه لعرض الخريطة والإحصائيات.
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-emerald-950/60 via-emerald-900/30 to-cyan-900/20 p-6 shadow-sm text-right">
-        <div className="text-sm text-muted-foreground">إدارة {labels.branchLabel}</div>
-        <h2 className="text-2xl font-semibold mt-2">{branch?.name || "غير محدد بعد"}</h2>
-        {branch?.addressText && (
-          <p className="text-sm text-muted-foreground mt-1">{branch.addressText}</p>
-        )}
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <div className="text-sm text-muted-foreground">إدارة {labels.branchLabel}</div>
+            <h2 className="text-2xl font-semibold mt-2">{branch?.name || "غير محدد بعد"}</h2>
+            {branch?.addressText && (
+              <p className="text-sm text-muted-foreground mt-1">{branch.addressText}</p>
+            )}
+          </div>
+          {isOrganizationAdmin && (
+            <Select
+              value={selectedBranchId}
+              onValueChange={(v) => setSelectedBranchId(v)}
+            >
+              <SelectTrigger className="w-[240px]">
+                <SelectValue placeholder="اختر الفرع" />
+              </SelectTrigger>
+              <SelectContent>
+                {orgBranches.map((b) => (
+                  <SelectItem key={b._id} value={b._id}>
+                    {b.nameAr || b.name || b._id}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-4">
@@ -774,10 +884,22 @@ export function MunicipalityDashboard() {
       <div className="rounded-2xl border bg-card p-4 text-right shadow-sm">
         <h3 className="text-lg font-semibold mb-3">تصدير CSV</h3>
         <div className="flex flex-wrap gap-3">
-          <a className="rounded-lg border px-4 py-2 text-sm hover:bg-muted" href="/api/reports/vehicles">
+          <a
+            className={cn(
+              "rounded-lg border px-4 py-2 text-sm",
+              isOrganizationAdmin && !selectedBranchId ? "pointer-events-none opacity-50" : "hover:bg-muted"
+            )}
+            href={isOrganizationAdmin && selectedBranchId ? `/api/reports/vehicles?branchId=${encodeURIComponent(selectedBranchId)}` : "/api/reports/vehicles"}
+          >
             تحميل تقرير {labels.vehicleLabel} (CSV)
           </a>
-          <a className="rounded-lg border px-4 py-2 text-sm hover:bg-muted" href="/api/reports/points">
+          <a
+            className={cn(
+              "rounded-lg border px-4 py-2 text-sm",
+              isOrganizationAdmin && !selectedBranchId ? "pointer-events-none opacity-50" : "hover:bg-muted"
+            )}
+            href={isOrganizationAdmin && selectedBranchId ? `/api/reports/points?branchId=${encodeURIComponent(selectedBranchId)}` : "/api/reports/points"}
+          >
             تحميل تقرير {labels.pointLabel} (CSV)
           </a>
         </div>

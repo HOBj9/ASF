@@ -6,6 +6,8 @@ export interface OrganizationLabels {
   vehicleLabel: string;
   driverLabel: string;
   routeLabel: string;
+  lineSupervisorLabel?: string;
+  surveyLabel?: string;
 }
 
 export interface IOrganization extends Document {
@@ -43,6 +45,8 @@ const OrganizationSchema: Schema = new Schema(
       vehicleLabel: { type: String, default: 'مركبات', trim: true },
       driverLabel: { type: String, default: 'سائقين', trim: true },
       routeLabel: { type: String, default: 'مسارات', trim: true },
+      lineSupervisorLabel: { type: String, default: 'مشرفو الخط', trim: true },
+      surveyLabel: { type: String, default: 'الاستبيانات', trim: true },
     },
     isActive: {
       type: Boolean,

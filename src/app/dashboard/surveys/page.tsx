@@ -3,6 +3,7 @@ import { authOptions } from "@/lib/auth"
 import { redirect } from "next/navigation"
 import { hasPermission, isAdmin } from "@/lib/permissions"
 import { permissionActions, permissionResources } from "@/constants/permissions"
+import { getLabelsForSession } from "@/lib/utils/labels-server.util"
 import { SurveysListManager } from "@/components/surveys/surveys-list-manager"
 
 export default async function SurveysPage() {
@@ -16,11 +17,14 @@ export default async function SurveysPage() {
     redirect("/unauthorized")
   }
 
+  const labels = await getLabelsForSession(session)
+  const surveyLabel = labels.surveyLabel
+
   return (
     <div className="text-right">
       <div className="mb-6 lg:mb-8">
-        <h1 className="text-2xl lg:text-3xl font-bold">الاستبيانات</h1>
-        <p className="text-muted-foreground mt-2">مسح النقاط — الإجابة على الاستبيانات أو إدارتها</p>
+        <h1 className="text-2xl lg:text-3xl font-bold">{surveyLabel}</h1>
+        <p className="text-muted-foreground mt-2">مسح النقاط — الإجابة على {surveyLabel} أو إدارتها</p>
       </div>
       <SurveysListManager />
     </div>

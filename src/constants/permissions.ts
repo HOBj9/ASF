@@ -5,6 +5,7 @@
 
 export const permissionResources = {
   ALL: 'all',
+  DASHBOARD: 'dashboard',
   USERS: 'users',
   ROLES: 'roles',
   PERMISSIONS: 'permissions',
@@ -52,6 +53,7 @@ export const defaultPermissions: PermissionDefinition[] = [
     resource: permissionResources.ALL,
     action: permissionActions.MANAGE,
   },
+  { name: 'dashboard_read', nameAr: 'عرض لوحة التحكم التشغيلية', resource: permissionResources.DASHBOARD, action: permissionActions.READ },
   { name: 'users_create', nameAr: 'إنشاء المستخدمين', resource: permissionResources.USERS, action: permissionActions.CREATE },
   { name: 'users_read', nameAr: 'قراءة المستخدمين', resource: permissionResources.USERS, action: permissionActions.READ },
   { name: 'users_update', nameAr: 'تحديث المستخدمين', resource: permissionResources.USERS, action: permissionActions.UPDATE },
@@ -128,6 +130,7 @@ export const defaultRoles = {
     name: 'organization_admin',
     nameAr: 'مدير مؤسسة',
     permissions: [
+      'dashboard_read',
       'organizations_read',
       'organizations_update',
       'branches_read',
@@ -173,15 +176,15 @@ export const defaultRoles = {
     nameAr: 'مشرف الخط',
     permissions: [
       'forms_read',
-      'form_submissions_create',
       'form_submissions_read',
-      'points_read',
+      'form_submissions_create',
     ],
   },
   branchAdmin: {
     name: 'branch_admin',
     nameAr: 'مدير فرع',
     permissions: [
+      'dashboard_read',
       'vehicles_read',
       'vehicles_create',
       'vehicles_update',
@@ -218,6 +221,7 @@ export const defaultRoles = {
     name: 'branch_user',
     nameAr: 'مستخدم فرع',
     permissions: [
+      'dashboard_read',
       'vehicles_read',
       'drivers_read',
       'points_read',

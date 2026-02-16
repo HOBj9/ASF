@@ -965,3 +965,8 @@
     display: none !important;
   }
 }
+
+/* Hide empty map marker when no position selected (avoids Leaflet unmount bug) */
+.leaflet-marker-empty {
+  display: none !important;
+}

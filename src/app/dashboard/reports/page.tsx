@@ -2,7 +2,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { redirect } from "next/navigation"
 import { ReportsPanel } from "@/components/municipality/reports-panel"
-import { hasPermission, isAdmin } from "@/lib/permissions"
+import { hasPermission, isAdmin, isOrganizationAdmin } from "@/lib/permissions"
 import { permissionActions, permissionResources } from "@/constants/permissions"
 
 export default async function ReportsPage() {
@@ -23,7 +23,7 @@ export default async function ReportsPage() {
         <h1 className="text-2xl lg:text-3xl font-bold">التقارير</h1>
         <p className="text-muted-foreground mt-2">تحميل تقارير CSV يومية وأسبوعية وشهرية ومخصصة</p>
       </div>
-      <ReportsPanel isSystemAdmin={adminUser} />
+      <ReportsPanel isSystemAdmin={adminUser} isOrganizationAdmin={isOrganizationAdmin(role)} />
     </div>
   )
 }

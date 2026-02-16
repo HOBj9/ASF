@@ -7,6 +7,7 @@ import { useLabels } from "@/hooks/use-labels"
 
 type ReportsPanelProps = {
   isSystemAdmin?: boolean
+  isOrganizationAdmin?: boolean
 }
 
 type BranchOption = {
@@ -72,7 +73,7 @@ const DURATION_OPTIONS = [
   { value: "hours", label: "بالساعات" },
 ] as const
 
-export function ReportsPanel({ isSystemAdmin = false }: ReportsPanelProps) {
+export function ReportsPanel({ isSystemAdmin = false, isOrganizationAdmin = false }: ReportsPanelProps) {
   const searchParams = useSearchParams()
   const { labels } = useLabels()
   const [period, setPeriod] = useState<"daily" | "weekly" | "monthly" | "custom">("daily")
@@ -128,21 +129,39 @@ export function ReportsPanel({ isSystemAdmin = false }: ReportsPanelProps) {
     return String(seconds)
   }
 
+  const showBranchSelector = isSystemAdmin || isOrganizationAdmin
+
   useEffect(() => {
-    if (!isSystemAdmin) return
-    fetch("/api/municipalities")
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        const list = Array.isArray(data?.branches) ? data.branches : []
-        setBranches(
-          list.map((item: any) => ({
-            _id: String(item._id),
-            name: String(item.name || item.nameAr || "فرع"),
-          }))
-        )
-      })
-      .catch(() => null)
-  }, [isSystemAdmin])
+    if (isSystemAdmin) {
+      fetch("/api/municipalities")
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          const list = Array.isArray(data?.branches) ? data.branches : []
+          setBranches(
+            list.map((item: any) => ({
+              _id: String(item._id),
+              name: String(item.name || item.nameAr || "فرع"),
+            }))
+          )
+        })
+        .catch(() => null)
+      return
+    }
+    if (isOrganizationAdmin) {
+      fetch("/api/branches")
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          const list = Array.isArray(data?.branches) ? data.branches : []
+          setBranches(
+            list.map((item: any) => ({
+              _id: String(item._id),
+              name: String(item.name || item.nameAr || "فرع"),
+            }))
+          )
+        })
+        .catch(() => null)
+    }
+  }, [isSystemAdmin, isOrganizationAdmin])
 
   useEffect(() => {
     if (vehicleParamApplied) return
@@ -153,10 +172,10 @@ export function ReportsPanel({ isSystemAdmin = false }: ReportsPanelProps) {
     setVehicleParamApplied(true)
   }, [searchParams, vehicleParamApplied])
 
-  const branchParam = isSystemAdmin ? selectedBranchId : ""
+  const branchParam = showBranchSelector && selectedBranchId ? selectedBranchId : ""
 
   useEffect(() => {
-    if (isSystemAdmin && !selectedBranchId) {
+    if (showBranchSelector && !selectedBranchId) {
       setVehicles([])
       setPoints([])
       return
@@ -186,7 +205,7 @@ export function ReportsPanel({ isSystemAdmin = false }: ReportsPanelProps) {
         )
       })
       .finally(() => setLoadingOptions(false))
-  }, [branchParam, isSystemAdmin, selectedBranchId])
+  }, [branchParam, showBranchSelector, selectedBranchId])
 
   function toggleColumn(key: ColumnKey) {
     setSelectedColumns((prev) => {
@@ -200,7 +219,7 @@ export function ReportsPanel({ isSystemAdmin = false }: ReportsPanelProps) {
 
   function buildParams(extra?: { page?: number; pageSize?: number }) {
     const params = new URLSearchParams()
-    if (isSystemAdmin && selectedBranchId) params.set("branchId", selectedBranchId)
+    if (showBranchSelector && selectedBranchId) params.set("branchId", selectedBranchId)
     params.set("period", period)
     params.set("status", status)
     params.set("durationUnit", durationUnit)
@@ -258,6 +277,7 @@ export function ReportsPanel({ isSystemAdmin = false }: ReportsPanelProps) {
     return `/api/reports/export?${params.toString()}`
   }, [
     isSystemAdmin,
+    isOrganizationAdmin,
     selectedBranchId,
     period,
     status,
@@ -276,9 +296,11 @@ export function ReportsPanel({ isSystemAdmin = false }: ReportsPanelProps) {
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
-          {isSystemAdmin && (
+          {showBranchSelector && (
             <div className="space-y-1">
-              <label className="text-sm">الفرع</label>
+              <label className="text-sm">
+                الفرع {isOrganizationAdmin && <span className="text-muted-foreground">(اختياري - بدون اختيار يُخرج التقرير على مستوى المؤسسة)</span>}
+              </label>
               <select
                 value={selectedBranchId}
                 onChange={(e) => {
@@ -289,7 +311,7 @@ export function ReportsPanel({ isSystemAdmin = false }: ReportsPanelProps) {
                 }}
                 className="w-full rounded-lg border bg-background px-3 py-2"
               >
-                <option value="">اختر الفرع</option>
+                <option value="">{isOrganizationAdmin ? "كل المؤسسة" : "اختر الفرع"}</option>
                 {branches.map((branch) => (
                   <option key={branch._id} value={branch._id}>
                     {branch.name}
