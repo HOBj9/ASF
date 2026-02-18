@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server';
+import connectDB from '@/lib/mongodb';
+import WebhookIncomingLog from '@/models/WebhookIncomingLog';
 
 async function handleIncoming(request: Request) {
   const method = request.method;
@@ -35,6 +37,19 @@ async function handleIncoming(request: Request) {
   };
 
   console.log('[Athar Webhook Incoming] received request dump:', JSON.stringify(dump, null, 2));
+
+  try {
+    await connectDB();
+    await WebhookIncomingLog.create({
+      method,
+      url,
+      headers,
+      query: queryPayload,
+      body,
+    });
+  } catch (dbErr) {
+    console.error('[Athar Webhook Incoming] failed to save log:', dbErr);
+  }
 
   return NextResponse.json({ success: true, message: 'received' });
 }

@@ -21,6 +21,7 @@ import {
   UserCheck,
   MessageSquare,
   ClipboardList,
+  Webhook,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { apiClient } from "@/lib/api/client"
@@ -203,6 +204,12 @@ export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarP
       title: "إدارة الأدوار",
       href: "/dashboard/admin/roles",
       icon: KeyRound,
+      adminOnly: true,
+    },
+    {
+      title: "سجل Webhook",
+      href: "/dashboard/admin/webhook-logs",
+      icon: Webhook,
       adminOnly: true,
     },
     {

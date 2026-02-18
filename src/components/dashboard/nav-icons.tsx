@@ -21,6 +21,7 @@ import {
   MapPinned,
   UserCheck,
   MessageSquare,
+  Webhook,
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -130,6 +131,12 @@ function useDashboardNavItems() {
       title: "إدارة الأدوار",
       href: "/dashboard/admin/roles",
       icon: KeyRound,
+      adminOnly: true,
+    },
+    {
+      title: "سجل Webhook",
+      href: "/dashboard/admin/webhook-logs",
+      icon: Webhook,
       adminOnly: true,
     },
     {

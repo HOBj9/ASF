@@ -21,6 +21,7 @@ import './MaterialStock'
 import './MaterialTransaction'
 import './Survey'
 import './SurveySubmission'
+import './WebhookIncomingLog'
 
 // Re-export for convenience
 export { default as Permission } from './Permission'
@@ -45,6 +46,7 @@ export { default as MaterialStock } from './MaterialStock'
 export { default as MaterialTransaction } from './MaterialTransaction'
 export { default as Survey } from './Survey'
 export { default as SurveySubmission } from './SurveySubmission'
+export { default as WebhookIncomingLog } from './WebhookIncomingLog'
 
 export type { IPermission } from './Permission'
 export type { IRole } from './Role'
@@ -68,4 +70,5 @@ export type { IMaterialStock } from './MaterialStock'
 export type { IMaterialTransaction } from './MaterialTransaction'
 export type { ISurvey } from './Survey'
 export type { ISurveySubmission } from './SurveySubmission'
+export type { IWebhookIncomingLog } from './WebhookIncomingLog'
 
