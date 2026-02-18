@@ -26,23 +26,21 @@ export async function POST(
       return NextResponse.json({ error: 'الحاوية غير موجودة' }, { status: 404 });
     }
 
-    const existingZoneId = point.zoneId != null && String(point.zoneId).trim() !== '' ? String(point.zoneId).trim() : null;
-    if (existingZoneId) {
-      return NextResponse.json(
-        { error: 'النقطة مرتبطة بمنطقة أثر مسبقاً' },
-        { status: 400 }
-      );
-    }
-
     const atharService = await AtharService.forBranch(branchId);
     const pointName = point.nameAr || point.nameEn || point.name || 'نقطة';
-    const radius = point.radiusMeters ?? 500;
+    const radius = body.radiusMeters !== undefined && Number(body.radiusMeters) > 0
+      ? Number(body.radiusMeters)
+      : (point.radiusMeters ?? 500);
+    const center = { lat: Number(point.lat), lng: Number(point.lng) };
 
-    const zoneId = await atharService.ensureZone(
-      pointName,
-      { lat: Number(point.lat), lng: Number(point.lng) },
-      radius
-    );
+    const existingZoneId = point.zoneId != null && String(point.zoneId).trim() !== '' ? String(point.zoneId).trim() : null;
+    const zoneId = existingZoneId
+      ? await atharService.createZone(pointName, center, radius)
+      : await atharService.ensureZone(pointName, center, radius);
+
+    if (!zoneId) {
+      return NextResponse.json({ error: 'فشل إنشاء المنطقة في أثر' }, { status: 500 });
+    }
 
     const updated = await pointService.update(params.id, branchId, { zoneId });
     if (!updated) {

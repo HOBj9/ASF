@@ -32,5 +32,29 @@ if (typeof L !== "undefined" && !(L as any)[patchApplied]) {
     };
   }
 
+  // 3) Guard Control.onRemove (Attribution, etc.) so teardown never throws when map is null
+  if (L.Control?.prototype?.onRemove) {
+    const origControlOnRemove = L.Control.prototype.onRemove;
+    L.Control.prototype.onRemove = function (this: any, map: L.Map) {
+      try {
+        origControlOnRemove.call(this, map);
+      } catch {
+        // ignore errors when map is already null during teardown
+      }
+    };
+  }
+
+  // 4) Guard Map.removeLayer so ANY layer removal (including Zoom control which overrides onRemove) never throws
+  if (L.Map?.prototype?.removeLayer) {
+    const origRemoveLayer = L.Map.prototype.removeLayer;
+    L.Map.prototype.removeLayer = function (this: any, layer: any) {
+      try {
+        origRemoveLayer.call(this, layer);
+      } catch {
+        // Zoom/controls can throw _zoom null when map is already destroyed during React unmount
+      }
+    };
+  }
+
   (L as any)[patchApplied] = true;
 }

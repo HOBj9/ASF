@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { MunicipalityMap, type MapTab } from "./municipality-map";
 import { cn } from "@/lib/utils";
 import { Loading } from "@/components/ui/loading";
@@ -160,16 +161,21 @@ function StatCard({
 
 type MunicipalityDashboardProps = {
   isOrganizationAdmin?: boolean;
+  isLineSupervisor?: boolean;
   organizationId?: string | null;
+  sessionBranchId?: string | null;
 };
 
 export function MunicipalityDashboard({
   isOrganizationAdmin = false,
+  isLineSupervisor = false,
   organizationId: _organizationId,
+  sessionBranchId,
 }: MunicipalityDashboardProps = {}) {
   const [branch, setBranch] = useState<BranchInfo | null>(null);
   const [orgBranches, setOrgBranches] = useState<Array<{ _id: string; name?: string; nameAr?: string }>>([]);
   const [selectedBranchId, setSelectedBranchId] = useState("");
+  const isLineSupervisorNoBranch = isLineSupervisor && !sessionBranchId && !isOrganizationAdmin;
   const [liveVehicles, setLiveVehicles] = useState<LiveVehicle[]>([]);
   const [atharObjects, setAtharObjects] = useState<AtharObject[]>([]);
   const [zones, setZones] = useState<AtharZone[]>([]);
@@ -198,7 +204,7 @@ export function MunicipalityDashboard({
 
   const branchQuery =
     isOrganizationAdmin && selectedBranchId ? `?branchId=${encodeURIComponent(selectedBranchId)}` : "";
-  const canLoadBranchData = !isOrganizationAdmin || !!selectedBranchId;
+  const canLoadBranchData = !isLineSupervisorNoBranch && (!isOrganizationAdmin || !!selectedBranchId);
 
   const chartPalette = ["#22c55e", "#0ea5e9", "#f97316", "#a855f7", "#facc15", "#14b8a6"];
   const mapTabLoading: Partial<Record<MapTab, boolean>> = {
@@ -546,6 +552,21 @@ export function MunicipalityDashboard({
         </div>
         <div className="rounded-xl border bg-muted/30 p-8 text-center text-muted-foreground">
           اختر فرعاً من القائمة أعلاه لعرض الخريطة والإحصائيات.
+        </div>
+      </div>
+    );
+  }
+
+  if (isLineSupervisorNoBranch) {
+    return (
+      <div className="space-y-6">
+        <div className="rounded-2xl border border-muted bg-card p-8 shadow-sm text-right">
+          <p className="text-muted-foreground mb-4">
+            لا توجد بيانات تتبع لعرضها لهذا الحساب. يمكنك الوصول إلى {labels.surveyLabel || "الاستبيانات"} وردودها من القائمة.
+          </p>
+          <Link href="/dashboard/surveys">
+            <Button variant="default">الذهاب إلى {labels.surveyLabel || "الاستبيانات"}</Button>
+          </Link>
         </div>
       </div>
     );

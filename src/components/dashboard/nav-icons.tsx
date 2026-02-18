@@ -172,7 +172,7 @@ function useDashboardNavItems() {
   const filteredMenuItems = useMemo(() => (
     menuItems.filter((item) => {
       if (item.href === "/dashboard") {
-        return hasPermission(session?.user?.role as any, permissionResources.DASHBOARD, permissionActions.READ)
+        return true
       }
       if (item.organizationAdminOrSuperAdmin) return userIsOrgAdmin || userIsAdmin
       if (item.submissionsOrOrgAdmin)

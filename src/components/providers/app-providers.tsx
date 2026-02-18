@@ -1,5 +1,6 @@
 "use client"
 
+import "@/lib/leaflet-patch"
 import { SessionProvider } from "./session-provider"
 import { ThemeProvider } from "next-themes"
 import { QueryProvider } from "./query-provider"

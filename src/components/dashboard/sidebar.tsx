@@ -227,7 +227,7 @@ export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarP
   const filteredMenuItems = menuItems.filter(
     (item) => {
       if (item.href === "/dashboard") {
-        return hasPermission(session?.user?.role as any, permissionResources.DASHBOARD, permissionActions.READ)
+        return true
       }
       if ((item as any).organizationAdminOrSuperAdmin) {
         return userIsOrgAdmin || userIsAdmin

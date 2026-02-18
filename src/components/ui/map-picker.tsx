@@ -10,11 +10,19 @@ import markerShadow from "leaflet/dist/images/marker-shadow.png";
 
 const DEFAULT_CENTER: [number, number] = [33.5138, 36.2765];
 
+// Fallback when Next/build doesn't provide .src (e.g. Docker/production) — avoid "iconUrl not set"
+const FALLBACK_PIN_SVG =
+  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 25 41' width='25' height='41'%3E%3Cpath fill='%232a7fff' stroke='%23fff' stroke-width='1.5' d='M12.5 0C5.6 0 0 5.6 0 12.5 0 22 12.5 41 12.5 41S25 22 25 12.5C25 5.6 19.4 0 12.5 0z'/%3E%3Ccircle fill='%23fff' cx='12.5' cy='12.5' r='5'/%3E%3C/svg%3E";
+
+const iconUrl = typeof markerIcon?.src === "string" ? markerIcon.src : FALLBACK_PIN_SVG;
+const iconRetinaUrl = typeof markerIcon2x?.src === "string" ? markerIcon2x.src : iconUrl;
+const shadowUrl = typeof markerShadow?.src === "string" ? markerShadow.src : undefined;
+
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
-  iconRetinaUrl: markerIcon2x.src,
-  iconUrl: markerIcon.src,
-  shadowUrl: markerShadow.src,
+  iconRetinaUrl: iconRetinaUrl,
+  iconUrl,
+  shadowUrl: shadowUrl ?? "",
 });
 
 const ZOOM_ON_LOCATION = 16;
@@ -43,15 +51,17 @@ function MapCenterUpdater({ lat, lng }: { lat: number; lng: number }) {
   return null;
 }
 
-const pinIcon = L.icon({
-  iconUrl: markerIcon.src,
-  iconRetinaUrl: markerIcon2x.src,
-  shadowUrl: markerShadow.src,
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
-  shadowSize: [41, 41],
-});
+const pinIcon =
+  iconUrl &&
+  L.icon({
+    iconUrl,
+    iconRetinaUrl,
+    shadowUrl: shadowUrl || undefined,
+    iconSize: [25, 41],
+    iconAnchor: [12, 41],
+    popupAnchor: [1, -34],
+    shadowSize: [41, 41],
+  });
 
 function ImperativeMarker({
   lat,
@@ -68,7 +78,7 @@ function ImperativeMarker({
   useEffect(() => {
     const position: L.LatLngExpression = [lat, lng];
     if (!markerRef.current) {
-      markerRef.current = L.marker(position, { icon: pinIcon }).addTo(map);
+      markerRef.current = L.marker(position, pinIcon ? { icon: pinIcon } : {}).addTo(map);
     } else {
       markerRef.current.setLatLng(position);
     }

@@ -175,6 +175,7 @@ export const defaultRoles = {
     name: 'line_supervisor',
     nameAr: 'مشرف الخط',
     permissions: [
+      'dashboard_read',
       'forms_read',
       'form_submissions_read',
       'form_submissions_create',

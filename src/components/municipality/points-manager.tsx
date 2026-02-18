@@ -12,6 +12,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Progress } from "@/components/ui/progress"
 import toast from "react-hot-toast"
 import { useLabels } from "@/hooks/use-labels"
 import { ExportExcelDialog, type ExportColumn } from "@/components/municipality/export-excel-dialog"
@@ -115,13 +117,22 @@ export function PointsManager() {
   const [importingMarkers, setImportingMarkers] = useState(false)
   const [importingExcel, setImportingExcel] = useState(false)
   const [creatingZoneId, setCreatingZoneId] = useState<string | null>(null)
+  const [selectedPointIds, setSelectedPointIds] = useState<Set<string>>(new Set())
+  const [addZonesDialogOpen, setAddZonesDialogOpen] = useState(false)
+  const [bulkRadiusMeters, setBulkRadiusMeters] = useState(500)
+  const [bulkCreating, setBulkCreating] = useState(false)
+  const [bulkProgress, setBulkProgress] = useState({ processed: 0, success: 0, total: 0 })
+  const [pointToDelete, setPointToDelete] = useState<Point | null>(null)
+  const [deleting, setDeleting] = useState(false)
   const excelFileInputRef = useRef<HTMLInputElement | null>(null)
+  const resolvedBranchIdRef = useRef<string>("")
 
   const userIsAdmin = useMemo(() => isAdmin(session?.user?.role as any), [session?.user?.role])
   const userIsOrgAdmin = useMemo(() => isOrganizationAdmin(session?.user?.role as any), [session?.user?.role])
   const sessionBranchId = (session?.user as any)?.branchId ?? null
   const needsBranchSelector = userIsAdmin || (userIsOrgAdmin && !sessionBranchId)
   const resolvedBranchId = selectedBranchId || sessionBranchId
+  resolvedBranchIdRef.current = resolvedBranchId || ""
 
   const loadOrganizations = async () => {
     try {
@@ -178,9 +189,15 @@ export function PointsManager() {
   }
 
   const loadAtharMarkers = async () => {
+    const branchId = resolvedBranchIdRef.current || resolvedBranchId
+    if (needsBranchSelector && !branchId) {
+      toast.error("يرجى تحديد الفرع أولاً")
+      return
+    }
     setLoadingMarkers(true)
     try {
-      const res: any = await apiClient.get("/athar/markers")
+      const branchQuery = branchId ? `?branchId=${encodeURIComponent(branchId)}` : ""
+      const res: any = await apiClient.get(`/athar/markers${branchQuery}`)
       setMarkers(res.markers || res.data?.markers || [])
       setMarkersLoaded(true)
     } catch (error: any) {
@@ -191,9 +208,15 @@ export function PointsManager() {
   }
 
   const loadAtharZones = async () => {
+    const branchId = resolvedBranchIdRef.current || resolvedBranchId
+    if (needsBranchSelector && !branchId) {
+      toast.error("يرجى تحديد الفرع أولاً")
+      return
+    }
     setLoadingZones(true)
     try {
-      const res: any = await apiClient.get("/athar/zones?sync=false")
+      const zonesSuffix = branchId ? `&branchId=${encodeURIComponent(branchId)}` : ""
+      const res: any = await apiClient.get(`/athar/zones?sync=false${zonesSuffix}`)
       setZones(res.zones || res.data?.zones || [])
       setZonesLoaded(true)
     } catch (error: any) {
@@ -232,6 +255,11 @@ export function PointsManager() {
   useEffect(() => {
     if (!needsBranchSelector && session?.user) loadLocalPoints(null)
   }, [needsBranchSelector, session?.user])
+
+  useEffect(() => {
+    setMarkersLoaded(false)
+    setZonesLoaded(false)
+  }, [resolvedBranchId])
 
   const onTabChange = (value: string) => {
     setActiveTab(value)
@@ -361,15 +389,34 @@ export function PointsManager() {
     }
   }
 
-  const remove = async (item: Point) => {
-    if (!confirm(`حذف ${labels.pointLabel} ${item.name}؟`)) return
+  const openDeleteConfirm = (item: Point) => {
+    setPointToDelete(item)
+  }
+
+  const remove = async (item: Point, deleteFromAthar: boolean) => {
+    const branchId = resolvedBranchIdRef.current || resolvedBranchId
+    if (!branchId) {
+      toast.error("يرجى تحديد الفرع")
+      return
+    }
+    setDeleting(true)
     try {
-      await apiClient.delete(`/points/${item._id}`)
+      const qs = new URLSearchParams({ branchId })
+      if (deleteFromAthar) qs.set("deleteFromAthar", "true")
+      await apiClient.delete(`/points/${item._id}?${qs.toString()}`)
       setLocalPoints((prev) => prev.filter((i) => i._id !== item._id))
+      setSelectedPointIds((prev) => {
+        const next = new Set(prev)
+        next.delete(item._id)
+        return next
+      })
       toast.success(`تم حذف ${labels.pointLabel}`)
-      await loadLocalPoints(resolvedBranchId || null)
+      await loadLocalPoints(branchId)
+      setPointToDelete(null)
     } catch (error: any) {
-      toast.error(error.message || "حدث خطأ")
+      toast.error(error?.message || "حدث خطأ")
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -416,11 +463,14 @@ export function PointsManager() {
     }
   }
 
-  const createAtharZone = async (item: Point) => {
+  const createAtharZone = async (item: Point, radiusMeters?: number) => {
     if (!resolvedBranchId) return
     setCreatingZoneId(item._id)
     try {
-      await apiClient.post(`/points/${item._id}/create-athar-zone`, { branchId: resolvedBranchId })
+      await apiClient.post(`/points/${item._id}/create-athar-zone`, {
+        branchId: resolvedBranchId,
+        ...(radiusMeters !== undefined && { radiusMeters }),
+      })
       toast.success("تم إنشاء المنطقة في أثر وربطها بالنقطة")
       await loadLocalPoints(resolvedBranchId)
       if (editing?._id === item._id) {
@@ -431,6 +481,71 @@ export function PointsManager() {
       toast.error(error.message || "فشل إنشاء المنطقة في أثر")
     } finally {
       setCreatingZoneId(null)
+    }
+  }
+
+  const selectedPointsForZones = useMemo(() => {
+    return localPoints.filter((p) => selectedPointIds.has(p._id))
+  }, [localPoints, selectedPointIds])
+  const selectedPointsWithoutZone = useMemo(() => {
+    return selectedPointsForZones.filter((p) => !p.zoneId)
+  }, [selectedPointsForZones])
+
+  const togglePointSelection = (pointId: string) => {
+    setSelectedPointIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(pointId)) next.delete(pointId)
+      else next.add(pointId)
+      return next
+    })
+  }
+
+  const toggleSelectAll = () => {
+    const allIds = filteredLocalPoints.map((p) => p._id)
+    const allSelected = allIds.length > 0 && allIds.every((id) => selectedPointIds.has(id))
+    setSelectedPointIds((prev) => {
+      const next = new Set(prev)
+      if (allSelected) allIds.forEach((id) => next.delete(id))
+      else allIds.forEach((id) => next.add(id))
+      return next
+    })
+  }
+
+  const openAddZonesDialog = () => {
+    setBulkRadiusMeters(500)
+    setAddZonesDialogOpen(true)
+  }
+
+  const createBulkAtharZones = async () => {
+    const pointsToCreate = selectedPointsForZones
+    if (!resolvedBranchId || pointsToCreate.length === 0) return
+    setBulkCreating(true)
+    setBulkProgress({ processed: 0, success: 0, total: pointsToCreate.length })
+    let done = 0
+    let failed = 0
+    try {
+      for (const point of pointsToCreate) {
+        try {
+          await apiClient.post(`/points/${point._id}/create-athar-zone`, {
+            branchId: resolvedBranchId,
+            radiusMeters: bulkRadiusMeters,
+          })
+          done++
+        } catch {
+          failed++
+        }
+        setBulkProgress({ processed: done + failed, success: done, total: pointsToCreate.length })
+      }
+      await loadLocalPoints(resolvedBranchId)
+      setSelectedPointIds(new Set())
+      setAddZonesDialogOpen(false)
+      if (failed === 0) toast.success(`تم إنشاء المناطق في أثر لـ ${done} نقطة`)
+      else toast.success(`تم إنشاء ${done} منطقة، فشل ${failed}`)
+    } catch (e) {
+      toast.error("حدث خطأ أثناء إنشاء المناطق")
+    } finally {
+      setBulkCreating(false)
+      setBulkProgress({ processed: 0, success: 0, total: 0 })
     }
   }
 
@@ -455,6 +570,14 @@ export function PointsManager() {
           <CardTitle>{labels.pointLabel}</CardTitle>
           {activeTab === "local" && (
             <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="default"
+                size="sm"
+                onClick={openAddZonesDialog}
+                disabled={!resolvedBranchId || selectedPointIds.size === 0}
+              >
+                إضافة مناطق للنقاط المحددة ({selectedPointIds.size})
+              </Button>
               <input
                 ref={excelFileInputRef}
                 type="file"
@@ -567,6 +690,16 @@ export function PointsManager() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b text-right">
+                      <th className="p-2 w-10">
+                        <Checkbox
+                          checked={
+                            filteredLocalPoints.length > 0 &&
+                            filteredLocalPoints.every((p) => selectedPointIds.has(p._id))
+                          }
+                          onCheckedChange={toggleSelectAll}
+                          aria-label="تحديد الكل"
+                        />
+                      </th>
                       <th className="p-2">اسم {labels.pointLabel}</th>
                       <th className="p-2">النوع</th>
                       <th className="p-2">خط العرض</th>
@@ -579,6 +712,13 @@ export function PointsManager() {
                   <tbody>
                     {paginatedLocalPoints.map((item) => (
                       <tr key={item._id} className="border-b">
+                        <td className="p-2 w-10">
+                          <Checkbox
+                            checked={selectedPointIds.has(item._id)}
+                            onCheckedChange={() => togglePointSelection(item._id)}
+                            aria-label={`تحديد ${item.nameAr || item.name}`}
+                          />
+                        </td>
                         <td className="p-2">{item.nameAr || item.name}</td>
                         <td className="p-2">{pointTypeLabels[item.type] || item.type}</td>
                         <td className="p-2">{item.lat}</td>
@@ -586,24 +726,22 @@ export function PointsManager() {
                         <td className="p-2">{item.zoneId || "-"}</td>
                         <td className="p-2">{item.isActive ? "مفعّل" : "معطّل"}</td>
                         <td className="p-2 space-x-2 space-x-reverse">
-                          {!item.zoneId && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => createAtharZone(item)}
-                              disabled={creatingZoneId === item._id}
-                            >
-                              {creatingZoneId === item._id ? "جاري..." : "إنشاء منطقة في أثر"}
-                            </Button>
-                          )}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => createAtharZone(item)}
+                            disabled={creatingZoneId === item._id}
+                          >
+                            {creatingZoneId === item._id ? "جاري..." : item.zoneId ? "تحديث منطقة في أثر" : "إنشاء منطقة في أثر"}
+                          </Button>
                           <Button variant="outline" onClick={() => openEdit(item)}>تعديل</Button>
-                          <Button variant="destructive" onClick={() => remove(item)}>حذف</Button>
+                          <Button variant="destructive" onClick={() => openDeleteConfirm(item)}>حذف</Button>
                         </td>
                       </tr>
                     ))}
                     {paginatedLocalPoints.length === 0 && (
                       <tr>
-                        <td className="p-4 text-center text-muted-foreground" colSpan={7}>
+                        <td className="p-4 text-center text-muted-foreground" colSpan={8}>
                           لا توجد نتائج
                         </td>
                       </tr>
@@ -822,15 +960,15 @@ export function PointsManager() {
               <span>مفعّل</span>
               <Switch checked={!!form.isActive} onCheckedChange={(checked) => setForm({ ...form, isActive: checked })} />
             </div>
-            {editing && !editing.zoneId && (
+            {editing && (
               <div className="border-t pt-3">
                 <Button
                   variant="outline"
                   className="w-full"
-                  onClick={() => createAtharZone(editing)}
+                  onClick={() => createAtharZone(editing, form.radiusMeters)}
                   disabled={!!creatingZoneId}
                 >
-                  {creatingZoneId === editing._id ? "جاري إنشاء المنطقة..." : "إنشاء منطقة في أثر لهذه النقطة"}
+                  {creatingZoneId === editing._id ? "جاري..." : editing.zoneId ? "تحديث منطقة في أثر لهذه النقطة" : "إنشاء منطقة في أثر لهذه النقطة"}
                 </Button>
               </div>
             )}
@@ -838,6 +976,100 @@ export function PointsManager() {
           <DialogFooter className="flex-row-reverse gap-2">
             <Button variant="outline" onClick={() => setOpen(false)}>إلغاء</Button>
             <Button onClick={submit}>{editing ? "تحديث" : "إضافة"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={addZonesDialogOpen} onOpenChange={setAddZonesDialogOpen}>
+        <DialogContent className="text-right">
+          <DialogHeader>
+            <DialogTitle>إضافة مناطق في أثر للنقاط المحددة</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <p className="text-sm text-muted-foreground">
+              سيتم إنشاء منطقة جديدة في أثر لكل نقطة محددة (<strong>{selectedPointsForZones.length}</strong> نقطة).
+              إن كانت النقطة لديها معرف منطقة مسبقاً سيتم استبداله بمعرف المنطقة الجديد.
+            </p>
+            <div>
+              <Label htmlFor="bulk-radius">نصف القطر (متر)</Label>
+              <Input
+                id="bulk-radius"
+                type="number"
+                min={50}
+                max={5000}
+                step={50}
+                value={bulkRadiusMeters}
+                onChange={(e) => setBulkRadiusMeters(Number(e.target.value) || 500)}
+                className="mt-1"
+              />
+            </div>
+            {bulkCreating && bulkProgress.total > 0 && (
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">
+                    تمت معالجة {bulkProgress.processed} من {bulkProgress.total} نقطة
+                    {bulkProgress.success > 0 && (
+                      <span className="text-primary font-medium"> ({bulkProgress.success} تم بنجاح)</span>
+                    )}
+                  </span>
+                </div>
+                <Progress value={bulkProgress.processed} max={bulkProgress.total} className="h-2" />
+              </div>
+            )}
+          </div>
+          <DialogFooter className="flex-row-reverse gap-2">
+            <Button variant="outline" onClick={() => setAddZonesDialogOpen(false)} disabled={bulkCreating}>
+              إلغاء
+            </Button>
+            <Button
+              onClick={createBulkAtharZones}
+              disabled={bulkCreating || selectedPointsForZones.length === 0}
+            >
+              {bulkCreating ? "جاري الإنشاء..." : "إنشاء"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!pointToDelete} onOpenChange={(open) => !open && setPointToDelete(null)}>
+        <DialogContent className="text-right">
+          <DialogHeader>
+            <DialogTitle>تأكيد حذف {labels.pointLabel}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <p className="text-sm text-muted-foreground">
+              {pointToDelete && (
+                <>
+                  النقطة: <strong>{pointToDelete.nameAr || pointToDelete.name}</strong>. هل تريد الحذف من النظام فقط أم من النظام ومن أثر أيضاً؟
+                </>
+              )}
+            </p>
+            <div className="flex flex-col gap-2">
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => pointToDelete && remove(pointToDelete, false)}
+                disabled={deleting}
+              >
+                {deleting ? "جاري الحذف..." : "حذف من النظام فقط"}
+              </Button>
+              <Button
+                variant="destructive"
+                className="w-full"
+                onClick={() => pointToDelete && remove(pointToDelete, true)}
+                disabled={deleting || !pointToDelete?.zoneId}
+              >
+                {deleting ? "جاري الحذف..." : "حذف من النظام ومن أثر أيضاً"}
+              </Button>
+              {pointToDelete && !pointToDelete.zoneId && (
+                <p className="text-xs text-muted-foreground">هذه النقطة لا تملك منطقة في أثر، لذا الحذف من أثر غير متاح.</p>
+              )}
+            </div>
+          </div>
+          <DialogFooter className="flex-row-reverse gap-2">
+            <Button variant="ghost" onClick={() => setPointToDelete(null)} disabled={deleting}>
+              إلغاء
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

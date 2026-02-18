@@ -350,4 +350,25 @@ export class AtharService {
     console.log('[Athar] createZoneEvent: failed, response=', response);
     throw new Error('فشل إنشاء حدث المنطقة في Athar');
   }
+
+  /**
+   * Delete a zone from Athar by zone ID.
+   * Uses REMOVE_ZONE or DELETE_ZONE command (try REMOVE_ZONE first as common in tracking APIs).
+   */
+  async deleteZone(zoneId: string): Promise<void> {
+    if (!zoneId || !String(zoneId).trim()) {
+      throw new Error('معرّف المنطقة مطلوب للحذف');
+    }
+    const id = String(zoneId).replace(/\?.*$/, '').match(/^(\d+)/)?.[1] ?? String(zoneId);
+    console.log('[Athar] deleteZone: zoneId=', id);
+    const response = await this.makeRequest({
+      cmd: 'REMOVE_ZONE',
+      zone_id: id,
+    });
+    if (response && (response.error || response.err)) {
+      console.warn('[Athar] deleteZone: API returned error', response);
+      throw new Error(response.message || response.error || 'فشل حذف المنطقة من أثر');
+    }
+    console.log('[Athar] deleteZone: done');
+  }
 }
