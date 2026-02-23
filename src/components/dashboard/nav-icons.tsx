@@ -22,6 +22,7 @@ import {
   UserCheck,
   MessageSquare,
   Webhook,
+  Activity,
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -119,6 +120,12 @@ function useDashboardNavItems() {
       title: "التقارير",
       href: "/dashboard/reports",
       icon: FileText,
+      permissions: [{ resource: permissionResources.REPORTS, action: permissionActions.READ }],
+    },
+    {
+      title: "تقارير الأحداث",
+      href: "/dashboard/event-reports",
+      icon: Activity,
       permissions: [{ resource: permissionResources.REPORTS, action: permissionActions.READ }],
     },
     {
@@ -305,3 +312,4 @@ export function DashboardNavMenu({ onNavigate }: { onNavigate?: () => void }) {
     </div>
   )
 }
+

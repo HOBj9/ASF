@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { MunicipalityMap, type MapTab } from "./municipality-map";
 import { cn } from "@/lib/utils";
@@ -25,6 +25,7 @@ import {
   CartesianGrid,
 } from "recharts";
 import { useLabels } from "@/hooks/use-labels";
+import toast from "react-hot-toast";
 import {
   Select,
   SelectContent,
@@ -133,7 +134,22 @@ type EventItem = {
   pointName?: string;
   vehicleName?: string;
   driverName?: string;
+  displayText?: string;
 };
+
+function mergeUniqueEvents(primary: EventItem[], secondary: EventItem[], limit: number): EventItem[] {
+  const seen = new Set<string>();
+  const result: EventItem[] = [];
+
+  for (const event of [...primary, ...secondary]) {
+    if (!event?._id || seen.has(event._id)) continue;
+    seen.add(event._id);
+    result.push(event);
+    if (result.length >= limit) break;
+  }
+
+  return result;
+}
 
 function StatCard({
   label,
@@ -200,6 +216,10 @@ export function MunicipalityDashboard({
   const [objectsLoaded, setObjectsLoaded] = useState(false);
   const [vehiclesLoaded, setVehiclesLoaded] = useState(false);
   const [liveLoaded, setLiveLoaded] = useState(false);
+  const [newEventIds, setNewEventIds] = useState<Record<string, boolean>>({});
+  const eventsStreamConnectedRef = useRef(false);
+  const seenEventIdsRef = useRef<Set<string>>(new Set());
+  const eventHighlightTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const { labels } = useLabels();
 
   const branchQuery =
@@ -213,6 +233,28 @@ export function MunicipalityDashboard({
     zones: activeMapTab === "zones" && !zonesLoaded,
     objects: activeMapTab === "objects" && !objectsLoaded,
   };
+
+  function rememberEvents(eventList: EventItem[]) {
+    for (const event of eventList) {
+      if (event?._id) seenEventIdsRef.current.add(event._id);
+    }
+  }
+
+  function markEventAsNew(eventId: string) {
+    setNewEventIds((prev) => ({ ...prev, [eventId]: true }));
+
+    const timer = eventHighlightTimersRef.current[eventId];
+    if (timer) clearTimeout(timer);
+
+    eventHighlightTimersRef.current[eventId] = setTimeout(() => {
+      setNewEventIds((prev) => {
+        const next = { ...prev };
+        delete next[eventId];
+        return next;
+      });
+      delete eventHighlightTimersRef.current[eventId];
+    }, 12000);
+  }
 
   useEffect(() => {
     if (!isOrganizationAdmin) return;
@@ -276,7 +318,9 @@ export function MunicipalityDashboard({
         }
         if (eventsRes.ok) {
           const data = await eventsRes.json();
-          setEvents(data.events || []);
+          const initialEvents = Array.isArray(data.events) ? data.events : [];
+          rememberEvents(initialEvents);
+          setEvents(initialEvents);
         }
         if (analyticsRes.ok) {
           const data = await analyticsRes.json();
@@ -294,10 +338,16 @@ export function MunicipalityDashboard({
         .then((res) => res.json())
         .then((data) => setStats(data))
         .catch(() => null);
-      fetch(`/api/events?limit=8${branchQuery ? "&" + branchQuery.slice(1) : ""}`)
-        .then((res) => res.json())
-        .then((data) => setEvents(data.events || []))
-        .catch(() => null);
+      if (!eventsStreamConnectedRef.current) {
+        fetch(`/api/events?limit=8${branchQuery ? "&" + branchQuery.slice(1) : ""}`)
+          .then((res) => res.json())
+          .then((data) => {
+            const nextEvents = Array.isArray(data.events) ? data.events : [];
+            rememberEvents(nextEvents);
+            setEvents(nextEvents);
+          })
+          .catch(() => null);
+      }
       fetch(`/api/dashboard/analytics?dailyDays=${dailyDays}&monthlyMonths=${monthlyMonths}${branchQuery ? "&" + branchQuery.slice(1) : ""}`)
         .then((res) => res.json())
         .then((data) => setAnalytics(data))
@@ -309,6 +359,81 @@ export function MunicipalityDashboard({
       clearInterval(interval);
     };
   }, [dailyDays, monthlyMonths, isOrganizationAdmin, selectedBranchId, branchQuery, canLoadBranchData]);
+
+  useEffect(() => {
+    seenEventIdsRef.current = new Set();
+    setNewEventIds({});
+    eventsStreamConnectedRef.current = false;
+  }, [branchQuery]);
+
+  useEffect(() => {
+    return () => {
+      for (const timer of Object.values(eventHighlightTimersRef.current)) {
+        clearTimeout(timer);
+      }
+      eventHighlightTimersRef.current = {};
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!canLoadBranchData) {
+      eventsStreamConnectedRef.current = false;
+      return;
+    }
+
+    const url = `/api/events/websocket?limit=8${branchQuery ? "&" + branchQuery.slice(1) : ""}`;
+    const source = new EventSource(url);
+
+    source.onopen = () => {
+      eventsStreamConnectedRef.current = true;
+    };
+
+    source.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(event.data);
+
+        if (payload?.type === "events_snapshot" && Array.isArray(payload?.data)) {
+          const snapshot = payload.data as EventItem[];
+          rememberEvents(snapshot);
+          setEvents((prev) => mergeUniqueEvents(snapshot, prev, 8));
+          return;
+        }
+
+        if (payload?.type === "zone_event" && payload?.data?._id) {
+          const incomingEvent = payload.data as EventItem;
+          if (seenEventIdsRef.current.has(incomingEvent._id)) return;
+
+          seenEventIdsRef.current.add(incomingEvent._id);
+          setEvents((prev) => mergeUniqueEvents([incomingEvent], prev, 8));
+          markEventAsNew(incomingEvent._id);
+
+          const description =
+            incomingEvent.displayText ||
+            incomingEvent.name ||
+            incomingEvent.pointName ||
+            "تم استلام حدث جديد";
+
+          if (incomingEvent.type === "zone_in") {
+            toast.success(description, { id: `zone-event-${incomingEvent._id}` });
+          } else {
+            toast(description, { id: `zone-event-${incomingEvent._id}` });
+          }
+        }
+      } catch {
+        // Ignore malformed SSE payloads
+      }
+    };
+
+    source.onerror = () => {
+      eventsStreamConnectedRef.current = false;
+      source.close();
+    };
+
+    return () => {
+      eventsStreamConnectedRef.current = false;
+      source.close();
+    };
+  }, [canLoadBranchData, branchQuery]);
 
   // Preload map data in background after initial page load (non-blocking)
   useEffect(() => {
@@ -653,13 +778,26 @@ export function MunicipalityDashboard({
           <div className="space-y-3 overflow-y-auto flex-1 pr-1">
             {events.length === 0 && <div className="text-sm text-muted-foreground">لا توجد أحداث حالياً.</div>}
             {events.map((event) => (
-              <div key={event._id} className="rounded-lg border p-3">
+              <div
+                key={event._id}
+                className={cn(
+                  "rounded-lg border p-3 transition-colors",
+                  newEventIds[event._id] && "border-emerald-400/70 bg-emerald-500/10"
+                )}
+              >
                 <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">{event.type === "zone_in" ? "دخول" : "خروج"}</span>
+                  <div className="flex items-center gap-2">
+                    {newEventIds[event._id] && (
+                      <span className="rounded-full bg-emerald-600 px-2 py-0.5 text-[10px] font-semibold text-white">
+                        جديد
+                      </span>
+                    )}
+                    <span className="text-xs text-muted-foreground">{event.type === "zone_in" ? "دخول" : "خروج"}</span>
+                  </div>
                   <span className="text-xs text-muted-foreground">{event.eventTimestamp || ""}</span>
                 </div>
                 <div className="font-semibold mt-1">
-                  {event.name || event.pointName || `${labels.pointLabel} بدون اسم`}
+                  {event.displayText || event.name || event.pointName || `${labels.pointLabel} بدون اسم`}
                 </div>
                 <div className="text-xs text-muted-foreground mt-1">
                   {event.vehicleName || event.imei || ""}

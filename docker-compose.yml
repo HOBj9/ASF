@@ -9,7 +9,7 @@ services:
     container_name: waste-management-system-mongodb
     restart: unless-stopped
     ports:
-      - "127.0.0.1:27018:27017"  # Host 27018 to avoid conflict with local MongoDB
+      - "127.0.0.1:27020:27017"  # Host 27020 to avoid conflict with local MongoDB
     environment:
       MONGO_INITDB_ROOT_USERNAME: admin
       MONGO_INITDB_ROOT_PASSWORD: admin123

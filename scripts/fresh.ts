@@ -33,6 +33,7 @@ import MaterialStock from "../src/models/MaterialStock"
 import MaterialTransaction from "../src/models/MaterialTransaction"
 import Survey from "../src/models/Survey"
 import SurveySubmission from "../src/models/SurveySubmission"
+import IncomingAtharEvent from "../src/models/IncomingAtharEvent"
 
 import { defaultPermissions, defaultRoles } from "../src/constants/permissions"
 
@@ -65,6 +66,7 @@ const models: ModelInfo[] = [
   { name: "MaterialTransaction", model: MaterialTransaction, collection: "materialtransactions" },
   { name: "Survey", model: Survey, collection: "surveys" },
   { name: "SurveySubmission", model: SurveySubmission, collection: "surveysubmissions" },
+  { name: "IncomingAtharEvent", model: IncomingAtharEvent, collection: "incomingatharevents" },
 ]
 
 async function syncIndexes(modelInfo: ModelInfo): Promise<number> {

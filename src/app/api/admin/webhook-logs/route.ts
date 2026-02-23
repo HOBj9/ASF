@@ -1,7 +1,15 @@
 import { NextResponse } from 'next/server';
 import { requireAdmin, handleApiError } from '@/lib/middleware/api-auth.middleware';
 import connectDB from '@/lib/mongodb';
-import WebhookIncomingLog from '@/models/WebhookIncomingLog';
+import IncomingAtharEvent from '@/models/IncomingAtharEvent';
+
+function toUrl(pathname: string, query: Record<string, any> | null | undefined): string {
+  const normalizedPath = pathname || '/api/athar/webhook/incoming';
+  const entries = Object.entries(query || {}).filter(([, value]) => value !== undefined && value !== null);
+  if (entries.length === 0) return normalizedPath;
+  const search = new URLSearchParams(entries.map(([key, value]) => [key, String(value)])).toString();
+  return `${normalizedPath}?${search}`;
+}
 
 export async function GET(request: Request) {
   try {
@@ -15,14 +23,25 @@ export async function GET(request: Request) {
 
     await connectDB();
 
-    const [logs, total] = await Promise.all([
-      WebhookIncomingLog.find({})
+    const [rows, total] = await Promise.all([
+      IncomingAtharEvent.find({})
         .sort({ receivedAt: -1 })
         .skip(skip)
         .limit(limit)
         .lean(),
-      WebhookIncomingLog.countDocuments({}),
+      IncomingAtharEvent.countDocuments({}),
     ]);
+
+    const logs = rows.map((row: any) => ({
+      _id: String(row._id),
+      method: row.sourceMethod || 'GET',
+      url: toUrl(row.sourcePath, row.query),
+      headers: row.headers || {},
+      query: row.query || {},
+      body: row.body ?? null,
+      receivedAt: row.receivedAt || row.createdAt,
+      createdAt: row.createdAt,
+    }));
 
     return NextResponse.json({
       logs,

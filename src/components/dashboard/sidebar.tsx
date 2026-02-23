@@ -22,6 +22,7 @@ import {
   MessageSquare,
   ClipboardList,
   Webhook,
+  Activity,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { apiClient } from "@/lib/api/client"
@@ -179,6 +180,12 @@ export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarP
       title: "التقارير",
       href: "/dashboard/reports",
       icon: FileText,
+      permissions: [{ resource: permissionResources.REPORTS, action: permissionActions.READ }],
+    },
+    {
+      title: "تقارير الأحداث",
+      href: "/dashboard/event-reports",
+      icon: Activity,
       permissions: [{ resource: permissionResources.REPORTS, action: permissionActions.READ }],
     },
     {
@@ -398,6 +405,7 @@ export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarP
     </>
   )
 }
+
 
 
 

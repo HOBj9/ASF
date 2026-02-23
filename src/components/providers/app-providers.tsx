@@ -1,14 +1,18 @@
 "use client"
 
-import "@/lib/leaflet-patch"
 import { SessionProvider } from "./session-provider"
 import { ThemeProvider } from "next-themes"
 import { QueryProvider } from "./query-provider"
 import { ErrorBoundary } from "@/components/error-boundary"
 import { ChunkLoadRecovery } from "@/components/chunk-load-recovery"
 import { Toaster } from "react-hot-toast"
+import { useEffect } from "react"
 
 export function AppProviders({ children }: { children: React.ReactNode }) {
+  useEffect(() => {
+    void import("@/lib/leaflet-patch")
+  }, [])
+
   return (
     <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
       <ChunkLoadRecovery />

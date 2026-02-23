@@ -22,6 +22,7 @@ import './MaterialTransaction'
 import './Survey'
 import './SurveySubmission'
 import './WebhookIncomingLog'
+import './IncomingAtharEvent'
 
 // Re-export for convenience
 export { default as Permission } from './Permission'
@@ -47,6 +48,7 @@ export { default as MaterialTransaction } from './MaterialTransaction'
 export { default as Survey } from './Survey'
 export { default as SurveySubmission } from './SurveySubmission'
 export { default as WebhookIncomingLog } from './WebhookIncomingLog'
+export { default as IncomingAtharEvent } from './IncomingAtharEvent'
 
 export type { IPermission } from './Permission'
 export type { IRole } from './Role'
@@ -71,4 +73,5 @@ export type { IMaterialTransaction } from './MaterialTransaction'
 export type { ISurvey } from './Survey'
 export type { ISurveySubmission } from './SurveySubmission'
 export type { IWebhookIncomingLog } from './WebhookIncomingLog'
+export type { IIncomingAtharEvent } from './IncomingAtharEvent'
 
