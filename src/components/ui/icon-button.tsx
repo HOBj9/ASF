@@ -1,9 +1,10 @@
-﻿"use client"
+"use client"
 
 import * as React from "react"
 import { Button, ButtonProps } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import { LucideIcon, Loader2 } from "lucide-react"
+import { LucideIcon } from "lucide-react"
+import { CircularSpinner } from "@/components/ui/loading"
 
 interface IconButtonProps extends Omit<ButtonProps, 'children'> {
   icon: LucideIcon
@@ -29,7 +30,7 @@ export const IconButton = React.forwardRef<HTMLButtonElement, IconButtonProps>(
         {...props}
       >
         {loading ? (
-          <Loader2 className="h-4 w-4 animate-spin" />
+          <CircularSpinner size="xs" />
         ) : (
           <Icon className="h-4 w-4" />
         )}

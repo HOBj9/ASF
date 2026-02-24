@@ -1,10 +1,16 @@
-﻿import { NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { requirePermission, handleApiError } from '@/lib/middleware/api-auth.middleware';
 import { OrganizationService } from '@/lib/services/organization.service';
 import { permissionActions, permissionResources } from '@/constants/permissions';
 import { isAdmin } from '@/lib/permissions';
+import { RoleService } from '@/lib/services/role.service';
+import { UserService } from '@/lib/services/user.service';
+import User from '@/models/User';
+import connectDB from '@/lib/mongodb';
 
 const organizationService = new OrganizationService();
+const roleService = new RoleService();
+const userService = new UserService();
 
 export async function GET(_: Request, { params }: { params: { id: string } }) {
   try {
@@ -22,7 +28,26 @@ export async function GET(_: Request, { params }: { params: { id: string } }) {
       return NextResponse.json({ error: 'المؤسسة غير موجودة' }, { status: 404 });
     }
 
-    return NextResponse.json({ organization });
+    let adminUser: { _id: string; name: string; email: string } | null = null;
+    const orgAdminRole = await roleService.getByName('organization_admin');
+    if (orgAdminRole) {
+      await connectDB();
+      const user = await User.findOne({
+        organizationId: params.id,
+        role: orgAdminRole._id,
+      })
+        .select('_id name email')
+        .lean();
+      if (user) {
+        adminUser = {
+          _id: String(user._id),
+          name: user.name,
+          email: user.email,
+        };
+      }
+    }
+
+    return NextResponse.json({ organization, adminUser });
   } catch (error: any) {
     return handleApiError(error);
   }
@@ -40,9 +65,32 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     }
 
     const body = await request.json();
-    const organization = await organizationService.update(params.id, body);
+    const { adminUserName, adminUserEmail, adminUserPassword, ...orgBody } = body;
+
+    const organization = await organizationService.update(params.id, orgBody);
     if (!organization) {
       return NextResponse.json({ error: 'المؤسسة غير موجودة' }, { status: 404 });
+    }
+
+    const hasAdminUpdate = adminUserName !== undefined || adminUserEmail !== undefined || (adminUserPassword !== undefined && adminUserPassword !== '');
+    if (hasAdminUpdate) {
+      const orgAdminRole = await roleService.getByName('organization_admin');
+      if (orgAdminRole) {
+        await connectDB();
+        const adminUserDoc = await User.findOne({
+          organizationId: params.id,
+          role: orgAdminRole._id,
+        }).select('_id').lean();
+        if (adminUserDoc) {
+          const updateData: { name?: string; email?: string; password?: string } = {};
+          if (adminUserName !== undefined && adminUserName !== '') updateData.name = adminUserName;
+          if (adminUserEmail !== undefined && adminUserEmail !== '') updateData.email = adminUserEmail;
+          if (adminUserPassword !== undefined && adminUserPassword !== '') updateData.password = adminUserPassword;
+          if (Object.keys(updateData).length > 0) {
+            await userService.update(String(adminUserDoc._id), updateData);
+          }
+        }
+      }
     }
 
     return NextResponse.json({ organization });

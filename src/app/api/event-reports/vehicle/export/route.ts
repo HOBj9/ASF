@@ -6,7 +6,7 @@ import {
   generateVehicleEventsReport,
   mapRowsToCsvRows,
 } from '@/lib/services/reports/event-report-engine.service';
-import { toCsv } from '@/lib/utils/csv.util';
+import { toXlsxBuffer } from '@/lib/utils/excel.util';
 
 function parseDateTime(value: string | null): Date | null {
   if (!value) return null;
@@ -30,8 +30,14 @@ export async function GET(request: Request) {
       branchId: searchParams.get('branchId'),
     });
 
-    const vehicleId = String(searchParams.get('vehicleId') || '').trim();
-    if (!vehicleId) {
+    const vehicleIdsRaw = searchParams.getAll('vehicleIds');
+    const vehicleIds = vehicleIdsRaw.length > 0
+      ? vehicleIdsRaw.map((id) => id.trim()).filter(Boolean)
+      : [];
+    const vehicleIdSingle = String(searchParams.get('vehicleId') || '').trim();
+    const vehicleIdsResolved = vehicleIds.length > 0 ? vehicleIds : (vehicleIdSingle ? [vehicleIdSingle] : []);
+
+    if (vehicleIdsResolved.length === 0) {
       return NextResponse.json({ error: 'يرجى تحديد المركبة' }, { status: 400 });
     }
 
@@ -40,20 +46,23 @@ export async function GET(request: Request) {
 
     const report = await generateVehicleEventsReport({
       scope,
-      vehicleId,
+      vehicleIds: vehicleIdsResolved,
       from,
       to,
     });
 
     const csvRows = mapRowsToCsvRows(report.rows, report.headers);
-    const csv = toCsv(csvRows, report.headers.map((header) => header.label));
+    const excelBuffer = toXlsxBuffer(
+      report.headers.map((header) => header.label),
+      csvRows
+    );
     const datePart = report.range.from.toISOString().slice(0, 10);
-    const filename = `vehicle-events-report-${datePart}.csv`;
+    const filename = `vehicle-events-report-${datePart}.xlsx`;
 
-    return new NextResponse(csv, {
+    return new NextResponse(excelBuffer, {
       status: 200,
       headers: {
-        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         'Content-Disposition': `attachment; filename="${filename}"`,
       },
     });
@@ -61,4 +70,3 @@ export async function GET(request: Request) {
     return handleApiError(error);
   }
 }
-

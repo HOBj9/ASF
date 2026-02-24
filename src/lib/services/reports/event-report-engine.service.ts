@@ -37,17 +37,37 @@ type PointVehiclesReportResult = {
 
 type GenerateVehicleEventsReportInput = {
   scope: EventReportScope;
-  vehicleId: string;
+  vehicleId?: string;
+  vehicleIds?: string[];
   from?: Date | null;
   to?: Date | null;
 };
 
 type GeneratePointVehiclesReportInput = {
   scope: EventReportScope;
-  pointId: string;
+  pointId?: string;
+  pointIds?: string[];
   from?: Date | null;
   to?: Date | null;
 };
+
+function normalizeVehicleIds(input: GenerateVehicleEventsReportInput): string[] {
+  const ids = input.vehicleIds?.length
+    ? input.vehicleIds.filter((id) => id?.trim())
+    : input.vehicleId?.trim()
+      ? [input.vehicleId.trim()]
+      : [];
+  return [...new Set(ids)];
+}
+
+function normalizePointIds(input: GeneratePointVehiclesReportInput): string[] {
+  const ids = input.pointIds?.length
+    ? input.pointIds.filter((id) => id?.trim())
+    : input.pointId?.trim()
+      ? [input.pointId.trim()]
+      : [];
+  return [...new Set(ids)];
+}
 
 type AnyDoc = Record<string, any>;
 
@@ -220,23 +240,37 @@ export async function generateVehicleEventsReport(
 ): Promise<VehicleEventsReportResult> {
   await connectDB();
 
+  const vehicleIds = normalizeVehicleIds(input);
+  if (vehicleIds.length === 0) {
+    throw new Error('يرجى تحديد مركبة واحدة على الأقل');
+  }
+
   const timeZone = await getBranchTimeZone(input.scope.branchId);
   const range = resolveRange(timeZone, input.from, input.to);
 
-  const vehicle = await Vehicle.findOne({
-    _id: input.vehicleId,
+  const vehicles = await Vehicle.find({
+    _id: { $in: vehicleIds },
     branchId: input.scope.branchId,
   })
     .select('name plateNumber imei')
     .lean();
 
-  if (!vehicle) {
-    throw new Error('المركبة غير موجودة ضمن الفرع المحدد');
+  if (vehicles.length === 0) {
+    throw new Error('المركبات المحددة غير موجودة ضمن الفرع المحدد');
+  }
+
+  const vehicleMap = new Map<string, AnyDoc>();
+  const vehicleImeis: string[] = [];
+  for (const v of vehicles) {
+    const id = String(v._id);
+    vehicleMap.set(id, v);
+    const imei = normalizeText(v.imei);
+    if (imei) vehicleImeis.push(imei);
   }
 
   const visitFilter = {
     branchId: input.scope.branchId,
-    vehicleId: input.vehicleId,
+    vehicleId: { $in: vehicleIds },
     ...buildVisitOverlapFilter(range),
   };
 
@@ -267,6 +301,8 @@ export async function generateVehicleEventsReport(
     const exitTime = toDate(visit?.exitTime);
     const eventTimestamp = exitTime || entryTime || new Date();
     const durationSeconds = visit?.durationSeconds ?? null;
+    const vid = String(visit?.vehicleId ?? visit?.vehicleId?._id ?? '');
+    const vehicle = vehicleMap.get(vid) || (visit as AnyDoc).vehicleId;
 
     totalEntries += 1;
     if (exitTime) totalExits += 1;
@@ -274,16 +310,22 @@ export async function generateVehicleEventsReport(
       totalStayDurationSeconds += durationSeconds;
     }
 
+    const vName = vehicle
+      ? normalizeText(vehicle.name || (vehicle as AnyDoc).name) || 'مركبة غير معروفة'
+      : 'مركبة غير معروفة';
+    const vPlate = vehicle ? normalizeText(vehicle.plateNumber || (vehicle as AnyDoc).plateNumber) : '';
+    const vImei = vehicle ? normalizeText(vehicle.imei || (vehicle as AnyDoc).imei) : '';
+
     visitRows.push({
-      id: normalizeText(visit?._id) || `${input.vehicleId}-${eventTimestamp.getTime()}`,
+      id: normalizeText(visit?._id) || `${vid}-${eventTimestamp.getTime()}`,
       source: 'point_visit',
       sourceLabel: 'زيارة محسوبة',
       eventTimestamp: eventTimestamp.toISOString(),
       eventType: 'visit',
       eventTypeLabel: 'زيارة',
-      vehicleName: normalizeText(vehicle.name) || 'مركبة غير معروفة',
-      plateNumber: normalizeText(vehicle.plateNumber),
-      imei: normalizeText(vehicle.imei),
+      vehicleName: vName,
+      plateNumber: vPlate,
+      imei: vImei,
       pointName,
       zoneId: normalizeText(visit?.zoneId || visit?.pointId?.zoneId),
       entryTime: formatDateTime(entryTime, timeZone),
@@ -295,10 +337,9 @@ export async function generateVehicleEventsReport(
     });
   }
 
-  const vehicleFilter: Array<Record<string, any>> = [{ vehicleId: input.vehicleId }];
-  const vehicleImei = normalizeText(vehicle.imei);
-  if (vehicleImei) {
-    vehicleFilter.push({ imei: vehicleImei });
+  const vehicleFilter: Array<Record<string, any>> = [{ vehicleId: { $in: vehicleIds } }];
+  if (vehicleImeis.length > 0) {
+    vehicleFilter.push({ imei: { $in: vehicleImeis } });
   }
 
   const zoneEvents = (await ZoneEvent.find({
@@ -345,12 +386,14 @@ export async function generateVehicleEventsReport(
 
   const rows = sortVehicleRowsDesc([...visitRows, ...zoneEventRows], timeZone);
 
+  const uniqueVehicleCount = new Set(rows.map((r) => r.vehicleName + r.imei)).size;
+
   const summary: EventReportSummary = {
     totalRecords: rows.length,
     totalVisits: visits.length,
     totalEntries,
     totalExits,
-    totalVehicles: rows.length ? 1 : 0,
+    totalVehicles: uniqueVehicleCount,
     totalPoints: pointsSet.size,
     totalStayDurationSeconds,
   };
@@ -369,24 +412,29 @@ export async function generatePointVehiclesReport(
 ): Promise<PointVehiclesReportResult> {
   await connectDB();
 
+  const pointIds = normalizePointIds(input);
+  if (pointIds.length === 0) {
+    throw new Error('يرجى تحديد نقطة واحدة على الأقل');
+  }
+
   const timeZone = await getBranchTimeZone(input.scope.branchId);
   const range = resolveRange(timeZone, input.from, input.to);
 
-  const point = await Point.findOne({
-    _id: input.pointId,
+  const points = await Point.find({
+    _id: { $in: pointIds },
     branchId: input.scope.branchId,
   })
     .select('name nameAr zoneId')
     .lean();
 
-  if (!point) {
-    throw new Error('النقطة غير موجودة ضمن الفرع المحدد');
+  if (points.length === 0) {
+    throw new Error('النقاط المحددة غير موجودة ضمن الفرع المحدد');
   }
 
-  const zoneMatchers: Array<Record<string, any>> = [{ pointId: input.pointId }];
-  const pointZoneId = normalizeText(point.zoneId);
-  if (pointZoneId) {
-    zoneMatchers.push({ zoneId: pointZoneId });
+  const zoneMatchers: Array<Record<string, any>> = [{ pointId: { $in: pointIds } }];
+  const zoneIds = points.map((p) => normalizeText(p.zoneId)).filter(Boolean);
+  if (zoneIds.length > 0) {
+    zoneMatchers.push({ zoneId: { $in: zoneIds } });
   }
 
   const zoneEvents = (await ZoneEvent.find({
@@ -400,7 +448,7 @@ export async function generatePointVehiclesReport(
 
   const visitFilter = {
     branchId: input.scope.branchId,
-    pointId: input.pointId,
+    pointId: { $in: pointIds },
     ...buildVisitOverlapFilter(range),
   };
 
@@ -503,7 +551,7 @@ export async function generatePointVehiclesReport(
   const summary = createEmptySummary();
   summary.totalRecords = rows.length;
   summary.totalVehicles = rows.length;
-  summary.totalPoints = rows.length ? 1 : 0;
+  summary.totalPoints = pointIds.length;
   summary.totalVisits = visits.length;
   summary.totalEntries = rows.reduce((acc, row) => acc + row.entriesCount, 0);
   summary.totalExits = rows.reduce((acc, row) => acc + row.exitsCount, 0);

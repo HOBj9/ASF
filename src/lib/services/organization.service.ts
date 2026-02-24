@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Organization Service
  * Business logic for organization management
  */
@@ -16,6 +16,10 @@ export interface CreateOrganizationData {
     vehicleLabel?: string;
     driverLabel?: string;
     routeLabel?: string;
+    lineSupervisorLabel?: string;
+    surveyLabel?: string;
+    eventsReportLabel?: string;
+    latestEventsLabel?: string;
   };
   isActive?: boolean;
 }
@@ -30,6 +34,10 @@ export interface UpdateOrganizationData {
     vehicleLabel?: string;
     driverLabel?: string;
     routeLabel?: string;
+    lineSupervisorLabel?: string;
+    surveyLabel?: string;
+    eventsReportLabel?: string;
+    latestEventsLabel?: string;
   };
   isActive?: boolean;
 }
@@ -76,6 +84,10 @@ export class OrganizationService {
         vehicleLabel: data.labels.vehicleLabel || undefined,
         driverLabel: data.labels.driverLabel || undefined,
         routeLabel: data.labels.routeLabel || undefined,
+        lineSupervisorLabel: data.labels.lineSupervisorLabel || undefined,
+        surveyLabel: data.labels.surveyLabel || undefined,
+        eventsReportLabel: data.labels.eventsReportLabel || undefined,
+        latestEventsLabel: data.labels.latestEventsLabel || undefined,
       };
     }
 

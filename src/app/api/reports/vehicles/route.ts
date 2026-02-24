@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requirePermission, handleApiError } from '@/lib/middleware/api-auth.middleware';
 import { resolveBranchId } from '@/lib/utils/municipality.util';
-import { toCsv } from '@/lib/utils/csv.util';
+import { toXlsxBuffer } from '@/lib/utils/excel.util';
 import { permissionActions, permissionResources } from '@/constants/permissions';
 import { generateVisitsReport, type ReportColumnKey } from '@/lib/services/reports/report-engine.service';
 
@@ -43,13 +43,13 @@ export async function GET(request: Request) {
       status: 'closed',
     });
 
-    const csv = toCsv(report.rows, report.headers);
-    const filename = `vehicle-report-${report.range.start.toISOString().slice(0, 10)}.csv`;
+    const excelBuffer = toXlsxBuffer(report.headers, report.rows);
+    const filename = `vehicle-report-${report.range.start.toISOString().slice(0, 10)}.xlsx`;
 
-    return new NextResponse(csv, {
+    return new NextResponse(excelBuffer, {
       status: 200,
       headers: {
-        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         'Content-Disposition': `attachment; filename="${filename}"`,
       },
     });

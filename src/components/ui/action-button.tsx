@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 
 import * as React from "react"
 import { Button, ButtonProps } from "@/components/ui/button"
@@ -6,8 +6,9 @@ import { getMessage } from "@/constants/messages"
 import { 
   Save, X, Trash2, Edit, Plus, Check, 
   Search, Filter, RefreshCw, Upload, Download,
-  Send, Loader2
+  Send
 } from "lucide-react"
+import { CircularSpinner } from "@/components/ui/loading"
 import { cn } from "@/lib/utils"
 
 type ActionType = 
@@ -115,7 +116,7 @@ export const ActionButton = React.forwardRef<HTMLButtonElement, ActionButtonProp
       >
         {isLoading ? (
           <>
-            <Loader2 className="h-4 w-4 animate-spin" />
+            <CircularSpinner size="xs" />
             {getMessage('buttons.loading')}
           </>
         ) : (

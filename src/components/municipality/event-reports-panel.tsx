@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { MultiSelectWithSearch } from '@/components/ui/multi-select-with-search';
 import { useLabels } from '@/hooks/use-labels';
 import type {
   EventReportHeader,
@@ -77,8 +78,8 @@ export function EventReportsPanel({
 
   const [selectedOrganizationId, setSelectedOrganizationId] = useState('');
   const [selectedBranchId, setSelectedBranchId] = useState('');
-  const [selectedVehicleId, setSelectedVehicleId] = useState('');
-  const [selectedPointId, setSelectedPointId] = useState('');
+  const [selectedVehicleIds, setSelectedVehicleIds] = useState<string[]>([]);
+  const [selectedPointIds, setSelectedPointIds] = useState<string[]>([]);
 
   const todayRange = useMemo(() => getTodayRange(), []);
   const [fromDateTime, setFromDateTime] = useState(todayRange.from);
@@ -205,8 +206,8 @@ export function EventReportsPanel({
       if (!resolvedBranchId) {
         setVehicles([]);
         setPoints([]);
-        setSelectedVehicleId('');
-        setSelectedPointId('');
+        setSelectedVehicleIds([]);
+        setSelectedPointIds([]);
         return;
       }
 
@@ -244,11 +245,11 @@ export function EventReportsPanel({
 
         setVehicles(mappedVehicles);
         setPoints(mappedPoints);
-        setSelectedVehicleId((current) =>
-          current && mappedVehicles.some((vehicle) => vehicle._id === current) ? current : ''
+        setSelectedVehicleIds((current) =>
+          current.filter((id) => mappedVehicles.some((v) => v._id === id))
         );
-        setSelectedPointId((current) =>
-          current && mappedPoints.some((point) => point._id === current) ? current : ''
+        setSelectedPointIds((current) =>
+          current.filter((id) => mappedPoints.some((p) => p._id === id))
         );
       } catch (optionsError: any) {
         if (active) {
@@ -307,9 +308,9 @@ export function EventReportsPanel({
     params.set('pageSize', String(PAGE_SIZE));
 
     if (activeTab === 'vehicle') {
-      params.set('vehicleId', selectedVehicleId);
+      selectedVehicleIds.forEach((id) => params.append('vehicleIds', id));
     } else {
-      params.set('pointId', selectedPointId);
+      selectedPointIds.forEach((id) => params.append('pointIds', id));
     }
 
     return params;
@@ -322,11 +323,11 @@ export function EventReportsPanel({
       return;
     }
 
-    if (activeTab === 'vehicle' && !selectedVehicleId) {
+    if (activeTab === 'vehicle' && selectedVehicleIds.length === 0) {
       setError(`يرجى اختيار ${labels.vehicleLabel}`);
       return;
     }
-    if (activeTab === 'point' && !selectedPointId) {
+    if (activeTab === 'point' && selectedPointIds.length === 0) {
       setError(`يرجى اختيار ${labels.pointLabel}`);
       return;
     }
@@ -369,8 +370,8 @@ export function EventReportsPanel({
     const scopeValidationError = validateScope();
     if (scopeValidationError) return '';
 
-    if (activeTab === 'vehicle' && !selectedVehicleId) return '';
-    if (activeTab === 'point' && !selectedPointId) return '';
+    if (activeTab === 'vehicle' && selectedVehicleIds.length === 0) return '';
+    if (activeTab === 'point' && selectedPointIds.length === 0) return '';
 
     const from = new Date(fromDateTime);
     const to = new Date(toDateTime);
@@ -413,7 +414,7 @@ export function EventReportsPanel({
   return (
     <Card className="text-right">
       <CardHeader>
-        <CardTitle>تقارير الأحداث المخصصة</CardTitle>
+        <CardTitle>{labels.eventsReportLabel || 'تقارير الأحداث'} المخصصة</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="flex flex-wrap justify-end gap-2">
@@ -515,37 +516,27 @@ export function EventReportsPanel({
         <div className="grid gap-3 md:grid-cols-2">
           {activeTab === 'vehicle' ? (
             <div className="space-y-1">
-              <label className="text-sm">{labels.vehicleLabel}</label>
-              <select
-                value={selectedVehicleId}
-                onChange={(event) => setSelectedVehicleId(event.target.value)}
-                className="w-full rounded-lg border bg-background px-3 py-2"
+              <MultiSelectWithSearch
+                label={labels.vehicleLabel}
+                options={vehicles}
+                value={selectedVehicleIds}
+                onChange={setSelectedVehicleIds}
+                placeholder={`اختر ${labels.vehicleLabel}`}
+                emptyMessage={`لا توجد ${labels.vehicleLabel}`}
                 disabled={loadingReportOptions || !resolvedBranchId}
-              >
-                <option value="">{`اختر ${labels.vehicleLabel}`}</option>
-                {vehicles.map((vehicle) => (
-                  <option key={vehicle._id} value={vehicle._id}>
-                    {vehicle.name}
-                  </option>
-                ))}
-              </select>
+              />
             </div>
           ) : (
             <div className="space-y-1">
-              <label className="text-sm">{labels.pointLabel}</label>
-              <select
-                value={selectedPointId}
-                onChange={(event) => setSelectedPointId(event.target.value)}
-                className="w-full rounded-lg border bg-background px-3 py-2"
+              <MultiSelectWithSearch
+                label={labels.pointLabel}
+                options={points}
+                value={selectedPointIds}
+                onChange={setSelectedPointIds}
+                placeholder={`اختر ${labels.pointLabel}`}
+                emptyMessage={`لا توجد ${labels.pointLabel}`}
                 disabled={loadingReportOptions || !resolvedBranchId}
-              >
-                <option value="">{`اختر ${labels.pointLabel}`}</option>
-                {points.map((point) => (
-                  <option key={point._id} value={point._id}>
-                    {point.name}
-                  </option>
-                ))}
-              </select>
+              />
             </div>
           )}
         </div>
@@ -577,7 +568,7 @@ export function EventReportsPanel({
               exportUrl ? 'hover:bg-accent' : 'pointer-events-none opacity-50'
             }`}
           >
-            تصدير CSV
+            تصدير Excel
           </a>
         </div>
 

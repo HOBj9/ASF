@@ -11,6 +11,8 @@ export type Labels = {
   routeLabel: string;
   lineSupervisorLabel: string;
   surveyLabel: string;
+  eventsReportLabel: string;
+  latestEventsLabel: string;
 };
 
 export const defaultLabels: Labels = {
@@ -21,6 +23,8 @@ export const defaultLabels: Labels = {
   routeLabel: 'مسارات',
   lineSupervisorLabel: 'مشرفو الخط',
   surveyLabel: 'الاستبيانات',
+  eventsReportLabel: 'تقارير الأحداث',
+  latestEventsLabel: 'آخر الأحداث',
 };
 
 /** Returns true if the string is empty or only question marks/spaces (corrupted encoding). */
@@ -41,5 +45,7 @@ export function sanitizeLabels(labels: Partial<Labels> | null | undefined): Labe
     routeLabel: isCorruptedLabel(merged.routeLabel) ? defaultLabels.routeLabel : merged.routeLabel!,
     lineSupervisorLabel: isCorruptedLabel(merged.lineSupervisorLabel) ? defaultLabels.lineSupervisorLabel : merged.lineSupervisorLabel!,
     surveyLabel: isCorruptedLabel(merged.surveyLabel) ? defaultLabels.surveyLabel : merged.surveyLabel!,
+    eventsReportLabel: isCorruptedLabel(merged.eventsReportLabel) ? defaultLabels.eventsReportLabel : merged.eventsReportLabel!,
+    latestEventsLabel: isCorruptedLabel(merged.latestEventsLabel) ? defaultLabels.latestEventsLabel : merged.latestEventsLabel!,
   };
 }

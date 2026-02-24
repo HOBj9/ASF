@@ -26,6 +26,7 @@ import {
 } from "recharts";
 import { useLabels } from "@/hooks/use-labels";
 import toast from "react-hot-toast";
+import { playEventToastSound } from "@/lib/utils/event-toast-sound";
 import {
   Select,
   SelectContent,
@@ -407,16 +408,49 @@ export function MunicipalityDashboard({
           setEvents((prev) => mergeUniqueEvents([incomingEvent], prev, 8));
           markEventAsNew(incomingEvent._id);
 
-          const description =
+          const eventTypeLabel = incomingEvent.type === "zone_in" ? "دخول" : "خروج";
+          const vehicleDisplay = incomingEvent.vehicleName || incomingEvent.imei || "—";
+          const pointDisplay = incomingEvent.pointName || "—";
+          const timeDisplay = incomingEvent.eventTimestamp || "—";
+          const driverDisplay = incomingEvent.driverName || "—";
+          const mainText =
             incomingEvent.displayText ||
             incomingEvent.name ||
             incomingEvent.pointName ||
             "تم استلام حدث جديد";
 
+          const toastContent = (
+            <div className="space-y-1.5 text-right" dir="rtl">
+              <div className="font-semibold">{eventTypeLabel}</div>
+              <div>{mainText}</div>
+              <div className="text-xs opacity-90 space-y-0.5">
+                <div>الوقت: {timeDisplay}</div>
+                <div>{labels.vehicleLabel}: {vehicleDisplay}</div>
+                <div>{labels.pointLabel}: {pointDisplay}</div>
+                {incomingEvent.driverName ? (
+                  <div>{labels.driverLabel}: {driverDisplay}</div>
+                ) : null}
+              </div>
+            </div>
+          );
+
+          const toastOptions = {
+            id: `zone-event-${incomingEvent._id}`,
+            duration: 8500,
+            style: {
+              minWidth: "400px",
+              maxWidth: "520px",
+              padding: "1rem 1.25rem",
+              fontSize: "1rem",
+            },
+          };
+
+          playEventToastSound();
+
           if (incomingEvent.type === "zone_in") {
-            toast.success(description, { id: `zone-event-${incomingEvent._id}` });
+            toast.success(toastContent, toastOptions);
           } else {
-            toast(description, { id: `zone-event-${incomingEvent._id}` });
+            toast.warning(toastContent, toastOptions);
           }
         }
       } catch {
@@ -433,7 +467,7 @@ export function MunicipalityDashboard({
       eventsStreamConnectedRef.current = false;
       source.close();
     };
-  }, [canLoadBranchData, branchQuery]);
+  }, [canLoadBranchData, branchQuery, labels.vehicleLabel, labels.pointLabel, labels.driverLabel]);
 
   // Preload map data in background after initial page load (non-blocking)
   useEffect(() => {
@@ -772,7 +806,7 @@ export function MunicipalityDashboard({
         {showEvents && (
         <div className="rounded-2xl border bg-card p-4 text-right shadow-sm lg:h-[620px] flex flex-col">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-lg font-semibold">آخر الأحداث</h3>
+            <h3 className="text-lg font-semibold">{labels.latestEventsLabel || "آخر الأحداث"}</h3>
             <span className="text-xs text-muted-foreground">آخر 8 أحداث</span>
           </div>
           <div className="space-y-3 overflow-y-auto flex-1 pr-1">

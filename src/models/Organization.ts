@@ -8,6 +8,8 @@ export interface OrganizationLabels {
   routeLabel: string;
   lineSupervisorLabel?: string;
   surveyLabel?: string;
+  eventsReportLabel?: string;
+  latestEventsLabel?: string;
 }
 
 export interface IOrganization extends Document {
@@ -47,6 +49,8 @@ const OrganizationSchema: Schema = new Schema(
       routeLabel: { type: String, default: 'مسارات', trim: true },
       lineSupervisorLabel: { type: String, default: 'مشرفو الخط', trim: true },
       surveyLabel: { type: String, default: 'الاستبيانات', trim: true },
+      eventsReportLabel: { type: String, default: 'تقارير الأحداث', trim: true },
+      latestEventsLabel: { type: String, default: 'آخر الأحداث', trim: true },
     },
     isActive: {
       type: Boolean,

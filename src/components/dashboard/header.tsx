@@ -1,22 +1,20 @@
-﻿"use client"
+"use client"
 
 import { LogOut, AlertCircle, Home, RefreshCw, User, Menu } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useSession, signOut } from "next-auth/react"
 import { apiClient } from "@/lib/api/client"
-import { usePathname } from "next/navigation"
 import { useCallback, useState, useEffect } from "react"
 import toast from "react-hot-toast"
 import { Loading } from "@/components/ui/loading"
 import { ThemeToggle } from "@/components/theme-toggle"
 import Link from "next/link"
-import { DashboardNavIcons, DashboardNavMenu } from "@/components/dashboard/nav-icons"
+import { useSidebarStore } from "@/store/sidebar-store"
 
 export function DashboardHeader() {
   const { data: session, update } = useSession()
-  const pathname = usePathname()
   const [returningToAdmin, setReturningToAdmin] = useState(false)
-  const [isNavOpen, setIsNavOpen] = useState(false)
+  const toggleSidebar = useSidebarStore((s) => s.toggle)
 
   const handleStopImpersonate = useCallback(async () => {
     setReturningToAdmin(true)
@@ -63,10 +61,6 @@ export function DashboardHeader() {
     }
   }, [isImpersonating, returningToAdmin])
 
-  useEffect(() => {
-    setIsNavOpen(false)
-  }, [pathname])
-
   return (
     <>
       {returningToAdmin && (
@@ -75,7 +69,7 @@ export function DashboardHeader() {
           text="جاري العودة إلى حساب المدير... يرجى الانتظار" 
         />
       )}
-      <header className="flex h-16 items-center border-b bg-background px-4 lg:px-6 flex-row-reverse gap-4">
+      <header className="flex h-16 shrink-0 items-center border-b bg-background px-4 lg:px-6 flex-row-reverse gap-4">
         <div className="flex items-center gap-3">
           <Button
             variant="ghost"
@@ -111,37 +105,16 @@ export function DashboardHeader() {
             <span className="hidden sm:inline">تسجيل الخروج</span>
           </Button>
         </div>
-        <div className="flex-1 flex justify-center px-2">
-          <div className="hidden lg:flex w-full">
-            <DashboardNavIcons />
-          </div>
-          <div className="relative lg:hidden">
-            <Button
-              variant="ghost"
-              size="icon"
-              type="button"
-              aria-expanded={isNavOpen}
-              aria-controls="dashboard-nav-menu"
-              onClick={() => setIsNavOpen((open) => !open)}
-              title="القائمة"
-            >
-              <Menu className="h-5 w-5" />
-            </Button>
-            {isNavOpen && (
-              <>
-                <div
-                  className="fixed inset-0 z-40"
-                  onClick={() => setIsNavOpen(false)}
-                />
-                <div
-                  id="dashboard-nav-menu"
-                  className="absolute z-50 mt-2 right-0"
-                >
-                  <DashboardNavMenu onNavigate={() => setIsNavOpen(false)} />
-                </div>
-              </>
-            )}
-          </div>
+        <div className="flex-1 flex justify-end lg:hidden">
+          <Button
+            variant="ghost"
+            size="icon"
+            type="button"
+            onClick={() => toggleSidebar()}
+            title="القائمة"
+          >
+            <Menu className="h-5 w-5" />
+          </Button>
         </div>
         {isImpersonating && (
           <div className="flex items-center gap-2">

@@ -3,6 +3,7 @@ import { authOptions } from "@/lib/auth"
 import { redirect } from "next/navigation"
 import { hasPermission, isAdmin } from "@/lib/permissions"
 import { permissionActions, permissionResources } from "@/constants/permissions"
+import { getLabelsForSession } from "@/lib/utils/labels-server.util"
 import { OrganizationPointsManager } from "@/components/surveys/organization-points-manager"
 
 export default async function OrganizationPointsPage() {
@@ -16,10 +17,13 @@ export default async function OrganizationPointsPage() {
     redirect("/unauthorized")
   }
 
+  const labels = await getLabelsForSession(session)
+  const pageTitle = `${labels.pointLabel || "نقاط"} المؤسسة`
+
   return (
     <div className="text-right">
       <div className="mb-6 lg:mb-8">
-        <h1 className="text-2xl lg:text-3xl font-bold">نقاط المؤسسة</h1>
+        <h1 className="text-2xl lg:text-3xl font-bold">{pageTitle}</h1>
         <p className="text-muted-foreground mt-2">النقاط على مستوى المؤسسة ونسخها إلى الفروع ونقلها إلى أثر</p>
       </div>
       <OrganizationPointsManager />

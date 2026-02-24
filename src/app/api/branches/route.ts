@@ -48,6 +48,7 @@ export async function POST(request: Request) {
       atharKey,
       fuelPricePerKmGasoline,
       fuelPricePerKmDiesel,
+      labels,
       isActive,
       adminUserName,
       adminUserEmail,
@@ -75,6 +76,7 @@ export async function POST(request: Request) {
       atharKey,
       fuelPricePerKmGasoline: fuelPricePerKmGasoline != null ? Number(fuelPricePerKmGasoline) : undefined,
       fuelPricePerKmDiesel: fuelPricePerKmDiesel != null ? Number(fuelPricePerKmDiesel) : undefined,
+      labels: labels && typeof labels === 'object' ? labels : undefined,
       isActive: isActive ?? true,
     });
 

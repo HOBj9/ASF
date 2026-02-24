@@ -4,7 +4,7 @@
  */
 
 import connectDB from '@/lib/mongodb';
-import Branch, { IBranch } from '@/models/Branch';
+import Branch, { IBranch, BranchLabels } from '@/models/Branch';
 
 export interface CreateBranchData {
   organizationId: string;
@@ -20,6 +20,7 @@ export interface CreateBranchData {
   atharKey?: string;
   fuelPricePerKmGasoline?: number;
   fuelPricePerKmDiesel?: number;
+  labels?: BranchLabels;
   isActive?: boolean;
 }
 
@@ -36,13 +37,14 @@ export interface UpdateBranchData {
   atharKey?: string;
   fuelPricePerKmGasoline?: number;
   fuelPricePerKmDiesel?: number;
+  labels?: BranchLabels;
   isActive?: boolean;
 }
 
 export class BranchService {
   async create(data: CreateBranchData): Promise<IBranch> {
     await connectDB();
-    const branch = await Branch.create({
+    const createPayload: any = {
       organizationId: data.organizationId,
       name: data.name,
       nameAr: data.nameAr || null,
@@ -57,7 +59,11 @@ export class BranchService {
       fuelPricePerKmGasoline: data.fuelPricePerKmGasoline ?? null,
       fuelPricePerKmDiesel: data.fuelPricePerKmDiesel ?? null,
       isActive: data.isActive ?? true,
-    });
+    };
+    if (data.labels != null && typeof data.labels === 'object') {
+      createPayload.labels = data.labels;
+    }
+    const branch = await Branch.create(createPayload);
 
     return branch;
   }
@@ -83,6 +89,9 @@ export class BranchService {
     if (data.atharKey !== undefined && data.atharKey === '') updateData.atharKey = null;
     if (data.fuelPricePerKmGasoline !== undefined && (data.fuelPricePerKmGasoline === '' || data.fuelPricePerKmGasoline == null)) updateData.fuelPricePerKmGasoline = null;
     if (data.fuelPricePerKmDiesel !== undefined && (data.fuelPricePerKmDiesel === '' || data.fuelPricePerKmDiesel == null)) updateData.fuelPricePerKmDiesel = null;
+    if (data.labels !== undefined) {
+      updateData.labels = data.labels;
+    }
 
     return Branch.findByIdAndUpdate(id, updateData, {
       new: true,

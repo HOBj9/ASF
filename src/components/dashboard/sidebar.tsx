@@ -15,6 +15,7 @@ import {
   Truck,
   Users,
   MapPin,
+  MapPinned,
   Route,
   FileText,
   Boxes,
@@ -23,6 +24,7 @@ import {
   ClipboardList,
   Webhook,
   Activity,
+  ChevronDown,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { apiClient } from "@/lib/api/client"
@@ -51,6 +53,20 @@ export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarP
   const [roleName, setRoleName] = useState<string | null>(initialUser.roleName || null)
   const { labels, loading: labelsLoading } = useLabels()
   const [roleLoading, setRoleLoading] = useState(false)
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(() => ({
+    general: false,
+    organizations: false,
+    branchOps: false,
+    surveys: false,
+    reports: false,
+    userManagement: false,
+    system: false,
+    materials: false,
+  }))
+
+  const toggleGroup = (groupKey: string) => {
+    setExpandedGroups((prev) => ({ ...prev, [groupKey]: !prev[groupKey] }))
+  }
 
   // Get user data from session (updated when impersonation changes)
   const currentUser = useMemo(() => {
@@ -129,66 +145,70 @@ export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarP
 
   const menuItems = useMemo(() => ([
     {
+      group: "general" as const,
       title: "لوحة التحكم",
       href: "/dashboard",
       icon: LayoutDashboard,
       permissions: [{ resource: permissionResources.DASHBOARD, action: permissionActions.READ }],
     },
     {
+      group: "organizations" as const,
       title: "المؤسسات",
       href: "/dashboard/admin/organizations",
       icon: Building,
       superAdminOnly: true,
     },
     {
+      group: "branchOps" as const,
       title: labels.branchLabel || "الفروع",
       href: "/dashboard/admin/municipalities",
       icon: Building2,
       permissions: [{ resource: permissionResources.BRANCHES, action: permissionActions.READ }],
     },
     {
+      group: "branchOps" as const,
       title: labels.lineSupervisorLabel || "مشرفو الخط",
       href: "/dashboard/line-supervisors",
       icon: UserCheck,
       organizationAdminOrSuperAdmin: true,
     },
     {
+      group: "branchOps" as const,
       title: labels.vehicleLabel || "المركبات",
       href: "/dashboard/vehicles",
       icon: Truck,
       permissions: [{ resource: permissionResources.VEHICLES, action: permissionActions.READ }],
     },
     {
+      group: "branchOps" as const,
       title: labels.driverLabel || "السائقون",
       href: "/dashboard/drivers",
       icon: Users,
       permissions: [{ resource: permissionResources.DRIVERS, action: permissionActions.READ }],
     },
     {
+      group: "branchOps" as const,
       title: labels.pointLabel || "النقاط",
       href: "/dashboard/points",
       icon: MapPin,
       permissions: [{ resource: permissionResources.POINTS, action: permissionActions.READ }],
     },
     {
+      group: "branchOps" as const,
+      title: "نقاط المؤسسة",
+      href: "/dashboard/organization-points",
+      icon: MapPinned,
+      permissions: [{ resource: permissionResources.POINTS, action: permissionActions.READ }],
+    },
+    {
+      group: "branchOps" as const,
       title: labels.routeLabel || "المسارات",
       href: "/dashboard/routes",
       icon: Route,
       permissions: [{ resource: permissionResources.ROUTES, action: permissionActions.READ }],
     },
     {
-      title: "التقارير",
-      href: "/dashboard/reports",
-      icon: FileText,
-      permissions: [{ resource: permissionResources.REPORTS, action: permissionActions.READ }],
-    },
-    {
-      title: "تقارير الأحداث",
-      href: "/dashboard/event-reports",
-      icon: Activity,
-      permissions: [{ resource: permissionResources.REPORTS, action: permissionActions.READ }],
-    },
-    {
+      group: "surveys" as const,
       title: labels.surveyLabel || "الاستبيانات",
       href: "/dashboard/surveys",
       icon: ClipboardList,
@@ -196,47 +216,62 @@ export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarP
       lineSupervisorCanSee: true,
     },
     {
-      title: "ردودي",
+      group: "surveys" as const,
+      title: `ردود ${labels.surveyLabel || "الاستبيانات"}`,
       href: "/dashboard/survey-responses",
       icon: MessageSquare,
       lineSupervisorCanSee: true,
+      submissionsOrOrgAdmin: true,
     },
     {
+      group: "reports" as const,
+      title: "التقارير",
+      href: "/dashboard/reports",
+      icon: FileText,
+      permissions: [{ resource: permissionResources.REPORTS, action: permissionActions.READ }],
+    },
+    {
+      group: "reports" as const,
+      title: labels.eventsReportLabel || "تقارير الأحداث",
+      href: "/dashboard/event-reports",
+      icon: Activity,
+      permissions: [{ resource: permissionResources.REPORTS, action: permissionActions.READ }],
+    },
+    {
+      group: "userManagement" as const,
       title: "المستخدمون",
       href: "/dashboard/admin/users",
       icon: UserCog,
       adminOnly: true,
     },
     {
+      group: "userManagement" as const,
       title: "إدارة الأدوار",
       href: "/dashboard/admin/roles",
       icon: KeyRound,
       adminOnly: true,
     },
     {
+      group: "system" as const,
       title: "سجل Webhook",
       href: "/dashboard/admin/webhook-logs",
       icon: Webhook,
       adminOnly: true,
     },
     {
+      group: "system" as const,
       title: "الإعدادات",
       href: "/dashboard/settings",
       icon: Settings,
     },
     {
+      group: "materials" as const,
       title: "المواد",
       href: "/dashboard/materials",
       icon: Boxes,
       permissions: [{ resource: permissionResources.MATERIALS, action: permissionActions.READ }],
     },
-    {
-      title: `ردود ${labels.surveyLabel || "الاستبيانات"}`,
-      href: "/dashboard/survey-responses",
-      icon: MessageSquare,
-      submissionsOrOrgAdmin: true,
-    },
-  ]), [labels.branchLabel, labels.driverLabel, labels.pointLabel, labels.routeLabel, labels.vehicleLabel, labels.lineSupervisorLabel, labels.surveyLabel])
+  ]), [labels.branchLabel, labels.driverLabel, labels.pointLabel, labels.routeLabel, labels.vehicleLabel, labels.lineSupervisorLabel, labels.surveyLabel, labels.eventsReportLabel])
 
   const filteredMenuItems = menuItems.filter(
     (item) => {
@@ -259,6 +294,7 @@ export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarP
       if (item.adminOnly && !userIsAdmin) return false
       if ((item as any).superAdminOnly && !userIsSuperAdmin) return false
       if (userIsAdmin) return true
+      if ((item as any).lineSupervisorCanSee && (userIsOrgAdmin || userIsAdmin)) return true
       if (item.permissions && item.permissions.length > 0) {
         const role = session?.user?.role || null
         return hasAnyPermission(role as any, item.permissions)
@@ -266,6 +302,39 @@ export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarP
       return true
     }
   )
+
+  const groupLabels: Record<string, string> = {
+    general: "عام",
+    organizations: "إدارة المؤسسات",
+    branchOps: "الفرع والعمليات",
+    surveys: "الاستبيانات",
+    reports: "التقارير",
+    userManagement: "إدارة المستخدمين",
+    system: "النظام",
+    materials: "المواد",
+  }
+
+  const groupedItems = useMemo(() => {
+    const map = new Map<string, typeof filteredMenuItems>()
+    for (const item of filteredMenuItems) {
+      const list = map.get(item.group) ?? []
+      list.push(item)
+      map.set(item.group, list)
+    }
+    const order: (keyof typeof groupLabels)[] = [
+      "general",
+      "organizations",
+      "branchOps",
+      "surveys",
+      "reports",
+      "userManagement",
+      "system",
+      "materials",
+    ]
+    return order
+      .filter((key) => map.has(key) && map.get(key)!.length > 0)
+      .map((key) => ({ groupKey: key, label: groupLabels[key], items: map.get(key)! }))
+  }, [filteredMenuItems])
   const sidebarLoading = sessionStatus === "loading" || labelsLoading || roleLoading
 
   // Handle responsive behavior
@@ -298,8 +367,8 @@ export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarP
       {/* Sidebar */}
       <aside
         className={cn(
-          "fixed lg:static inset-y-0 right-0 z-50 flex h-screen w-72 flex-col transition-transform duration-300 ease-in-out",
-          "lg:m-4 lg:rounded-2xl lg:h-[calc(100vh-2rem)]",
+          "fixed lg:static inset-y-0 right-0 z-50 flex h-screen lg:h-full w-72 flex-col transition-transform duration-300 ease-in-out shrink-0",
+          "lg:m-4 lg:rounded-2xl lg:max-h-[calc(100vh-2rem)]",
           "bg-gradient-to-br from-background via-background/95 to-background/90",
           "backdrop-blur-xl bg-opacity-80 dark:bg-opacity-90",
           "border-l lg:border lg:rounded-2xl border-border/50",
@@ -361,7 +430,7 @@ export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarP
         </div>
         
         {/* Navigation */}
-        <nav className="flex-1 space-y-2 p-4 overflow-y-auto">
+        <nav className="flex-1 space-y-4 p-4 overflow-y-auto">
           {sidebarLoading ? (
             <div className="space-y-2">
               {Array.from({ length: 8 }).map((_, idx) => (
@@ -371,35 +440,71 @@ export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarP
                 </div>
               ))}
             </div>
-          ) : filteredMenuItems.map((item, index) => {
-            const Icon = item.icon
-            const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href))
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  "flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-all duration-200 text-right",
-                  "group relative overflow-hidden",
-                  "animate-fade-in",
-                  isActive
-                    ? "bg-gradient-to-l from-[hsl(var(--sidebar-item-active-bg))] via-[hsl(var(--sidebar-item-active-bg))]/90 to-[hsl(var(--sidebar-item-active-bg))]/80 text-[hsl(var(--sidebar-item-active-text))] shadow-lg shadow-[hsl(var(--sidebar-item-active-bg))]/40"
-                    : "text-foreground/70 hover:bg-[hsl(var(--sidebar-item-hover))] hover:text-foreground hover:shadow-md"
-                )}
-                style={{ animationDelay: `${index * 50}ms` }}
-              >
-                <div className={cn(
-                  "absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200",
-                  "bg-gradient-to-l from-[hsl(var(--primary))]/20 to-transparent"
-                )} />
-                <Icon className={cn(
-                  "h-5 w-5 relative z-10 transition-transform duration-200",
-                  isActive ? "text-[hsl(var(--sidebar-item-active-text))]" : "text-foreground/70 group-hover:scale-110 group-hover:text-[hsl(var(--icon-hover))]"
-                )} />
-                <span className="relative z-10">{item.title}</span>
-              </Link>
-            )
-          })}
+          ) : (
+            groupedItems.map(({ groupKey, label, items }, groupIndex) => {
+              const isExpanded = expandedGroups[groupKey] !== false
+              return (
+                <div key={groupKey} className="space-y-1">
+                  <button
+                    type="button"
+                    onClick={() => toggleGroup(groupKey)}
+                    className={cn(
+                      "flex w-full items-center justify-between gap-2 rounded-lg px-4 py-2.5 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground",
+                      "hover:bg-[hsl(var(--sidebar-item-hover))] hover:text-foreground transition-colors"
+                    )}
+                  >
+                    <span>{label}</span>
+                    <ChevronDown
+                      className={cn(
+                        "h-4 w-4 shrink-0 transition-transform duration-200",
+                        isExpanded ? "rotate-0" : "-rotate-90"
+                      )}
+                    />
+                  </button>
+                  <div
+                    className={cn(
+                      "grid transition-[grid-template-rows] duration-200 ease-in-out",
+                      isExpanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+                    )}
+                  >
+                    <div className="min-h-0 overflow-hidden">
+                      <div className="space-y-1 pt-0.5">
+                        {items.map((item, index) => {
+                          const Icon = item.icon
+                          const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href))
+                          return (
+                            <Link
+                              key={item.href}
+                              href={item.href}
+                              className={cn(
+                                "flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-all duration-200 text-right",
+                                "group relative overflow-hidden",
+                                "animate-fade-in",
+                                isActive
+                                  ? "bg-gradient-to-l from-[hsl(var(--sidebar-item-active-bg))] via-[hsl(var(--sidebar-item-active-bg))]/90 to-[hsl(var(--sidebar-item-active-bg))]/80 text-[hsl(var(--sidebar-item-active-text))] shadow-lg shadow-[hsl(var(--sidebar-item-active-bg))]/40"
+                                  : "text-foreground/70 hover:bg-[hsl(var(--sidebar-item-hover))] hover:text-foreground hover:shadow-md"
+                              )}
+                              style={{ animationDelay: `${(groupIndex * 10 + index) * 50}ms` }}
+                            >
+                              <div className={cn(
+                                "absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200",
+                                "bg-gradient-to-l from-[hsl(var(--primary))]/20 to-transparent"
+                              )} />
+                              <Icon className={cn(
+                                "h-5 w-5 relative z-10 transition-transform duration-200",
+                                isActive ? "text-[hsl(var(--sidebar-item-active-text))]" : "text-foreground/70 group-hover:scale-110 group-hover:text-[hsl(var(--icon-hover))]"
+                              )} />
+                              <span className="relative z-10">{item.title}</span>
+                            </Link>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )
+            })
+          )}
         </nav>
       </aside>
     </>

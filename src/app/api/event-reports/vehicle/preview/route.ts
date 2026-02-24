@@ -32,8 +32,14 @@ export async function GET(request: Request) {
       branchId: searchParams.get('branchId'),
     });
 
-    const vehicleId = String(searchParams.get('vehicleId') || '').trim();
-    if (!vehicleId) {
+    const vehicleIdsRaw = searchParams.getAll('vehicleIds');
+    const vehicleIds = vehicleIdsRaw.length > 0
+      ? vehicleIdsRaw.map((id) => id.trim()).filter(Boolean)
+      : [];
+    const vehicleIdSingle = String(searchParams.get('vehicleId') || '').trim();
+    const vehicleIdsResolved = vehicleIds.length > 0 ? vehicleIds : (vehicleIdSingle ? [vehicleIdSingle] : []);
+
+    if (vehicleIdsResolved.length === 0) {
       return NextResponse.json({ error: 'يرجى تحديد المركبة' }, { status: 400 });
     }
 
@@ -44,7 +50,7 @@ export async function GET(request: Request) {
 
     const report = await generateVehicleEventsReport({
       scope,
-      vehicleId,
+      vehicleIds: vehicleIdsResolved,
       from,
       to,
     });

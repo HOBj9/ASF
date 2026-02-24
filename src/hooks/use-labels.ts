@@ -9,6 +9,8 @@ export type Labels = {
   routeLabel: string;
   lineSupervisorLabel: string;
   surveyLabel: string;
+  eventsReportLabel: string;
+  latestEventsLabel: string;
 };
 
 export function useLabels() {

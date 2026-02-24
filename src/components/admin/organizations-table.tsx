@@ -19,6 +19,8 @@ type OrgLabels = {
   routeLabel: string
   lineSupervisorLabel: string
   surveyLabel: string
+  eventsReportLabel: string
+  latestEventsLabel: string
 }
 
 type Organization = {
@@ -38,6 +40,8 @@ const defaultLabels: OrgLabels = {
   routeLabel: "مسار",
   lineSupervisorLabel: "مشرفو الخط",
   surveyLabel: "الاستبيانات",
+  eventsReportLabel: "تقارير الأحداث",
+  latestEventsLabel: "آخر الأحداث",
 }
 
 const emptyForm: Partial<Organization> = {
@@ -91,7 +95,7 @@ export function OrganizationsTable() {
     setOpen(true)
   }
 
-  const openEdit = (item: Organization) => {
+  const openEdit = async (item: Organization) => {
     setEditing(item)
     setForm({
       ...item,
@@ -100,6 +104,27 @@ export function OrganizationsTable() {
     })
     setAdminForm({ ...emptyAdminForm })
     setOpen(true)
+    try {
+      const data = await apiClient.get(`/organizations/${item._id}`)
+      const org = data.organization || data
+      const admin = data.adminUser
+      if (org) {
+        setForm({
+          ...org,
+          type: (org as any).type || "",
+          labels: { ...defaultLabels, ...(org.labels || {}) },
+        })
+      }
+      if (admin) {
+        setAdminForm({
+          adminUserName: admin.name || "",
+          adminUserEmail: admin.email || "",
+          adminUserPassword: "",
+        })
+      }
+    } catch (_) {
+      // keep form as from item
+    }
   }
 
   const submit = async () => {
@@ -114,7 +139,13 @@ export function OrganizationsTable() {
       type: form.type || null,
       labels: form.labels || defaultLabels,
       isActive: form.isActive ?? true,
-      ...(!editing ? adminForm : {}),
+      ...(editing
+        ? {
+            ...(adminForm.adminUserName !== undefined && { adminUserName: adminForm.adminUserName }),
+            ...(adminForm.adminUserEmail !== undefined && { adminUserEmail: adminForm.adminUserEmail }),
+            ...(adminForm.adminUserPassword !== undefined && adminForm.adminUserPassword !== "" && { adminUserPassword: adminForm.adminUserPassword }),
+          }
+        : adminForm),
     }
 
     try {
@@ -261,6 +292,14 @@ export function OrganizationsTable() {
               <Label>تسمية الاستبيانات</Label>
               <Input value={form.labels?.surveyLabel || ""} onChange={(e) => updateLabel("surveyLabel", e.target.value)} />
             </div>
+            <div>
+              <Label>تسمية تقارير الأحداث</Label>
+              <Input value={form.labels?.eventsReportLabel || ""} onChange={(e) => updateLabel("eventsReportLabel", e.target.value)} />
+            </div>
+            <div>
+              <Label>تسمية قسم آخر الأحداث</Label>
+              <Input value={form.labels?.latestEventsLabel || ""} onChange={(e) => updateLabel("latestEventsLabel", e.target.value)} />
+            </div>
 
             {!editing && (
               <>
@@ -286,6 +325,38 @@ export function OrganizationsTable() {
                   <Label>كلمة المرور</Label>
                   <Input
                     type="password"
+                    value={adminForm.adminUserPassword}
+                    onChange={(e) => setAdminForm({ ...adminForm, adminUserPassword: e.target.value })}
+                  />
+                </div>
+              </>
+            )}
+
+            {editing && (
+              <>
+                <div className="pt-2 border-t">
+                  <div className="text-sm text-muted-foreground mb-2">حساب مدير المؤسسة</div>
+                </div>
+                <div>
+                  <Label>اسم المستخدم</Label>
+                  <Input
+                    value={adminForm.adminUserName}
+                    onChange={(e) => setAdminForm({ ...adminForm, adminUserName: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label>البريد الإلكتروني</Label>
+                  <Input
+                    type="email"
+                    value={adminForm.adminUserEmail}
+                    onChange={(e) => setAdminForm({ ...adminForm, adminUserEmail: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label>كلمة المرور (اتركه فارغاً إذا لم تُرد تغييره)</Label>
+                  <Input
+                    type="password"
+                    placeholder="••••••••"
                     value={adminForm.adminUserPassword}
                     onChange={(e) => setAdminForm({ ...adminForm, adminUserPassword: e.target.value })}
                   />

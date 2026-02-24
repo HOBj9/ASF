@@ -1,5 +1,17 @@
 import mongoose, { Schema, Document, Model } from 'mongoose';
 
+export interface BranchLabels {
+  branchLabel?: string;
+  pointLabel?: string;
+  vehicleLabel?: string;
+  driverLabel?: string;
+  routeLabel?: string;
+  lineSupervisorLabel?: string;
+  surveyLabel?: string;
+  eventsReportLabel?: string;
+  latestEventsLabel?: string;
+}
+
 export interface IBranch extends Document {
   organizationId: mongoose.Types.ObjectId;
   name: string;
@@ -14,6 +26,7 @@ export interface IBranch extends Document {
   atharKey?: string;
   fuelPricePerKmGasoline?: number;
   fuelPricePerKmDiesel?: number;
+  labels?: BranchLabels;
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -84,6 +97,17 @@ const BranchSchema: Schema = new Schema(
     fuelPricePerKmDiesel: {
       type: Number,
       default: null,
+    },
+    labels: {
+      branchLabel: { type: String, trim: true },
+      pointLabel: { type: String, trim: true },
+      vehicleLabel: { type: String, trim: true },
+      driverLabel: { type: String, trim: true },
+      routeLabel: { type: String, trim: true },
+      lineSupervisorLabel: { type: String, trim: true },
+      surveyLabel: { type: String, trim: true },
+      eventsReportLabel: { type: String, trim: true },
+      latestEventsLabel: { type: String, trim: true },
     },
     isActive: {
       type: Boolean,

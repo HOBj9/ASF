@@ -21,6 +21,18 @@ const MapPicker = dynamic(
   { ssr: false, loading: () => <div className="h-[240px] rounded-lg border animate-pulse bg-muted" /> }
 )
 
+type BranchLabels = {
+  branchLabel?: string
+  pointLabel?: string
+  vehicleLabel?: string
+  driverLabel?: string
+  routeLabel?: string
+  lineSupervisorLabel?: string
+  surveyLabel?: string
+  eventsReportLabel?: string
+  latestEventsLabel?: string
+}
+
 type Branch = {
   _id: string
   organizationId: string
@@ -35,6 +47,7 @@ type Branch = {
   atharKey?: string
   fuelPricePerKmGasoline?: number | null
   fuelPricePerKmDiesel?: number | null
+  labels?: BranchLabels
   isActive: boolean
 }
 
@@ -60,6 +73,8 @@ type BranchDetailsResponse = {
   } | null
 }
 
+const emptyBranchLabels: BranchLabels = {}
+
 const emptyBranch: Partial<Branch> = {
   organizationId: "",
   name: "",
@@ -73,6 +88,7 @@ const emptyBranch: Partial<Branch> = {
   atharKey: "",
   fuelPricePerKmGasoline: undefined,
   fuelPricePerKmDiesel: undefined,
+  labels: emptyBranchLabels,
   isActive: true,
 }
 
@@ -191,8 +207,16 @@ export function MunicipalitiesTable() {
     setOpen(true)
 
     try {
-      const detailsRes = await apiClient.get<BranchDetailsResponse>(`/branches/${item._id}`)
-      const branchAdminUser = detailsRes.branchAdminUser || detailsRes.data?.branchAdminUser
+      const detailsRes = await apiClient.get<BranchDetailsResponse & { branch?: Branch }>(`/branches/${item._id}`)
+      const branchFromApi = detailsRes.branch || (detailsRes as any).data?.branch
+      if (branchFromApi) {
+        setForm((prev) => ({
+          ...prev,
+          ...branchFromApi,
+          labels: branchFromApi.labels && typeof branchFromApi.labels === "object" ? { ...emptyBranchLabels, ...branchFromApi.labels } : emptyBranchLabels,
+        }))
+      }
+      const branchAdminUser = detailsRes.branchAdminUser || (detailsRes as any).data?.branchAdminUser
       setAdminUser({
         adminUserName: branchAdminUser?.name || "",
         adminUserEmail: branchAdminUser?.email || "",
@@ -426,6 +450,46 @@ export function MunicipalitiesTable() {
                   onChange={(e) => setForm({ ...form, fuelPricePerKmDiesel: e.target.value === "" ? undefined : Number(e.target.value) })}
                 />
               </div>
+            </div>
+
+            <div className="pt-2 border-t">
+              <div className="text-sm text-muted-foreground mb-2">تسميات الفرع (اختياري)</div>
+            </div>
+            <div>
+              <Label>تسمية الفرع</Label>
+              <Input value={form.labels?.branchLabel ?? ""} onChange={(e) => setForm({ ...form, labels: { ...form.labels, branchLabel: e.target.value || undefined } })} placeholder="تركه فارغاً لاستخدام تسمية المؤسسة" />
+            </div>
+            <div>
+              <Label>تسمية النقاط</Label>
+              <Input value={form.labels?.pointLabel ?? ""} onChange={(e) => setForm({ ...form, labels: { ...form.labels, pointLabel: e.target.value || undefined } })} placeholder="تركه فارغاً لاستخدام تسمية المؤسسة" />
+            </div>
+            <div>
+              <Label>تسمية المركبات</Label>
+              <Input value={form.labels?.vehicleLabel ?? ""} onChange={(e) => setForm({ ...form, labels: { ...form.labels, vehicleLabel: e.target.value || undefined } })} placeholder="تركه فارغاً لاستخدام تسمية المؤسسة" />
+            </div>
+            <div>
+              <Label>تسمية السائقين</Label>
+              <Input value={form.labels?.driverLabel ?? ""} onChange={(e) => setForm({ ...form, labels: { ...form.labels, driverLabel: e.target.value || undefined } })} placeholder="تركه فارغاً لاستخدام تسمية المؤسسة" />
+            </div>
+            <div>
+              <Label>تسمية المسارات</Label>
+              <Input value={form.labels?.routeLabel ?? ""} onChange={(e) => setForm({ ...form, labels: { ...form.labels, routeLabel: e.target.value || undefined } })} placeholder="تركه فارغاً لاستخدام تسمية المؤسسة" />
+            </div>
+            <div>
+              <Label>تسمية مشرفي الخط</Label>
+              <Input value={form.labels?.lineSupervisorLabel ?? ""} onChange={(e) => setForm({ ...form, labels: { ...form.labels, lineSupervisorLabel: e.target.value || undefined } })} placeholder="تركه فارغاً لاستخدام تسمية المؤسسة" />
+            </div>
+            <div>
+              <Label>تسمية الاستبيانات</Label>
+              <Input value={form.labels?.surveyLabel ?? ""} onChange={(e) => setForm({ ...form, labels: { ...form.labels, surveyLabel: e.target.value || undefined } })} placeholder="تركه فارغاً لاستخدام تسمية المؤسسة" />
+            </div>
+            <div>
+              <Label>تسمية تقارير الأحداث</Label>
+              <Input value={form.labels?.eventsReportLabel ?? ""} onChange={(e) => setForm({ ...form, labels: { ...form.labels, eventsReportLabel: e.target.value || undefined } })} placeholder="تركه فارغاً لاستخدام تسمية المؤسسة" />
+            </div>
+            <div>
+              <Label>تسمية قسم آخر الأحداث</Label>
+              <Input value={form.labels?.latestEventsLabel ?? ""} onChange={(e) => setForm({ ...form, labels: { ...form.labels, latestEventsLabel: e.target.value || undefined } })} placeholder="تركه فارغاً لاستخدام تسمية المؤسسة" />
             </div>
 
             {!editing && (

@@ -17,6 +17,8 @@ type OrganizationLabels = {
   routeLabel: string
   lineSupervisorLabel: string
   surveyLabel: string
+  eventsReportLabel: string
+  latestEventsLabel: string
 }
 
 const defaultLabels: OrganizationLabels = {
@@ -27,6 +29,8 @@ const defaultLabels: OrganizationLabels = {
   routeLabel: "مسار",
   lineSupervisorLabel: "مشرفو الخط",
   surveyLabel: "الاستبيانات",
+  eventsReportLabel: "تقارير الأحداث",
+  latestEventsLabel: "آخر الأحداث",
 }
 
 export function OrganizationLabelsSettings() {
@@ -54,6 +58,8 @@ export function OrganizationLabelsSettings() {
           routeLabel: organization.labels?.routeLabel || defaultLabels.routeLabel,
           lineSupervisorLabel: organization.labels?.lineSupervisorLabel || defaultLabels.lineSupervisorLabel,
           surveyLabel: organization.labels?.surveyLabel || defaultLabels.surveyLabel,
+          eventsReportLabel: organization.labels?.eventsReportLabel || defaultLabels.eventsReportLabel,
+          latestEventsLabel: organization.labels?.latestEventsLabel || defaultLabels.latestEventsLabel,
         })
       } catch (error: any) {
         setAvailable(false)
@@ -152,6 +158,20 @@ export function OrganizationLabelsSettings() {
               <Input
                 value={labels.surveyLabel}
                 onChange={(e) => setLabels((prev) => ({ ...prev, surveyLabel: e.target.value }))}
+              />
+            </div>
+            <div>
+              <Label>تسمية تقارير الأحداث</Label>
+              <Input
+                value={labels.eventsReportLabel}
+                onChange={(e) => setLabels((prev) => ({ ...prev, eventsReportLabel: e.target.value }))}
+              />
+            </div>
+            <div>
+              <Label>تسمية قسم آخر الأحداث</Label>
+              <Input
+                value={labels.latestEventsLabel}
+                onChange={(e) => setLabels((prev) => ({ ...prev, latestEventsLabel: e.target.value }))}
               />
             </div>
             <div className="pt-2">

@@ -32,8 +32,14 @@ export async function GET(request: Request) {
       branchId: searchParams.get('branchId'),
     });
 
-    const pointId = String(searchParams.get('pointId') || '').trim();
-    if (!pointId) {
+    const pointIdsRaw = searchParams.getAll('pointIds');
+    const pointIds = pointIdsRaw.length > 0
+      ? pointIdsRaw.map((id) => id.trim()).filter(Boolean)
+      : [];
+    const pointIdSingle = String(searchParams.get('pointId') || '').trim();
+    const pointIdsResolved = pointIds.length > 0 ? pointIds : (pointIdSingle ? [pointIdSingle] : []);
+
+    if (pointIdsResolved.length === 0) {
       return NextResponse.json({ error: 'يرجى تحديد النقطة' }, { status: 400 });
     }
 
@@ -44,7 +50,7 @@ export async function GET(request: Request) {
 
     const report = await generatePointVehiclesReport({
       scope,
-      pointId,
+      pointIds: pointIdsResolved,
       from,
       to,
     });

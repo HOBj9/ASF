@@ -420,7 +420,7 @@ export function ReportsPanel({ isSystemAdmin = false, isOrganizationAdmin = fals
               href={exportUrl || "#"}
               className={`rounded-lg border px-4 py-2 text-sm ${exportUrl ? "hover:bg-muted" : "pointer-events-none opacity-50"}`}
             >
-              تصدير CSV
+              تصدير Excel
             </a>
           </div>
 
