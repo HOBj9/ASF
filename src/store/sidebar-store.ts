@@ -1,4 +1,4 @@
-﻿import { create } from 'zustand'
+import { create } from 'zustand'
 
 interface SidebarState {
   isOpen: boolean
@@ -7,31 +7,15 @@ interface SidebarState {
   close: () => void
 }
 
-// Initialize based on screen size
+// Start collapsed (icon-only) by default; user can expand
 const getInitialState = (): boolean => {
-  if (typeof window === 'undefined') return true
-  return window.innerWidth >= 1024
+  return false
 }
 
 export const useSidebarStore = create<SidebarState>((set) => ({
   isOpen: getInitialState(),
-  toggle: () => {
-    set((state) => {
-      // On desktop (lg and above), always keep sidebar open
-      if (typeof window !== 'undefined' && window.innerWidth >= 1024) {
-        return { isOpen: true }
-      }
-      // On mobile, toggle the state
-      return { isOpen: !state.isOpen }
-    })
-  },
+  toggle: () => set((state) => ({ isOpen: !state.isOpen })),
   open: () => set({ isOpen: true }),
-  close: () => {
-    // On desktop, don't allow closing
-    if (typeof window !== 'undefined' && window.innerWidth >= 1024) {
-      return
-    }
-    set({ isOpen: false })
-  },
+  close: () => set({ isOpen: false }),
 }))
 

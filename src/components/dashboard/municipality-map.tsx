@@ -288,7 +288,7 @@ export function MunicipalityMap({
   eventsLoadMoreSentinelRef?: React.RefObject<HTMLDivElement | null>;
 }) {
   const [fullscreenOpen, setFullscreenOpen] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [rightPanel, setRightPanel] = useState<RightPanelType>(null);
   const [objectsPanelOpen, setObjectsPanelOpen] = useState(false);
   const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null);
@@ -411,7 +411,7 @@ export function MunicipalityMap({
 
   const focusOnObject = (obj: AtharObject | null) => {
     if (!obj || obj.lat == null || obj.lng == null || !mapRef.current) return;
-    mapRef.current.setView([Number(obj.lat), Number(obj.lng)], 15, { animate: true });
+    mapRef.current.setView([Number(obj.lat), Number(obj.lng)], 17, { animate: true });
   };
 
   const center = useMemo(() => {
@@ -550,7 +550,15 @@ export function MunicipalityMap({
         center={initialCenter}
         zoom={13}
         className="h-full w-full"
-        whenCreated={attachRef ? (map) => (mapRef.current = map) : undefined}
+        whenCreated={
+          attachRef
+            ? (map) => {
+                mapRef.current = map;
+                // Force tile load after layout (fixes empty map on first load)
+                window.setTimeout(() => map.invalidateSize(), 100);
+              }
+            : undefined
+        }
       >
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
@@ -711,7 +719,7 @@ export function MunicipalityMap({
             type="button"
             onClick={() => setSidebarOpen(true)}
             title="فتح القائمة الجانبية"
-            className="absolute top-1/2 right-0 -translate-y-1/2 z-[400] flex flex-col items-center justify-center w-10 h-20 rounded-r-lg bg-muted/90 hover:bg-muted border border-r-0 border-border shadow-sm transition-colors"
+            className="absolute top-1/2 left-0 -translate-y-1/2 z-[400] flex flex-col items-center justify-center w-10 h-20 rounded-r-lg bg-muted/90 hover:bg-muted border border-r-0 border-border shadow-sm transition-colors"
           >
             <PanelRightOpen className="h-5 w-5 text-muted-foreground" />
             <span className="text-[10px] text-muted-foreground mt-1">القائمة</span>
@@ -742,7 +750,10 @@ export function MunicipalityMap({
                         <button
                           key={`obj-row-${obj.id}`}
                           type="button"
-                          onClick={() => setSelectedObjectId(String(obj.id))}
+                          onClick={() => {
+                            setSelectedObjectId(String(obj.id));
+                            focusOnObject(obj);
+                          }}
                           className={`w-full rounded-md border px-2 py-2 text-xs transition ${
                             isSelected ? "bg-primary/10 border-primary/40" : "hover:bg-muted"
                           }`}
@@ -831,7 +842,9 @@ export function MunicipalityMap({
                           }
                         }}
                         className={`rounded-lg border p-3 transition-colors cursor-pointer hover:bg-muted/50 text-right ${
-                          newEventIds[event._id] ? "border-emerald-400/70 bg-emerald-500/10" : ""
+                          newEventIds[event._id]
+                            ? "border-emerald-400 bg-emerald-500/20 ring-2 ring-emerald-400/80 shadow-lg shadow-emerald-500/30 animate-pulse"
+                            : ""
                         }`}
                       >
                         <div className="flex items-center justify-between">
@@ -1012,7 +1025,11 @@ export function MunicipalityMap({
                             <button
                               key={`obj-row-${obj.id}`}
                               type="button"
-                              onClick={() => setSelectedObjectId(String(obj.id))}
+                              onClick={() => {
+                                setSelectedObjectId(String(obj.id));
+                                focusOnObject(obj);
+                                onTabChange("objects");
+                              }}
                               className={`w-full rounded-md border px-2 py-2 text-xs transition ${
                                 isSelected ? "bg-primary/10 border-primary/40" : "hover:bg-muted"
                               }`}

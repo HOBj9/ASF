@@ -25,6 +25,8 @@ import {
   Webhook,
   Activity,
   ChevronDown,
+  PanelLeftClose,
+  PanelLeft,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { apiClient } from "@/lib/api/client"
@@ -314,6 +316,17 @@ export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarP
     materials: "المواد",
   }
 
+  const groupIcons: Record<string, typeof LayoutDashboard> = {
+    general: LayoutDashboard,
+    organizations: Building,
+    branchOps: Building2,
+    surveys: ClipboardList,
+    reports: FileText,
+    userManagement: UserCog,
+    system: Settings,
+    materials: Boxes,
+  }
+
   const groupedItems = useMemo(() => {
     const map = new Map<string, typeof filteredMenuItems>()
     for (const item of filteredMenuItems) {
@@ -337,22 +350,7 @@ export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarP
   }, [filteredMenuItems])
   const sidebarLoading = sessionStatus === "loading" || labelsLoading || roleLoading
 
-  // Handle responsive behavior
-  useEffect(() => {
-    const handleResize = () => {
-      if (window.innerWidth >= 1024) {
-        useSidebarStore.getState().open()
-      }
-    }
-
-    // Set initial state on mount
-    if (typeof window !== 'undefined' && window.innerWidth >= 1024) {
-      useSidebarStore.getState().open()
-    }
-
-    window.addEventListener("resize", handleResize)
-    return () => window.removeEventListener("resize", handleResize)
-  }, [])
+  const isCollapsed = !isOpen
 
   return (
     <>
@@ -367,7 +365,9 @@ export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarP
       {/* Sidebar */}
       <aside
         className={cn(
-          "fixed lg:static inset-y-0 right-0 z-50 flex h-screen lg:h-full w-72 flex-col transition-transform duration-300 ease-in-out shrink-0",
+          "fixed lg:static inset-y-0 right-0 z-50 flex h-screen lg:h-full flex-col transition-all duration-300 ease-in-out shrink-0",
+          "w-72 lg:w-20",
+          isOpen && "lg:w-72",
           "lg:m-4 lg:rounded-2xl lg:max-h-[calc(100vh-2rem)]",
           "bg-gradient-to-br from-background via-background/95 to-background/90",
           "backdrop-blur-xl bg-opacity-80 dark:bg-opacity-90",
@@ -379,70 +379,123 @@ export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarP
       >
         {/* Header */}
         <div className="border-b border-border/50 bg-gradient-to-l from-[hsl(var(--primary))]/20 via-[hsl(var(--primary))]/10 to-transparent dark:from-[hsl(var(--primary))]/30 dark:via-[hsl(var(--primary))]/15 backdrop-blur-sm lg:rounded-t-2xl">
-          {/* Close Button */}
-          <div className="flex h-12 items-center justify-end px-6">
+          <div className={cn("flex h-12 items-center", isCollapsed ? "justify-center px-0" : "justify-end px-6")}>
             <Button
               variant="ghost"
               size="icon"
               onClick={toggle}
-              className="lg:hidden hover:bg-[hsl(var(--sidebar-item-hover))] rounded-lg"
+              className={cn(
+                "hover:bg-[hsl(var(--sidebar-item-hover))] rounded-lg",
+                "lg:flex",
+                isCollapsed && "lg:mx-auto"
+              )}
+              title={isCollapsed ? "توسيع القائمة" : "طي القائمة"}
             >
-              <X className="h-5 w-5" />
+              {isCollapsed ? (
+                <PanelLeft className="h-5 w-5 lg:block hidden" />
+              ) : (
+                <>
+                  <X className="h-5 w-5 lg:hidden" />
+                  <PanelLeftClose className="h-5 w-5 hidden lg:block" />
+                </>
+              )}
             </Button>
           </div>
           
           {/* User Profile Section */}
-          <div className="px-6 pt-2 pb-2">
+          <div className={cn("pt-2 pb-2", isCollapsed ? "px-2" : "px-6")}>
             {sidebarLoading ? (
-              <div className="flex items-center gap-3 rounded-xl px-3 py-2">
-                <Skeleton className="h-12 w-12 rounded-full" />
-                <div className="flex-1 space-y-2">
-                  <Skeleton className="h-4 w-32" />
-                  <Skeleton className="h-3 w-24" />
-                </div>
+              <div className={cn("flex rounded-xl px-3 py-2", isCollapsed ? "justify-center" : "items-center gap-3")}>
+                <Skeleton className={cn("rounded-full", isCollapsed ? "h-10 w-10" : "h-12 w-12")} />
+                {!isCollapsed && (
+                  <div className="flex-1 space-y-2">
+                    <Skeleton className="h-4 w-32" />
+                    <Skeleton className="h-3 w-24" />
+                  </div>
+                )}
               </div>
             ) : (
               <Link
                 href="/dashboard/profile"
-                className="flex items-center gap-3 rounded-xl px-3 py-2 hover:bg-[hsl(var(--sidebar-item-hover))] transition-all duration-200 text-right group"
+                className={cn(
+                  "flex rounded-xl px-3 py-2 hover:bg-[hsl(var(--sidebar-item-hover))] transition-all duration-200 text-right group",
+                  isCollapsed ? "justify-center" : "items-center gap-3"
+                )}
+                title={isCollapsed ? currentUser.name : undefined}
               >
                 <div className="relative">
                   {currentUser.avatar ? (
                     <img
                       src={currentUser.avatar}
                       alt={currentUser.name}
-                      className="h-12 w-12 rounded-full object-cover border-2 border-[hsl(var(--primary))]/30 dark:border-[hsl(var(--primary))]/40 group-hover:border-[hsl(var(--primary))]/50 transition-all"
+                      className={cn(
+                        "rounded-full object-cover border-2 border-[hsl(var(--primary))]/30 dark:border-[hsl(var(--primary))]/40 group-hover:border-[hsl(var(--primary))]/50 transition-all",
+                        isCollapsed ? "h-10 w-10" : "h-12 w-12"
+                      )}
                     />
                   ) : (
-                    <div className="h-12 w-12 rounded-full bg-gradient-to-br from-[hsl(var(--primary))] to-[hsl(var(--primary-light))] flex items-center justify-center border-2 border-[hsl(var(--primary))]/30 dark:border-[hsl(var(--primary))]/40 group-hover:border-[hsl(var(--primary))]/50 transition-all">
-                      <User className="h-6 w-6 text-white" />
+                    <div className={cn(
+                      "rounded-full bg-gradient-to-br from-[hsl(var(--primary))] to-[hsl(var(--primary-light))] flex items-center justify-center border-2 border-[hsl(var(--primary))]/30 dark:border-[hsl(var(--primary))]/40 group-hover:border-[hsl(var(--primary))]/50 transition-all text-white",
+                      isCollapsed ? "h-10 w-10" : "h-12 w-12"
+                    )}>
+                      <User className={isCollapsed ? "h-5 w-5" : "h-6 w-6"} />
                     </div>
                   )}
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-foreground truncate">
-                    مرحبًا، {currentUser.name}
-                  </p>
-                </div>
+                {!isCollapsed && (
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-foreground truncate">
+                      مرحبًا، {currentUser.name}
+                    </p>
+                  </div>
+                )}
               </Link>
             )}
           </div>
         </div>
         
         {/* Navigation */}
-        <nav className="flex-1 space-y-4 p-4 overflow-y-auto">
+        <nav className={cn("flex-1 overflow-y-auto", isCollapsed ? "space-y-1 p-2" : "space-y-4 p-4")}>
           {sidebarLoading ? (
             <div className="space-y-2">
-              {Array.from({ length: 8 }).map((_, idx) => (
-                <div key={`sidebar-skeleton-${idx}`} className="flex items-center gap-3 rounded-xl px-4 py-3">
-                  <Skeleton className="h-5 w-5 rounded-full" />
-                  <Skeleton className="h-4 flex-1" />
+              {Array.from({ length: isCollapsed ? 6 : 8 }).map((_, idx) => (
+                <div key={`sidebar-skeleton-${idx}`} className={cn("rounded-xl", isCollapsed ? "flex justify-center py-2" : "flex items-center gap-3 px-4 py-3")}>
+                  <Skeleton className={cn("rounded-full", isCollapsed ? "h-9 w-9" : "h-5 w-5")} />
+                  {!isCollapsed && <Skeleton className="h-4 flex-1" />}
                 </div>
               ))}
+            </div>
+          ) : isCollapsed ? (
+            /* Collapsed: icon-only list */
+            <div className="space-y-1">
+              {filteredMenuItems.map((item) => {
+                const Icon = item.icon
+                const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href))
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    title={item.title}
+                    className={cn(
+                      "flex items-center justify-center rounded-xl py-3 text-sm font-medium transition-all duration-200",
+                      "group relative",
+                      isActive
+                        ? "bg-gradient-to-l from-[hsl(var(--sidebar-item-active-bg))] via-[hsl(var(--sidebar-item-active-bg))]/90 to-[hsl(var(--sidebar-item-active-bg))]/80 text-[hsl(var(--sidebar-item-active-text))] shadow-lg shadow-[hsl(var(--sidebar-item-active-bg))]/40"
+                        : "text-foreground/70 hover:bg-[hsl(var(--sidebar-item-hover))] hover:text-foreground"
+                    )}
+                  >
+                    <Icon className={cn(
+                      "h-5 w-5 transition-transform duration-200",
+                      isActive ? "text-[hsl(var(--sidebar-item-active-text))]" : "text-foreground/70 group-hover:scale-110 group-hover:text-[hsl(var(--icon-hover))]"
+                    )} />
+                  </Link>
+                )
+              })}
             </div>
           ) : (
             groupedItems.map(({ groupKey, label, items }, groupIndex) => {
               const isExpanded = expandedGroups[groupKey] !== false
+              const GroupIcon = groupIcons[groupKey]
               return (
                 <div key={groupKey} className="space-y-1">
                   <button
@@ -453,7 +506,10 @@ export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarP
                       "hover:bg-[hsl(var(--sidebar-item-hover))] hover:text-foreground transition-colors"
                     )}
                   >
-                    <span>{label}</span>
+                    <span className="flex items-center gap-2">
+                      {GroupIcon && <GroupIcon className="h-4 w-4 shrink-0" />}
+                      {label}
+                    </span>
                     <ChevronDown
                       className={cn(
                         "h-4 w-4 shrink-0 transition-transform duration-200",

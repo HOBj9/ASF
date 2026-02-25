@@ -265,7 +265,7 @@ export function MunicipalityDashboard({
         return next;
       });
       delete eventHighlightTimersRef.current[eventId];
-    }, 12000);
+    }, 5000);
   }
 
   useEffect(() => {
@@ -366,7 +366,7 @@ export function MunicipalityDashboard({
         .then((res) => res.json())
         .then((data) => setAnalytics(data))
         .catch(() => null);
-    }, 15000);
+    }, 3000);
 
     return () => {
       active = false;
@@ -449,6 +449,8 @@ export function MunicipalityDashboard({
           const incomingEvent = payload.data as EventItem;
           if (seenEventIdsRef.current.has(incomingEvent._id)) return;
 
+          playEventToastSound();
+
           seenEventIdsRef.current.add(incomingEvent._id);
           setEvents((prev) => mergeUniqueEvents([incomingEvent], prev, 10));
           markEventAsNew(incomingEvent._id);
@@ -490,8 +492,6 @@ export function MunicipalityDashboard({
             },
           };
 
-          playEventToastSound();
-
           if (incomingEvent.type === "zone_in") {
             toast.success(toastContent, toastOptions);
           } else {
@@ -514,19 +514,22 @@ export function MunicipalityDashboard({
     };
   }, [canLoadBranchData, branchQuery, labels.vehicleLabel, labels.pointLabel, labels.driverLabel]);
 
+  // Fetch live vehicle locations as soon as branch is known (so map + live tab show on first load)
+  useEffect(() => {
+    if (!canLoadBranchData || liveLoaded) return;
+    fetch(`/api/vehicles/locations${branchQuery}`)
+      .then((res) => res.json())
+      .then((data) => {
+        setLiveVehicles(data.data || []);
+        setLiveLoaded(true);
+      })
+      .catch(() => setLiveLoaded(true));
+  }, [canLoadBranchData, liveLoaded, branchQuery]);
+
   // Preload map data in background after initial page load (non-blocking)
   useEffect(() => {
     if (!canLoadBranchData || loading) return;
     const zonesSuffix = branchQuery ? "&" + branchQuery.slice(1) : "";
-    if (!liveLoaded) {
-      fetch(`/api/vehicles/locations${branchQuery}`)
-        .then((res) => res.json())
-        .then((data) => {
-          setLiveVehicles(data.data || []);
-          setLiveLoaded(true);
-        })
-        .catch(() => setLiveLoaded(true));
-    }
     if (!pointsLoaded) {
       fetch(`/api/points${branchQuery}`)
         .then((res) => res.json())
@@ -576,7 +579,7 @@ export function MunicipalityDashboard({
         })
         .catch(() => setVehiclesLoaded(true));
     }
-  }, [canLoadBranchData, loading, branchQuery, liveLoaded, pointsLoaded, markersLoaded, zonesLoaded, objectsLoaded, vehiclesLoaded]);
+  }, [canLoadBranchData, loading, branchQuery, pointsLoaded, markersLoaded, zonesLoaded, objectsLoaded, vehiclesLoaded]);
 
   function exportChartAsPng(containerId: string, filename: string) {
     const container = document.getElementById(containerId);
