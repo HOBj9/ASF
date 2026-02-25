@@ -8,8 +8,8 @@ import { getBranchTimezone, getRecentBranchEvents } from '@/lib/services/zone-ev
 export const dynamic = 'force-dynamic';
 
 function parseLimit(input: string | null): number {
-  const numeric = Number(input || 8);
-  if (!Number.isFinite(numeric)) return 8;
+  const numeric = Number(input || 10);
+  if (!Number.isFinite(numeric)) return 10;
   return Math.min(Math.max(Math.floor(numeric), 1), 50);
 }
 

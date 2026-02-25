@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { MapContainer, TileLayer, Marker, Popup, Circle, Polygon } from "react-leaflet";
 import L from "leaflet";
-import { Maximize2, BusFront, MapPin, Hexagon, CarFront, X } from "lucide-react";
+import { Maximize2, BusFront, MapPin, Hexagon, CarFront, X, BarChart2, CalendarDays, Layers, PanelRightOpen, PanelRightClose } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -120,19 +120,52 @@ L.Icon.Default.mergeOptions({
   shadowUrl: defaultShadowUrl,
 });
 
-/** Leaflet icon from Athar marker icon URL (e.g. SVG from API) */
-function getAtharMarkerIcon(iconUrl: string | undefined): L.Icon | L.DivIcon | undefined {
-  if (!iconUrl || !iconUrl.trim()) return undefined;
-  try {
-    return L.icon({
-      iconUrl,
-      iconSize: [32, 32],
-      iconAnchor: [16, 32],
-      popupAnchor: [0, -32],
-    });
-  } catch {
-    return undefined;
+/** Default icon for points (نقاط) when no custom icon is provided; avoids broken Leaflet default image */
+function getDefaultPointIcon(): L.DivIcon {
+  return L.divIcon({
+    className: "",
+    html: `<div style="
+      width:28px;height:36px;display:flex;align-items:center;justify-content:center;
+      font-size:24px;line-height:1;filter:drop-shadow(0 2px 4px rgba(0,0,0,.35));
+    ">📍</div>`,
+    iconSize: [28, 36],
+    iconAnchor: [14, 36],
+    popupAnchor: [0, -36],
+  });
+}
+
+/** Default icon for vehicles/markers when no custom icon is provided (e.g. Athar marker without icon) */
+function getDefaultVehicleIcon(): L.DivIcon {
+  return L.divIcon({
+    className: "",
+    html: `<div style="
+      width:28px;height:28px;border-radius:50%;
+      background:#0ea5e9;display:flex;align-items:center;justify-content:center;
+      border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.35);
+      font-size:14px;line-height:1;
+    ">🚗</div>`,
+    iconSize: [28, 28],
+    iconAnchor: [14, 14],
+    popupAnchor: [0, -14],
+  });
+}
+
+/** Leaflet icon from Athar marker icon URL (e.g. SVG from API); falls back to default vehicle icon when missing */
+function getAtharMarkerIcon(iconUrl: string | undefined): L.Icon | L.DivIcon {
+  if (iconUrl?.trim()) {
+    try {
+      const icon = L.icon({
+        iconUrl,
+        iconSize: [32, 32],
+        iconAnchor: [16, 32],
+        popupAnchor: [0, -32],
+      });
+      return icon;
+    } catch {
+      // fall through to default
+    }
   }
+  return getDefaultVehicleIcon();
 }
 
 function getBusIcon(status: LiveVehicle["status"], heading: number) {
@@ -158,7 +191,7 @@ function getBusIcon(status: LiveVehicle["status"], heading: number) {
 }
 
 const statusLabel: Record<LiveVehicle["status"], string> = {
-  moving: "متحركة",
+  moving: "تعمل",
   stopped: "متوقفة",
   offline: "غير متصلة",
 };
@@ -177,18 +210,31 @@ function isPointInsidePolygon(lat: number, lng: number, polygon: Array<{ lat: nu
   return inside;
 }
 
-function RawJsonDetails({ value }: { value: unknown }) {
-  return (
-    <details className="mt-2 rounded border p-2">
-      <summary className="cursor-pointer text-xs font-medium">RAW JSON</summary>
-      <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words text-[10px] leading-4 text-left">
-        {JSON.stringify(value, null, 2)}
-      </pre>
-    </details>
-  );
-}
-
 export type MapTab = "live" | "points" | "zones" | "objects";
+
+export type EventDetailsForPoint = {
+  displayText?: string;
+  eventTimestamp?: string;
+  vehicleName?: string;
+  type?: string;
+  pointName?: string;
+  driverName?: string;
+};
+
+export type MapEventItem = {
+  _id: string;
+  type?: string;
+  name?: string;
+  imei?: string;
+  eventTimestamp?: string;
+  pointName?: string;
+  vehicleName?: string;
+  driverName?: string;
+  displayText?: string;
+  pointId?: string;
+};
+
+type RightPanelType = "cars" | "events" | "live" | "layers" | null;
 
 export function MunicipalityMap({
   municipality,
@@ -204,6 +250,17 @@ export function MunicipalityMap({
   tabLoading = {},
   showZonesWithPoints = false,
   onToggleMapView,
+  focusPointId = null,
+  eventDetailsForPoint = null,
+  events = [],
+  newEventIds = {},
+  onEventClick,
+  eventsLabel = "آخر الأحداث",
+  driverLabel = "السائق",
+  pointLabel = "نقطة",
+  eventsHasMore = false,
+  eventsLoadingMore = false,
+  eventsLoadMoreSentinelRef,
 }: {
   municipality: MunicipalityInfo | null;
   liveVehicles?: LiveVehicle[];
@@ -218,8 +275,21 @@ export function MunicipalityMap({
   tabLoading?: Partial<Record<MapTab, boolean>>;
   showZonesWithPoints?: boolean;
   onToggleMapView?: () => void;
+  focusPointId?: string | null;
+  eventDetailsForPoint?: EventDetailsForPoint | null;
+  events?: MapEventItem[];
+  newEventIds?: Record<string, boolean>;
+  onEventClick?: (event: MapEventItem) => void;
+  eventsLabel?: string;
+  driverLabel?: string;
+  pointLabel?: string;
+  eventsHasMore?: boolean;
+  eventsLoadingMore?: boolean;
+  eventsLoadMoreSentinelRef?: React.RefObject<HTMLDivElement | null>;
 }) {
   const [fullscreenOpen, setFullscreenOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [rightPanel, setRightPanel] = useState<RightPanelType>(null);
   const [objectsPanelOpen, setObjectsPanelOpen] = useState(false);
   const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null);
   const [selectedPoint, setSelectedPoint] = useState<MapPoint | null>(null);
@@ -280,6 +350,24 @@ export function MunicipalityMap({
     }
     return map;
   }, [routes]);
+
+  useEffect(() => {
+    if (focusPointId && points.length > 0) {
+      const point = points.find((p) => String(p._id) === String(focusPointId));
+      if (point) {
+        setSelectedMarker(null);
+        setSelectedPoint(point);
+        onTabChange("points");
+        const t = setTimeout(() => {
+          if (mapRef.current) {
+            mapRef.current.panTo([Number(point.lat), Number(point.lng)], { animate: true });
+            mapRef.current.setZoom(16);
+          }
+        }, 150);
+        return () => clearTimeout(t);
+      }
+    }
+  }, [focusPointId, points, onTabChange]);
 
   useEffect(() => {
     if (activeTab !== "objects") {
@@ -347,10 +435,119 @@ export function MunicipalityMap({
     return defaultCenter;
   }, [municipality, activeTab, visibleLiveVehicles, points, atharMarkers, zones, atharObjects]);
 
+  const mapKey = `map-${activeTab}-${municipality?.name ?? "default"}`;
+  const initialCenter = useMemo(() => center, [mapKey]);
+
+  const liveMarkersLayer = useMemo(() => {
+    if (activeTab !== "live") return null;
+    return visibleLiveVehicles.map((vehicle) => {
+      const matchedObject = vehicle.imei ? objectByImei.get(vehicle.imei) : null;
+      return (
+        <Marker
+          key={vehicle.id}
+          position={vehicle.coordinates as [number, number]}
+          icon={getBusIcon(vehicle.status, vehicle.heading)}
+        >
+          <Popup>
+            <div className="text-right space-y-1 max-w-[300px]">
+              <div className="font-semibold">{vehicle.busNumber}</div>
+              <div className="text-xs text-muted-foreground">السائق: {vehicle.driverName}</div>
+              <div className="text-xs text-muted-foreground">الحالة: {statusLabel[vehicle.status]}</div>
+              <div className="text-xs text-muted-foreground">السرعة: {vehicle.speed} كم/س</div>
+              <div className="text-xs text-muted-foreground">الاتجاه: {Math.round(vehicle.heading || 0)}°</div>
+              <div className="text-xs text-muted-foreground">
+                المنطقة: {vehicleZoneMap.get(vehicle.id) || "غير محددة"}
+              </div>
+              {vehicle.imei && <div className="text-xs text-muted-foreground">IMEI: {vehicle.imei}</div>}
+              {matchedObject && (
+                <>
+                  <div className="mt-2 border-t pt-2 text-xs font-medium">تفاصيل السيارة من أثر</div>
+                  <div className="text-xs text-muted-foreground">الاسم: {matchedObject.name || "-"}</div>
+                  <div className="text-xs text-muted-foreground">اللوحة: {matchedObject.plateNumber || "-"}</div>
+                  <div className="text-xs text-muted-foreground">الجهاز: {matchedObject.device || "-"}</div>
+                  <div className="text-xs text-muted-foreground">الموديل: {matchedObject.model || "-"}</div>
+                  <div className="text-xs text-muted-foreground">وقت الجهاز: {matchedObject.dtTracker || "-"}</div>
+                  <div className="text-xs text-muted-foreground">وقت الخادم: {matchedObject.dtServer || "-"}</div>
+                </>
+              )}
+            </div>
+          </Popup>
+        </Marker>
+      );
+    });
+  }, [activeTab, visibleLiveVehicles, objectByImei, vehicleZoneMap]);
+
+  const pointsMarkersLayer = useMemo(() => {
+    if (activeTab !== "points") return null;
+    return points.map((point) => {
+      const pointId = point._id != null ? String(point._id) : `${point.lat}-${point.lng}`;
+      const lat = Number(point.lat);
+      const lng = Number(point.lng);
+      const radius = Number(point.radiusMeters) || 500;
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+      return (
+        <Marker
+          key={pointId}
+          position={[lat, lng]}
+          icon={getDefaultPointIcon()}
+          eventHandlers={{
+            click: () => {
+              setSelectedPoint(point);
+              setSelectedMarker(null);
+            },
+          }}
+        >
+          <Popup>
+            <div className="text-right">
+              <div className="font-semibold">{point.nameAr || point.name || "نقطة"}</div>
+              <div className="text-xs text-muted-foreground">
+                {pointTypeLabels[point.type || ""] || point.type || "نقطة"}
+              </div>
+              <div className="text-xs text-muted-foreground">نصف القطر: {radius} م</div>
+              <div className="text-xs text-muted-foreground mt-1">اضغط للتوسع في التفاصيل</div>
+            </div>
+          </Popup>
+        </Marker>
+      );
+    });
+  }, [activeTab, points]);
+
+  const atharMarkersLayer = useMemo(() => {
+    if (activeTab !== "points") return null;
+    return atharMarkers.map((marker) => {
+      const lat = Number(marker.lat);
+      const lng = Number(marker.lng);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+      const customIcon = getAtharMarkerIcon(marker.icon);
+      return (
+        <Marker
+          key={`marker-${marker.id}`}
+          position={[lat, lng]}
+          icon={customIcon}
+          eventHandlers={{
+            click: () => {
+              setSelectedMarker(marker);
+              setSelectedPoint(null);
+            },
+          }}
+        >
+          <Popup>
+            <div className="text-right">
+              <div className="font-semibold">{marker.name || `نقطة أثر ${marker.id}`}</div>
+              <div className="text-xs text-muted-foreground">نقطة من أثر</div>
+              <div className="text-xs text-muted-foreground mt-1">اضغط للتوسع في التفاصيل</div>
+            </div>
+          </Popup>
+        </Marker>
+      );
+    });
+  }, [activeTab, atharMarkers]);
+
   const renderMap = (heightClass: string, attachRef = false) => (
     <div className={`${heightClass} w-full overflow-hidden rounded-2xl border bg-background`}>
       <MapContainer
-        center={center}
+        key={mapKey}
+        center={initialCenter}
         zoom={13}
         className="h-full w-full"
         whenCreated={attachRef ? (map) => (mapRef.current = map) : undefined}
@@ -373,105 +570,11 @@ export function MunicipalityMap({
           </Marker>
         )}
 
-        {activeTab === "live" &&
-          visibleLiveVehicles.map((vehicle) => {
-            const matchedObject = vehicle.imei ? objectByImei.get(vehicle.imei) : null;
-            return (
-              <Marker
-                key={vehicle.id}
-                position={vehicle.coordinates as [number, number]}
-                icon={getBusIcon(vehicle.status, vehicle.heading)}
-              >
-                <Popup>
-                  <div className="text-right space-y-1 max-w-[300px]">
-                    <div className="font-semibold">{vehicle.busNumber}</div>
-                    <div className="text-xs text-muted-foreground">السائق: {vehicle.driverName}</div>
-                    <div className="text-xs text-muted-foreground">الحالة: {statusLabel[vehicle.status]}</div>
-                    <div className="text-xs text-muted-foreground">السرعة: {vehicle.speed} كم/س</div>
-                    <div className="text-xs text-muted-foreground">الاتجاه: {Math.round(vehicle.heading || 0)}°</div>
-                    <div className="text-xs text-muted-foreground">
-                      المنطقة: {vehicleZoneMap.get(vehicle.id) || "غير محددة"}
-                    </div>
-                    {vehicle.imei && <div className="text-xs text-muted-foreground">IMEI: {vehicle.imei}</div>}
+        {liveMarkersLayer}
 
-                    {matchedObject && (
-                      <>
-                        <div className="mt-2 border-t pt-2 text-xs font-medium">تفاصيل السيارة من أثر</div>
-                        <div className="text-xs text-muted-foreground">الاسم: {matchedObject.name || "-"}</div>
-                        <div className="text-xs text-muted-foreground">اللوحة: {matchedObject.plateNumber || "-"}</div>
-                        <div className="text-xs text-muted-foreground">الجهاز: {matchedObject.device || "-"}</div>
-                        <div className="text-xs text-muted-foreground">الموديل: {matchedObject.model || "-"}</div>
-                        <div className="text-xs text-muted-foreground">وقت الجهاز: {matchedObject.dtTracker || "-"}</div>
-                        <div className="text-xs text-muted-foreground">وقت الخادم: {matchedObject.dtServer || "-"}</div>
-                        <RawJsonDetails value={matchedObject.raw} />
-                      </>
-                    )}
-                  </div>
-                </Popup>
-              </Marker>
-            );
-          })}
+        {pointsMarkersLayer}
 
-        {activeTab === "points" &&
-          points.map((point) => {
-            const pointId = point._id != null ? String(point._id) : `${point.lat}-${point.lng}`;
-            const lat = Number(point.lat);
-            const lng = Number(point.lng);
-            const radius = Number(point.radiusMeters) || 500;
-            if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
-            return (
-              <Marker
-                key={pointId}
-                position={[lat, lng]}
-                eventHandlers={{
-                  click: () => {
-                    setSelectedPoint(point);
-                    setSelectedMarker(null);
-                  },
-                }}
-              >
-                <Popup>
-                  <div className="text-right">
-                    <div className="font-semibold">{point.nameAr || point.name || "نقطة"}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {pointTypeLabels[point.type || ""] || point.type || "نقطة"}
-                    </div>
-                    <div className="text-xs text-muted-foreground">نصف القطر: {radius} م</div>
-                    <div className="text-xs text-muted-foreground mt-1">اضغط للتوسع في التفاصيل</div>
-                  </div>
-                </Popup>
-              </Marker>
-            );
-          })}
-
-        {activeTab === "points" &&
-          atharMarkers.map((marker) => {
-            const lat = Number(marker.lat);
-            const lng = Number(marker.lng);
-            if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
-            const customIcon = getAtharMarkerIcon(marker.icon);
-            return (
-              <Marker
-                key={`marker-${marker.id}`}
-                position={[lat, lng]}
-                icon={customIcon ?? undefined}
-                eventHandlers={{
-                  click: () => {
-                    setSelectedMarker(marker);
-                    setSelectedPoint(null);
-                  },
-                }}
-              >
-                <Popup>
-                  <div className="text-right">
-                    <div className="font-semibold">{marker.name || `نقطة أثر ${marker.id}`}</div>
-                    <div className="text-xs text-muted-foreground">نقطة من أثر</div>
-                    <div className="text-xs text-muted-foreground mt-1">اضغط للتوسع في التفاصيل</div>
-                  </div>
-                </Popup>
-              </Marker>
-            );
-          })}
+        {atharMarkersLayer}
 
         {activeTab === "points" &&
           points.map((point) => {
@@ -532,14 +635,13 @@ export function MunicipalityMap({
                     <div className="font-semibold">{obj.name}</div>
                     {obj.plateNumber && <div className="text-xs text-muted-foreground">اللوحة: {obj.plateNumber}</div>}
                     <div className="text-xs text-muted-foreground">IMEI: {obj.imei || "-"}</div>
-                    <div className="text-xs text-muted-foreground">الحالة: {obj.active ? "نشطة" : "غير نشطة"}</div>
+                    <div className="text-xs text-muted-foreground">الحالة: {obj.active ? "تعمل" : "متوقفة"}</div>
                     <div className="text-xs text-muted-foreground">السرعة: {obj.speed} كم/س</div>
                     <div className="text-xs text-muted-foreground">الاتجاه: {Math.round(obj.angle || 0)}°</div>
                     {obj.dtTracker && <div className="text-xs text-muted-foreground">وقت الجهاز: {obj.dtTracker}</div>}
                     {obj.dtServer && <div className="text-xs text-muted-foreground">وقت الخادم: {obj.dtServer}</div>}
                     {obj.model && <div className="text-xs text-muted-foreground">الموديل: {obj.model}</div>}
                     {obj.device && <div className="text-xs text-muted-foreground">الجهاز: {obj.device}</div>}
-                    <RawJsonDetails value={obj.raw} />
                   </div>
                 </Popup>
               </Marker>
@@ -580,71 +682,23 @@ export function MunicipalityMap({
     </Tabs>
   );
 
+  const openRightPanel = (panel: RightPanelType) => {
+    setRightPanel((p) => (p === panel ? null : panel));
+    if (panel === "cars") onTabChange("objects");
+  };
+
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between gap-3">
+    <div className="space-y-2">
+      <div className="flex items-center justify-end">
         <Button variant="outline" size="sm" className="gap-2" onClick={() => setFullscreenOpen(true)}>
           <Maximize2 className="h-4 w-4" />
           عرض كامل
         </Button>
-
-        {renderTabSwitcher("w-full max-w-xl")}
       </div>
 
-      {activeTab === "points" && (
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <span className="text-xs text-muted-foreground">
-            اضغط على أي نقطة أو علامة لعرض التفاصيل في القسم من اليمين
-          </span>
-          <div className="flex items-center gap-2">
-            {onToggleMapView && (
-              <Button variant="outline" size="sm" onClick={onToggleMapView}>
-                {showZonesWithPoints ? "عرض النقاط فقط" : "عرض النقاط والمناطق"}
-              </Button>
-            )}
-            <span className="text-xs text-muted-foreground">
-              نقاط النظام: {points.length} • نقاط أثر: {atharMarkers.length}
-            </span>
-          </div>
-        </div>
-      )}
-
-      {activeTab === "objects" && (
-        <div className="flex items-center justify-between gap-3">
-          <Button
-            variant="outline"
-            size="sm"
-            className="gap-2"
-            onClick={() => setObjectsPanelOpen((open) => !open)}
-          >
-            <CarFront className="h-4 w-4" />
-            إجمالي سيارات أثر: {atharObjects.length}
-          </Button>
-          {objectsPanelOpen && (
-            <span className="text-xs text-muted-foreground">اضغط على السيارة لعرض التفاصيل</span>
-          )}
-        </div>
-      )}
-
-      <div
-        className={`relative ${
-          (activeTab === "objects" && objectsPanelOpen) ||
-          (activeTab === "points" && pointDetailsPanelOpen) ||
-          (zonesVisible && selectedZone != null)
-            ? "lg:flex lg:gap-4"
-            : ""
-        }`}
-      >
-        <div
-          className={`${
-            (activeTab === "objects" && objectsPanelOpen) ||
-            (activeTab === "points" && pointDetailsPanelOpen) ||
-            (zonesVisible && selectedZone != null)
-              ? "lg:order-2 lg:flex-1"
-              : ""
-          } relative`}
-        >
-          {renderMap("h-[520px]", true)}
+      <div className="flex w-full rounded-2xl border bg-card overflow-hidden relative" style={{ minHeight: "520px" }}>
+        <div className="flex-1 min-w-0 relative">
+          {renderMap("h-[520px] min-h-[520px]", true)}
           {currentTabLoading && (
             <div className="absolute inset-0 z-[500] rounded-2xl">
               <LoadingOverlay />
@@ -652,256 +706,398 @@ export function MunicipalityMap({
           )}
         </div>
 
-        {activeTab === "points" && pointDetailsPanelOpen && (
-          <aside className="mt-3 rounded-2xl border bg-background p-3 text-right shadow-sm lg:order-1 lg:mt-0 lg:w-[340px]">
-            <div className="flex items-center justify-between">
-              <div className="text-sm text-muted-foreground">تفاصيل النقطة</div>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => {
-                  setSelectedPoint(null);
-                  setSelectedMarker(null);
-                }}
-                title="إغلاق"
-              >
+        {!sidebarOpen ? (
+          <button
+            type="button"
+            onClick={() => setSidebarOpen(true)}
+            title="فتح القائمة الجانبية"
+            className="absolute top-1/2 right-0 -translate-y-1/2 z-[400] flex flex-col items-center justify-center w-10 h-20 rounded-r-lg bg-muted/90 hover:bg-muted border border-r-0 border-border shadow-sm transition-colors"
+          >
+            <PanelRightOpen className="h-5 w-5 text-muted-foreground" />
+            <span className="text-[10px] text-muted-foreground mt-1">القائمة</span>
+          </button>
+        ) : (
+          <>
+        {rightPanel && (
+          <aside className="w-80 flex-shrink-0 border-r border-l flex flex-col bg-background overflow-hidden max-h-[520px]">
+            <div className="flex items-center justify-between border-b px-3 py-2">
+              <span className="text-sm font-medium text-right">
+                {rightPanel === "cars" && "إجمالي سيارات أثر"}
+                {rightPanel === "events" && eventsLabel}
+                {rightPanel === "live" && "إحصائيات التتبع الحي"}
+                {rightPanel === "layers" && "النقاط والمناطق والسيارات"}
+              </span>
+              <Button variant="ghost" size="icon" onClick={() => setRightPanel(null)} title="إغلاق">
                 <X className="h-4 w-4" />
               </Button>
             </div>
-
-            <div className="mt-3 max-h-52 overflow-y-auto space-y-1 pr-1">
-              {points.map((point) => {
-                const pointId = point._id != null ? String(point._id) : `${point.lat}-${point.lng}`;
-                const selId = selectedPoint != null ? (selectedPoint._id != null ? String(selectedPoint._id) : `${selectedPoint.lat}-${selectedPoint.lng}`) : "";
-                const isSelected = selectedPoint != null && pointId === selId;
-                return (
-                  <button
-                    key={pointId}
-                    type="button"
-                    onClick={() => {
-                      setSelectedPoint(point);
-                      setSelectedMarker(null);
-                    }}
-                    className={`w-full rounded-md border px-2 py-2 text-xs transition text-right ${
-                      isSelected ? "bg-primary/10 border-primary/40 text-foreground" : "hover:bg-muted"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-muted-foreground">
-                        {Number(point.lat).toFixed(5)}, {Number(point.lng).toFixed(5)}
-                      </span>
-                      <span className="font-medium">{point.nameAr || point.name || "نقطة نظام"}</span>
-                    </div>
-                  </button>
-                );
-              })}
-              {atharMarkers.map((marker) => {
-                const isSelected = selectedMarker?.id === marker.id;
-                return (
-                  <button
-                    key={`marker-${marker.id}`}
-                    type="button"
-                    onClick={() => {
-                      setSelectedMarker(marker);
-                      setSelectedPoint(null);
-                    }}
-                    className={`w-full rounded-md border px-2 py-2 text-xs transition text-right ${
-                      isSelected ? "bg-primary/10 border-primary/40 text-foreground" : "hover:bg-muted"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-muted-foreground">
-                        {Number(marker.lat).toFixed(5)}, {Number(marker.lng).toFixed(5)}
-                      </span>
-                      <span className="font-medium">{marker.name || `نقطة أثر ${marker.id}`}</span>
-                    </div>
-                  </button>
-                );
-              })}
-              {points.length === 0 && atharMarkers.length === 0 && (
-                <div className="text-xs text-muted-foreground">لا توجد نقاط أو علامات.</div>
-              )}
-            </div>
-
-            {selectedPoint ? (
-              <div className="mt-4 border-t pt-3 space-y-2">
-                <div className="font-semibold">{selectedPoint.nameAr || selectedPoint.name || "نقطة"}</div>
-                <div className="grid gap-2 text-[11px] text-muted-foreground">
-                  <div>النوع: {pointTypeLabels[selectedPoint.type || ""] || selectedPoint.type || "—"}</div>
-                  <div>خط العرض: {Number(selectedPoint.lat).toFixed(6)}</div>
-                  <div>خط الطول: {Number(selectedPoint.lng).toFixed(6)}</div>
-                  <div>نصف القطر: {Number(selectedPoint.radiusMeters) || 500} م</div>
-                  {selectedPoint.zoneId && <div>معرف المنطقة: {selectedPoint.zoneId}</div>}
-                  {selectedPoint.addressText && <div>العنوان: {selectedPoint.addressText}</div>}
-                  {selectedPoint._id != null && <div>المعرف: {String(selectedPoint._id)}</div>}
-                </div>
-              </div>
-            ) : selectedMarker ? (
-              <div className="mt-4 border-t pt-3 space-y-2">
-                <div className="font-semibold">{selectedMarker.name || `نقطة أثر ${selectedMarker.id}`}</div>
-                <div className="grid gap-2 text-[11px] text-muted-foreground">
-                  <div>المعرف في أثر: {selectedMarker.id}</div>
-                  <div>خط العرض: {Number(selectedMarker.lat).toFixed(6)}</div>
-                  <div>خط الطول: {Number(selectedMarker.lng).toFixed(6)}</div>
-                </div>
-              </div>
-            ) : (
-              <div className="mt-4 text-xs text-muted-foreground">اختر نقطة أو علامة لعرض التفاصيل.</div>
-            )}
-          </aside>
-        )}
-
-        {zonesVisible && selectedZone != null && (
-          <aside className="mt-3 rounded-2xl border bg-background p-3 text-right shadow-sm lg:order-1 lg:mt-0 lg:w-[340px]">
-            <div className="flex items-center justify-between">
-              <div className="text-sm text-muted-foreground">تفاصيل المنطقة</div>
-              <Button variant="ghost" size="icon" onClick={() => setSelectedZone(null)} title="إغلاق">
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-            <div className="mt-3 space-y-2">
-              <div className="font-semibold">{selectedZone.name}</div>
-              <div className="grid gap-2 text-[11px] text-muted-foreground">
-                <div>المعرف: {selectedZone.id}</div>
-                {selectedZone.color && (
-                  <div className="flex items-center gap-2">
-                    <span>اللون:</span>
-                    <span
-                      className="inline-block h-4 w-4 rounded border border-border"
-                      style={{ backgroundColor: selectedZone.color }}
-                      title={selectedZone.color}
-                    />
-                    <span>{selectedZone.color}</span>
-                  </div>
-                )}
-                {selectedZone.center && (
-                  <>
-                    <div>خط العرض (المركز): {selectedZone.center.lat.toFixed(6)}</div>
-                    <div>خط الطول (المركز): {selectedZone.center.lng.toFixed(6)}</div>
-                  </>
-                )}
-                <div>عدد الرؤوس: {selectedZone.vertices?.length ?? 0}</div>
-                {selectedZone.vertices && selectedZone.vertices.length > 0 && (
-                  <div className="pt-1">
-                    <div className="text-muted-foreground mb-1">قائمة الرؤوس (أول 5):</div>
-                    <ul className="list-disc list-inside text-[10px] space-y-0.5">
-                      {(selectedZone.vertices.slice(0, 5) as Array<{ lat: number; lng: number }>).map((v, i) => (
-                        <li key={i}>
-                          {v.lat.toFixed(5)}, {v.lng.toFixed(5)}
-                        </li>
-                      ))}
-                    </ul>
-                    {selectedZone.vertices.length > 5 && (
-                      <div className="text-[10px] text-muted-foreground mt-1">وغيرها ({selectedZone.vertices.length - 5} رأس)</div>
+            <div className="flex-1 overflow-y-auto p-3 text-right">
+              {rightPanel === "cars" && (
+                <>
+                  <div className="text-xs text-muted-foreground mb-2">إجمالي: {atharObjects.length}</div>
+                  <div className="space-y-1 max-h-52 overflow-y-auto">
+                    {atharObjects.map((obj) => {
+                      const isSelected = String(obj.id) === String(selectedObjectId);
+                      return (
+                        <button
+                          key={`obj-row-${obj.id}`}
+                          type="button"
+                          onClick={() => setSelectedObjectId(String(obj.id))}
+                          className={`w-full rounded-md border px-2 py-2 text-xs transition ${
+                            isSelected ? "bg-primary/10 border-primary/40" : "hover:bg-muted"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-muted-foreground">
+                              {obj.lat != null && obj.lng != null ? `${obj.lat.toFixed(5)}, ${obj.lng.toFixed(5)}` : "بدون موقع"}
+                            </span>
+                            <span className="font-medium">
+                              {obj.name} {obj.plateNumber ? `(${obj.plateNumber})` : ""}
+                            </span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                    {atharObjects.length === 0 && (
+                      <div className="text-xs text-muted-foreground">لا توجد سيارات قادمة من أثر حالياً.</div>
                     )}
                   </div>
-                )}
-              </div>
+                  {selectedObject && (
+                    <div className="mt-4 border-t pt-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="font-semibold">{selectedObject.name}</div>
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-[11px] ${
+                            selectedObject.active ? "bg-emerald-500/15 text-emerald-700" : "bg-slate-500/15 text-slate-600"
+                          }`}
+                        >
+                          {selectedObject.active ? "نشطة" : "غير نشطة"}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-[11px] text-muted-foreground">
+                        <div>اللوحة: {selectedObject.plateNumber || "-"}</div>
+                        <div>IMEI: {selectedObject.imei || "-"}</div>
+                        <div>السرعة: {selectedObject.speed} كم/س</div>
+                        <div>الاتجاه: {Math.round(selectedObject.angle || 0)}°</div>
+                        <div>وقت الجهاز: {selectedObject.dtTracker || "-"}</div>
+                        <div>وقت الخادم: {selectedObject.dtServer || "-"}</div>
+                      </div>
+                      {matchedVehicle && (
+                        <div className="text-xs text-muted-foreground">المركبة بالنظام: {matchedVehicle.name}</div>
+                      )}
+                      {matchedRoute && (
+                        <div className="text-xs text-muted-foreground">المسار الحالي: {matchedRoute.name}</div>
+                      )}
+                      <div className="flex flex-wrap gap-2 pt-1">
+                        <Button size="sm" className="h-8" onClick={() => focusOnObject(selectedObject)} disabled={selectedObject.lat == null || selectedObject.lng == null}>
+                          تحديد على الخريطة
+                        </Button>
+                        {matchedVehicle?.routeId ? (
+                          <Button size="sm" variant="outline" className="h-8" asChild>
+                            <Link href={`/dashboard/routes/${String(matchedVehicle.routeId)}/points`}>عرض المسار</Link>
+                          </Button>
+                        ) : (
+                          <Button size="sm" variant="outline" className="h-8" disabled>عرض المسار</Button>
+                        )}
+                        {matchedVehicle?._id ? (
+                          <Button size="sm" variant="outline" className="h-8" asChild>
+                            <Link href={`/dashboard/reports?vehicleId=${matchedVehicle._id}`}>تقارير المركبة</Link>
+                          </Button>
+                        ) : (
+                          <Button size="sm" variant="outline" className="h-8" disabled>تقارير المركبة</Button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  {!selectedObject && atharObjects.length > 0 && (
+                    <div className="mt-4 text-xs text-muted-foreground">اختر سيارة لعرض التفاصيل.</div>
+                  )}
+                </>
+              )}
+              {rightPanel === "events" && (
+                <>
+                  <div className="space-y-3">
+                    {events.length === 0 && <div className="text-sm text-muted-foreground">لا توجد أحداث حالياً.</div>}
+                    {events.map((event) => (
+                      <div
+                        key={event._id}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => onEventClick?.(event)}
+                        onKeyDown={(e) => {
+                          if ((e.key === "Enter" || e.key === " ") && onEventClick) {
+                            e.preventDefault();
+                            onEventClick(event);
+                          }
+                        }}
+                        className={`rounded-lg border p-3 transition-colors cursor-pointer hover:bg-muted/50 text-right ${
+                          newEventIds[event._id] ? "border-emerald-400/70 bg-emerald-500/10" : ""
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            {newEventIds[event._id] && (
+                              <span className="rounded-full bg-emerald-600 px-2 py-0.5 text-[10px] font-semibold text-white">جديد</span>
+                            )}
+                            <span className="text-xs text-muted-foreground">{event.type === "zone_in" ? "دخول" : "خروج"}</span>
+                          </div>
+                          <span className="text-xs text-muted-foreground">{event.eventTimestamp || ""}</span>
+                        </div>
+                        <div className="font-semibold mt-1">
+                          {event.displayText || event.name || event.pointName || `${pointLabel} بدون اسم`}
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-1">{event.vehicleName || event.imei || ""}</div>
+                        {event.driverName && (
+                          <div className="text-xs text-muted-foreground mt-1">
+                            {driverLabel}: {event.driverName}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                    {eventsHasMore && <div ref={eventsLoadMoreSentinelRef} className="h-4 min-h-4" aria-hidden />}
+                    {eventsLoadingMore && <div className="text-center py-2 text-sm text-muted-foreground">جاري التحميل...</div>}
+                  </div>
+                </>
+              )}
+              {rightPanel === "live" && (
+                <div className="space-y-3 text-sm">
+                  <div className="font-medium">مركبات التتبع الحي: {visibleLiveVehicles.length}</div>
+                  <div className="text-muted-foreground">
+                    متحركة: {visibleLiveVehicles.filter((v) => v.status === "moving").length} • متوقفة:{" "}
+                    {visibleLiveVehicles.filter((v) => v.status === "stopped").length} • غير متصلة:{" "}
+                    {visibleLiveVehicles.filter((v) => v.status === "offline").length}
+                  </div>
+                </div>
+              )}
+              {rightPanel === "layers" && (
+                <>
+                  <div className="mb-3">{renderTabSwitcher("w-full")}</div>
+                  {onToggleMapView && activeTab === "points" && (
+                    <Button variant="outline" size="sm" className="w-full mb-2" onClick={onToggleMapView}>
+                      {showZonesWithPoints ? "عرض النقاط فقط" : "عرض النقاط والمناطق"}
+                    </Button>
+                  )}
+                  {activeTab === "points" && (
+                    <>
+                      <div className="text-xs text-muted-foreground mb-2">نقاط النظام: {points.length} • نقاط أثر: {atharMarkers.length}</div>
+                      <div className="max-h-40 overflow-y-auto space-y-1">
+                        {points.map((point) => {
+                          const pointId = point._id != null ? String(point._id) : `${point.lat}-${point.lng}`;
+                          const selId =
+                            selectedPoint != null
+                              ? selectedPoint._id != null
+                                ? String(selectedPoint._id)
+                                : `${selectedPoint.lat}-${selectedPoint.lng}`
+                              : "";
+                          const isSelected = selectedPoint != null && pointId === selId;
+                          return (
+                            <button
+                              key={pointId}
+                              type="button"
+                              onClick={() => {
+                                setSelectedPoint(point);
+                                setSelectedMarker(null);
+                              }}
+                              className={`w-full rounded-md border px-2 py-2 text-xs transition text-right ${
+                                isSelected ? "bg-primary/10 border-primary/40" : "hover:bg-muted"
+                              }`}
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-muted-foreground">
+                                  {Number(point.lat).toFixed(5)}, {Number(point.lng).toFixed(5)}
+                                </span>
+                                <span className="font-medium">{point.nameAr || point.name || "نقطة نظام"}</span>
+                              </div>
+                            </button>
+                          );
+                        })}
+                        {atharMarkers.map((marker) => {
+                          const isSelected = selectedMarker?.id === marker.id;
+                          return (
+                            <button
+                              key={`marker-${marker.id}`}
+                              type="button"
+                              onClick={() => {
+                                setSelectedMarker(marker);
+                                setSelectedPoint(null);
+                              }}
+                              className={`w-full rounded-md border px-2 py-2 text-xs transition text-right ${
+                                isSelected ? "bg-primary/10 border-primary/40" : "hover:bg-muted"
+                              }`}
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-muted-foreground">
+                                  {Number(marker.lat).toFixed(5)}, {Number(marker.lng).toFixed(5)}
+                                </span>
+                                <span className="font-medium">{marker.name || `نقطة أثر ${marker.id}`}</span>
+                              </div>
+                            </button>
+                          );
+                        })}
+                        {points.length === 0 && atharMarkers.length === 0 && (
+                          <div className="text-xs text-muted-foreground">لا توجد نقاط أو علامات.</div>
+                        )}
+                      </div>
+                      {selectedPoint ? (
+                        <div className="mt-4 border-t pt-3 space-y-2">
+                          {eventDetailsForPoint && focusPointId && String(selectedPoint._id) === String(focusPointId) && (
+                            <>
+                              <div className="text-xs font-semibold text-muted-foreground">الحدث المحدد</div>
+                              <div className="rounded-md border bg-muted/40 p-2 text-[11px] text-muted-foreground space-y-1">
+                                <div>{eventDetailsForPoint.displayText || "—"}</div>
+                                <div>الوقت: {eventDetailsForPoint.eventTimestamp || "—"}</div>
+                                <div>المركبة: {eventDetailsForPoint.vehicleName || "—"}</div>
+                                <div>النوع: {eventDetailsForPoint.type === "zone_in" ? "دخول" : eventDetailsForPoint.type === "zone_out" ? "خروج" : eventDetailsForPoint.type || "—"}</div>
+                                {eventDetailsForPoint.driverName && <div>السائق: {eventDetailsForPoint.driverName}</div>}
+                              </div>
+                            </>
+                          )}
+                          <div className="font-semibold">{selectedPoint.nameAr || selectedPoint.name || "نقطة"}</div>
+                          <div className="grid gap-2 text-[11px] text-muted-foreground">
+                            <div>النوع: {pointTypeLabels[selectedPoint.type || ""] || selectedPoint.type || "—"}</div>
+                            <div>خط العرض: {Number(selectedPoint.lat).toFixed(6)}</div>
+                            <div>خط الطول: {Number(selectedPoint.lng).toFixed(6)}</div>
+                            <div>نصف القطر: {Number(selectedPoint.radiusMeters) || 500} م</div>
+                            {selectedPoint.zoneId && <div>معرف المنطقة: {selectedPoint.zoneId}</div>}
+                            {selectedPoint.addressText && <div>العنوان: {selectedPoint.addressText}</div>}
+                            {selectedPoint._id != null && <div>المعرف: {String(selectedPoint._id)}</div>}
+                          </div>
+                        </div>
+                      ) : selectedMarker ? (
+                        <div className="mt-4 border-t pt-3 space-y-2">
+                          <div className="font-semibold">{selectedMarker.name || `نقطة أثر ${selectedMarker.id}`}</div>
+                          <div className="grid gap-2 text-[11px] text-muted-foreground">
+                            <div>المعرف في أثر: {selectedMarker.id}</div>
+                            <div>خط العرض: {Number(selectedMarker.lat).toFixed(6)}</div>
+                            <div>خط الطول: {Number(selectedMarker.lng).toFixed(6)}</div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="mt-4 text-xs text-muted-foreground">اختر نقطة أو علامة لعرض التفاصيل.</div>
+                      )}
+                    </>
+                  )}
+                  {activeTab === "zones" && selectedZone != null && (
+                    <div className="mt-3 space-y-2">
+                      <div className="font-semibold">{selectedZone.name}</div>
+                      <div className="grid gap-2 text-[11px] text-muted-foreground">
+                        <div>المعرف: {selectedZone.id}</div>
+                        {selectedZone.color && (
+                          <div className="flex items-center gap-2">
+                            <span>اللون:</span>
+                            <span className="inline-block h-4 w-4 rounded border border-border" style={{ backgroundColor: selectedZone.color }} title={selectedZone.color} />
+                            <span>{selectedZone.color}</span>
+                          </div>
+                        )}
+                        {selectedZone.center && (
+                          <>
+                            <div>خط العرض (المركز): {selectedZone.center.lat.toFixed(6)}</div>
+                            <div>خط الطول (المركز): {selectedZone.center.lng.toFixed(6)}</div>
+                          </>
+                        )}
+                        <div>عدد الرؤوس: {selectedZone.vertices?.length ?? 0}</div>
+                      </div>
+                    </div>
+                  )}
+                  {activeTab === "zones" && selectedZone == null && (
+                    <div className="text-xs text-muted-foreground mt-2">اضغط على منطقة على الخريطة لعرض التفاصيل.</div>
+                  )}
+                  {activeTab === "objects" && rightPanel === "layers" && (
+                    <>
+                      <div className="text-xs text-muted-foreground mb-2">إجمالي: {atharObjects.length}</div>
+                      <div className="max-h-40 overflow-y-auto space-y-1">
+                        {atharObjects.map((obj) => {
+                          const isSelected = String(obj.id) === String(selectedObjectId);
+                          return (
+                            <button
+                              key={`obj-row-${obj.id}`}
+                              type="button"
+                              onClick={() => setSelectedObjectId(String(obj.id))}
+                              className={`w-full rounded-md border px-2 py-2 text-xs transition ${
+                                isSelected ? "bg-primary/10 border-primary/40" : "hover:bg-muted"
+                              }`}
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-muted-foreground">
+                                  {obj.lat != null && obj.lng != null ? `${obj.lat.toFixed(5)}, ${obj.lng.toFixed(5)}` : "بدون موقع"}
+                                </span>
+                                <span className="font-medium">{obj.name} {obj.plateNumber ? `(${obj.plateNumber})` : ""}</span>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {selectedObject && (
+                        <div className="mt-4 border-t pt-3 space-y-2">
+                          <div className="font-semibold">{selectedObject.name}</div>
+                          <div className="grid grid-cols-2 gap-2 text-[11px] text-muted-foreground">
+                            <div>اللوحة: {selectedObject.plateNumber || "-"}</div>
+                            <div>السرعة: {selectedObject.speed} كم/س</div>
+                          </div>
+                          <Button size="sm" className="h-8 mt-1" onClick={() => selectedObject.lat != null && selectedObject.lng != null && focusOnObject(selectedObject)}>
+                            تحديد على الخريطة
+                          </Button>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </>
+              )}
             </div>
           </aside>
         )}
 
-        {activeTab === "objects" && objectsPanelOpen && (
-          <aside className="mt-3 rounded-2xl border bg-background p-3 text-right shadow-sm lg:order-1 lg:mt-0 lg:w-[340px]">
-            <div className="flex items-center justify-between">
-              <div className="text-sm text-muted-foreground">سيارات أثر</div>
-              <Button variant="ghost" size="icon" onClick={() => setObjectsPanelOpen(false)} title="إغلاق">
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-
-            <div className="mt-3 max-h-52 overflow-y-auto space-y-1 pr-1">
-              {atharObjects.map((obj) => {
-                const isSelected = String(obj.id) === String(selectedObjectId);
-                return (
-                  <button
-                    key={`obj-row-${obj.id}`}
-                    type="button"
-                    onClick={() => setSelectedObjectId(String(obj.id))}
-                    className={`w-full rounded-md border px-2 py-2 text-xs transition ${
-                      isSelected ? "bg-primary/10 border-primary/40 text-foreground" : "hover:bg-muted"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-muted-foreground">
-                        {obj.lat != null && obj.lng != null ? `${obj.lat.toFixed(5)}, ${obj.lng.toFixed(5)}` : "بدون موقع"}
-                      </span>
-                      <span className="font-medium">
-                        {obj.name} {obj.plateNumber ? `(${obj.plateNumber})` : ""}
-                      </span>
-                    </div>
-                  </button>
-                );
-              })}
-              {atharObjects.length === 0 && (
-                <div className="text-xs text-muted-foreground">لا توجد سيارات قادمة من أثر حالياً.</div>
-              )}
-            </div>
-
-            {selectedObject ? (
-              <div className="mt-4 border-t pt-3 space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="font-semibold">{selectedObject.name}</div>
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-[11px] ${
-                      selectedObject.active ? "bg-emerald-500/15 text-emerald-700" : "bg-slate-500/15 text-slate-600"
-                    }`}
-                  >
-                    {selectedObject.active ? "نشطة" : "غير نشطة"}
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2 text-[11px] text-muted-foreground">
-                  <div>اللوحة: {selectedObject.plateNumber || "-"}</div>
-                  <div>IMEI: {selectedObject.imei || "-"}</div>
-                  <div>السرعة: {selectedObject.speed} كم/س</div>
-                  <div>الاتجاه: {Math.round(selectedObject.angle || 0)}°</div>
-                  <div>وقت الجهاز: {selectedObject.dtTracker || "-"}</div>
-                  <div>وقت الخادم: {selectedObject.dtServer || "-"}</div>
-                </div>
-
-                {matchedVehicle && (
-                  <div className="text-xs text-muted-foreground">المركبة بالنظام: {matchedVehicle.name}</div>
-                )}
-                {matchedRoute && (
-                  <div className="text-xs text-muted-foreground">المسار الحالي: {matchedRoute.name}</div>
-                )}
-
-                <div className="flex flex-wrap gap-2 pt-1">
-                  <Button
-                    size="sm"
-                    className="h-8"
-                    onClick={() => focusOnObject(selectedObject)}
-                    disabled={selectedObject.lat == null || selectedObject.lng == null}
-                  >
-                    تحديد على الخريطة
-                  </Button>
-
-                  {matchedVehicle?.routeId ? (
-                    <Button size="sm" variant="outline" className="h-8" asChild>
-                      <Link href={`/dashboard/routes/${String(matchedVehicle.routeId)}/points`}>عرض المسار</Link>
-                    </Button>
-                  ) : (
-                    <Button size="sm" variant="outline" className="h-8" disabled>
-                      عرض المسار
-                    </Button>
-                  )}
-
-                  {matchedVehicle?._id ? (
-                    <Button size="sm" variant="outline" className="h-8" asChild>
-                      <Link href={`/dashboard/reports?vehicleId=${matchedVehicle._id}`}>تقارير المركبة</Link>
-                    </Button>
-                  ) : (
-                    <Button size="sm" variant="outline" className="h-8" disabled>
-                      تقارير المركبة
-                    </Button>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div className="mt-4 text-xs text-muted-foreground">اختر سيارة لعرض التفاصيل.</div>
-            )}
-          </aside>
+        <div className="flex flex-col w-14 flex-shrink-0 bg-muted/40 py-2 gap-1 border-l">
+          <button
+            type="button"
+            title="إغلاق القائمة الجانبية"
+            onClick={() => setSidebarOpen(false)}
+            className="flex items-center justify-center h-8 w-10 mx-auto rounded-lg transition-colors hover:bg-muted mb-1"
+          >
+            <PanelRightClose className="h-4 w-4 text-muted-foreground" />
+          </button>
+          <button
+            type="button"
+            title="إجمالي سيارات أثر"
+            onClick={() => openRightPanel("cars")}
+            className={`flex items-center justify-center h-10 w-10 mx-auto rounded-lg transition-colors ${
+              rightPanel === "cars" ? "bg-primary text-primary-foreground" : "hover:bg-muted"
+            }`}
+          >
+            <CarFront className="h-5 w-5" />
+          </button>
+          <button
+            type="button"
+            title={eventsLabel}
+            onClick={() => openRightPanel("events")}
+            className={`flex items-center justify-center h-10 w-10 mx-auto rounded-lg transition-colors ${
+              rightPanel === "events" ? "bg-primary text-primary-foreground" : "hover:bg-muted"
+            }`}
+          >
+            <CalendarDays className="h-5 w-5" />
+          </button>
+          <button
+            type="button"
+            title="إحصائيات التتبع الحي"
+            onClick={() => openRightPanel("live")}
+            className={`flex items-center justify-center h-10 w-10 mx-auto rounded-lg transition-colors ${
+              rightPanel === "live" ? "bg-primary text-primary-foreground" : "hover:bg-muted"
+            }`}
+          >
+            <BarChart2 className="h-5 w-5" />
+          </button>
+          <button
+            type="button"
+            title="النقاط والمناطق والسيارات"
+            onClick={() => openRightPanel("layers")}
+            className={`flex items-center justify-center h-10 w-10 mx-auto rounded-lg transition-colors ${
+              rightPanel === "layers" ? "bg-primary text-primary-foreground" : "hover:bg-muted"
+            }`}
+          >
+            <Layers className="h-5 w-5" />
+          </button>
+        </div>
+          </>
         )}
       </div>
 

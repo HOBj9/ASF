@@ -98,7 +98,7 @@ export function DashboardHeader() {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => signOut({ callbackUrl: "/login" })}
+            onClick={() => signOut({ callbackUrl: typeof window !== "undefined" ? `${window.location.origin}/login` : "/login" })}
             className="flex items-center gap-2"
           >
             <LogOut className="h-4 w-4" />

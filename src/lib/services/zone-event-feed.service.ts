@@ -1,4 +1,4 @@
-﻿import Branch from '@/models/Branch';
+import Branch from '@/models/Branch';
 import ZoneEvent from '@/models/ZoneEvent';
 import type { DashboardEventItem } from '@/lib/types/dashboard-event';
 
@@ -52,6 +52,7 @@ export function mapZoneEventToDashboardItem(event: any, timeZone: string): Dashb
   const imei = event?.imei || '';
   const eventDate: Date | null = event?.eventTimestamp || event?.createdAt || null;
 
+  const pointId = event?.pointId != null ? String(event.pointId) : '';
   return {
     _id: String(event?._id),
     type: event?.type || '',
@@ -62,17 +63,20 @@ export function mapZoneEventToDashboardItem(event: any, timeZone: string): Dashb
     vehicleName,
     driverName: event?.driverName || event?.driverId?.name || '',
     displayText: buildDisplayText(event?.type || '', vehicleName, imei, pointName),
+    ...(pointId ? { pointId } : {}),
   };
 }
 
 export async function getRecentBranchEvents(
   branchId: string,
   limit: number,
-  timeZone?: string
+  timeZone?: string,
+  skip?: number
 ): Promise<DashboardEventItem[]> {
   const resolvedTimeZone = timeZone || (await getBranchTimezone(branchId)) || 'Asia/Damascus';
   const events = await ZoneEvent.find({ branchId })
     .sort({ eventTimestamp: -1, createdAt: -1 })
+    .skip(skip ?? 0)
     .limit(limit)
     .populate('pointId', 'name nameAr')
     .populate('vehicleId', 'name plateNumber driverId')

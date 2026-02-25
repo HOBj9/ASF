@@ -8,4 +8,5 @@ export interface DashboardEventItem {
   vehicleName: string;
   driverName: string;
   displayText: string;
+  pointId?: string;
 }

@@ -136,6 +136,7 @@ type EventItem = {
   vehicleName?: string;
   driverName?: string;
   displayText?: string;
+  pointId?: string;
 };
 
 function mergeUniqueEvents(primary: EventItem[], secondary: EventItem[], limit: number): EventItem[] {
@@ -202,6 +203,8 @@ export function MunicipalityDashboard({
   const [stats, setStats] = useState<Stats | null>(null);
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
   const [events, setEvents] = useState<EventItem[]>([]);
+  const [eventsHasMore, setEventsHasMore] = useState(true);
+  const [eventsLoadingMore, setEventsLoadingMore] = useState(false);
   const [loading, setLoading] = useState(true);
   const [activeMapTab, setActiveMapTab] = useState<MapTab>("live");
   const [mapPointsOnly, setMapPointsOnly] = useState(true);
@@ -218,10 +221,18 @@ export function MunicipalityDashboard({
   const [vehiclesLoaded, setVehiclesLoaded] = useState(false);
   const [liveLoaded, setLiveLoaded] = useState(false);
   const [newEventIds, setNewEventIds] = useState<Record<string, boolean>>({});
+  const [mapFocusPointId, setMapFocusPointId] = useState<string | null>(null);
+  const [mapFocusEvent, setMapFocusEvent] = useState<EventItem | null>(null);
+  const mapSectionRef = useRef<HTMLDivElement | null>(null);
   const eventsStreamConnectedRef = useRef(false);
   const seenEventIdsRef = useRef<Set<string>>(new Set());
   const eventHighlightTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const eventsLoadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
+  const eventsLengthRef = useRef(0);
+  const eventsLoadMoreInProgressRef = useRef(false);
   const { labels } = useLabels();
+
+  eventsLengthRef.current = events.length;
 
   const branchQuery =
     isOrganizationAdmin && selectedBranchId ? `?branchId=${encodeURIComponent(selectedBranchId)}` : "";
@@ -299,7 +310,7 @@ export function MunicipalityDashboard({
             fetch(`/api/municipality${branchQuery}`),
             fetch(`/api/routes${branchQuery}`),
             fetch(`/api/dashboard/stats${branchQuery}`),
-            fetch(`/api/events?limit=8${branchQuery ? "&" + branchQuery.slice(1) : ""}`),
+            fetch(`/api/events?limit=10${branchQuery ? "&" + branchQuery.slice(1) : ""}`),
             fetch(`/api/dashboard/analytics?dailyDays=${dailyDays}&monthlyMonths=${monthlyMonths}${branchQuery ? "&" + branchQuery.slice(1) : ""}`),
           ]);
 
@@ -322,6 +333,7 @@ export function MunicipalityDashboard({
           const initialEvents = Array.isArray(data.events) ? data.events : [];
           rememberEvents(initialEvents);
           setEvents(initialEvents);
+          setEventsHasMore(data.hasMore !== false && initialEvents.length >= 10);
         }
         if (analyticsRes.ok) {
           const data = await analyticsRes.json();
@@ -340,12 +352,13 @@ export function MunicipalityDashboard({
         .then((data) => setStats(data))
         .catch(() => null);
       if (!eventsStreamConnectedRef.current) {
-        fetch(`/api/events?limit=8${branchQuery ? "&" + branchQuery.slice(1) : ""}`)
+        fetch(`/api/events?limit=10${branchQuery ? "&" + branchQuery.slice(1) : ""}`)
           .then((res) => res.json())
           .then((data) => {
             const nextEvents = Array.isArray(data.events) ? data.events : [];
             rememberEvents(nextEvents);
             setEvents(nextEvents);
+            setEventsHasMore(data.hasMore !== false && nextEvents.length >= 10);
           })
           .catch(() => null);
       }
@@ -364,8 +377,39 @@ export function MunicipalityDashboard({
   useEffect(() => {
     seenEventIdsRef.current = new Set();
     setNewEventIds({});
+    setEventsHasMore(true);
     eventsStreamConnectedRef.current = false;
   }, [branchQuery]);
+
+  useEffect(() => {
+    if (!canLoadBranchData || !eventsHasMore || eventsLoadingMore) return;
+    const sentinel = eventsLoadMoreSentinelRef.current;
+    if (!sentinel) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries[0]?.isIntersecting || eventsLoadMoreInProgressRef.current) return;
+        eventsLoadMoreInProgressRef.current = true;
+        const skip = eventsLengthRef.current;
+        setEventsLoadingMore(true);
+        fetch(`/api/events?limit=10&skip=${skip}${branchQuery ? "&" + branchQuery.slice(1) : ""}`)
+          .then((res) => res.json())
+          .then((data) => {
+            const next = Array.isArray(data.events) ? data.events : [];
+            if (next.length > 0) rememberEvents(next);
+            setEvents((prev) => [...prev, ...next]);
+            setEventsHasMore(data.hasMore !== false && next.length >= 10);
+          })
+          .catch(() => setEventsHasMore(false))
+          .finally(() => {
+            eventsLoadMoreInProgressRef.current = false;
+            setEventsLoadingMore(false);
+          });
+      },
+      { root: sentinel.closest(".overflow-y-auto") ?? undefined, rootMargin: "100px", threshold: 0.1 }
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [canLoadBranchData, eventsHasMore, eventsLoadingMore, branchQuery]);
 
   useEffect(() => {
     return () => {
@@ -382,7 +426,7 @@ export function MunicipalityDashboard({
       return;
     }
 
-    const url = `/api/events/websocket?limit=8${branchQuery ? "&" + branchQuery.slice(1) : ""}`;
+    const url = `/api/events/websocket?limit=10${branchQuery ? "&" + branchQuery.slice(1) : ""}`;
     const source = new EventSource(url);
 
     source.onopen = () => {
@@ -396,7 +440,8 @@ export function MunicipalityDashboard({
         if (payload?.type === "events_snapshot" && Array.isArray(payload?.data)) {
           const snapshot = payload.data as EventItem[];
           rememberEvents(snapshot);
-          setEvents((prev) => mergeUniqueEvents(snapshot, prev, 8));
+          setEvents((prev) => mergeUniqueEvents(snapshot, prev, 10));
+          setEventsHasMore(true);
           return;
         }
 
@@ -405,7 +450,7 @@ export function MunicipalityDashboard({
           if (seenEventIdsRef.current.has(incomingEvent._id)) return;
 
           seenEventIdsRef.current.add(incomingEvent._id);
-          setEvents((prev) => mergeUniqueEvents([incomingEvent], prev, 8));
+          setEvents((prev) => mergeUniqueEvents([incomingEvent], prev, 10));
           markEventAsNew(incomingEvent._id);
 
           const eventTypeLabel = incomingEvent.type === "zone_in" ? "دخول" : "خروج";
@@ -769,23 +814,8 @@ export function MunicipalityDashboard({
         <StatCard label="نسبة الإنجاز اليومية" value={`${stats?.dailyCompletionPercent ?? 0}%`} tone="violet" />
       </div>
 
-      <div className={cn("grid gap-6", showEvents ? "lg:grid-cols-[2fr_1fr]" : "lg:grid-cols-1")}>
-        <div className={cn("space-y-4", loading && "opacity-70")}>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <h3 className="text-lg font-semibold text-right">الخريطة التشغيلية</h3>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowEvents((prev) => !prev)}
-              >
-                {showEvents ? "إخفاء الأحداث" : "إظهار الأحداث"}
-              </Button>
-            </div>
-            <div className="text-sm text-muted-foreground">
-              {points.length} {labels.pointLabel} • {atharMarkers.length} نقاط أثر • {zones.length} مناطق • {routes.length} {labels.routeLabel} • {atharObjects.length} سيارات أثر
-            </div>
-          </div>
+      <div className="space-y-4">
+        <div ref={mapSectionRef} className={cn(loading && "opacity-70")}>
           <MunicipalityMap
             municipality={branch}
             liveVehicles={liveVehicles}
@@ -800,52 +830,25 @@ export function MunicipalityDashboard({
             tabLoading={mapTabLoading}
             showZonesWithPoints={!mapPointsOnly}
             onToggleMapView={() => setMapPointsOnly((p) => !p)}
+            focusPointId={mapFocusPointId}
+            eventDetailsForPoint={mapFocusEvent}
+            events={events}
+            newEventIds={newEventIds}
+            onEventClick={(event) => {
+              if (event.pointId) {
+                setMapFocusPointId(event.pointId);
+                setMapFocusEvent(event);
+                mapSectionRef.current?.scrollIntoView({ behavior: "smooth" });
+              }
+            }}
+            eventsLabel={labels.latestEventsLabel || "آخر الأحداث"}
+            driverLabel={labels.driverLabel}
+            pointLabel={labels.pointLabel}
+            eventsHasMore={eventsHasMore}
+            eventsLoadingMore={eventsLoadingMore}
+            eventsLoadMoreSentinelRef={eventsLoadMoreSentinelRef}
           />
         </div>
-
-        {showEvents && (
-        <div className="rounded-2xl border bg-card p-4 text-right shadow-sm lg:h-[620px] flex flex-col">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-lg font-semibold">{labels.latestEventsLabel || "آخر الأحداث"}</h3>
-            <span className="text-xs text-muted-foreground">آخر 8 أحداث</span>
-          </div>
-          <div className="space-y-3 overflow-y-auto flex-1 pr-1">
-            {events.length === 0 && <div className="text-sm text-muted-foreground">لا توجد أحداث حالياً.</div>}
-            {events.map((event) => (
-              <div
-                key={event._id}
-                className={cn(
-                  "rounded-lg border p-3 transition-colors",
-                  newEventIds[event._id] && "border-emerald-400/70 bg-emerald-500/10"
-                )}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    {newEventIds[event._id] && (
-                      <span className="rounded-full bg-emerald-600 px-2 py-0.5 text-[10px] font-semibold text-white">
-                        جديد
-                      </span>
-                    )}
-                    <span className="text-xs text-muted-foreground">{event.type === "zone_in" ? "دخول" : "خروج"}</span>
-                  </div>
-                  <span className="text-xs text-muted-foreground">{event.eventTimestamp || ""}</span>
-                </div>
-                <div className="font-semibold mt-1">
-                  {event.displayText || event.name || event.pointName || `${labels.pointLabel} بدون اسم`}
-                </div>
-                <div className="text-xs text-muted-foreground mt-1">
-                  {event.vehicleName || event.imei || ""}
-                </div>
-                {event.driverName && (
-                  <div className="text-xs text-muted-foreground mt-1">
-                    {labels.driverLabel}: {event.driverName}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-        )}
       </div>
 
       <div className="rounded-2xl border bg-card p-4 text-right shadow-sm">
