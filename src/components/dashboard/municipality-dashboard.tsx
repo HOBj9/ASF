@@ -27,6 +27,7 @@ import {
 import { useLabels } from "@/hooks/use-labels";
 import toast from "react-hot-toast";
 import { playEventToastSound } from "@/lib/utils/event-toast-sound";
+import { getNotificationPreferences } from "@/lib/utils/notification-preferences";
 import {
   Select,
   SelectContent,
@@ -449,7 +450,12 @@ export function MunicipalityDashboard({
           const incomingEvent = payload.data as EventItem;
           if (seenEventIdsRef.current.has(incomingEvent._id)) return;
 
-          playEventToastSound();
+          const notifPrefs = getNotificationPreferences();
+          if (!notifPrefs.enabled) return;
+
+          if (notifPrefs.soundEnabled) {
+            playEventToastSound();
+          }
 
           seenEventIdsRef.current.add(incomingEvent._id);
           setEvents((prev) => mergeUniqueEvents([incomingEvent], prev, 10));
@@ -483,7 +489,8 @@ export function MunicipalityDashboard({
 
           const toastOptions = {
             id: `zone-event-${incomingEvent._id}`,
-            duration: 8500,
+            duration: notifPrefs.toastDurationSeconds * 1000,
+            position: notifPrefs.toastPosition,
             style: {
               minWidth: "400px",
               maxWidth: "520px",

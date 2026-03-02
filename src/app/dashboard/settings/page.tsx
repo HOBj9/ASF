@@ -5,6 +5,7 @@ import connectDB from "@/lib/mongodb"
 import User from "@/models/User"
 import { ProfileManager } from "@/components/profile/profile-manager"
 import { OrganizationLabelsSettings } from "@/components/settings/organization-labels-settings"
+import { NotificationSettings } from "@/components/settings/notification-settings"
 
 export default async function SettingsPage() {
   const session = await getServerSession(authOptions)
@@ -41,6 +42,11 @@ export default async function SettingsPage() {
       <div>
         <h2 className="text-xl font-semibold mb-3">تسميات المؤسسة</h2>
         <OrganizationLabelsSettings />
+      </div>
+
+      <div>
+        <h2 className="text-xl font-semibold mb-3">تخصيص الإشعارات</h2>
+        <NotificationSettings />
       </div>
     </div>
   )

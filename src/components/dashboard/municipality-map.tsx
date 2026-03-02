@@ -3,10 +3,11 @@
 import "@/lib/leaflet-patch";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { MapContainer, TileLayer, Marker, Popup, Circle, Polygon } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup, Circle, Polygon, Tooltip } from "react-leaflet";
 import L from "leaflet";
-import { Maximize2, BusFront, MapPin, Hexagon, CarFront, X, BarChart2, CalendarDays, Layers, PanelRightOpen, PanelRightClose } from "lucide-react";
+import { Maximize2, BusFront, MapPin, Hexagon, CarFront, X, BarChart2, CalendarDays, Layers, PanelRightOpen, PanelRightClose, Tag, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { LoadingOverlay } from "@/components/ui/loading";
@@ -290,6 +291,9 @@ export function MunicipalityMap({
   const [fullscreenOpen, setFullscreenOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [rightPanel, setRightPanel] = useState<RightPanelType>(null);
+  const [showVehicleNamesOnMap, setShowVehicleNamesOnMap] = useState(true);
+  const [atharCarsSearchQuery, setAtharCarsSearchQuery] = useState("");
+  const [eventsSearchQuery, setEventsSearchQuery] = useState("");
   const [objectsPanelOpen, setObjectsPanelOpen] = useState(false);
   const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null);
   const [selectedPoint, setSelectedPoint] = useState<MapPoint | null>(null);
@@ -350,6 +354,31 @@ export function MunicipalityMap({
     }
     return map;
   }, [routes]);
+
+  const filteredAtharObjects = useMemo(() => {
+    const q = atharCarsSearchQuery.trim().toLowerCase();
+    if (!q) return atharObjects;
+    return atharObjects.filter(
+      (obj) =>
+        (obj.name || "").toLowerCase().includes(q) ||
+        (obj.plateNumber || "").toLowerCase().includes(q) ||
+        (obj.imei || "").toLowerCase().includes(q)
+    );
+  }, [atharObjects, atharCarsSearchQuery]);
+
+  const filteredEvents = useMemo(() => {
+    const q = eventsSearchQuery.trim().toLowerCase();
+    if (!q) return events;
+    return events.filter(
+      (event) =>
+        (event.displayText || "").toLowerCase().includes(q) ||
+        (event.name || "").toLowerCase().includes(q) ||
+        (event.pointName || "").toLowerCase().includes(q) ||
+        (event.vehicleName || "").toLowerCase().includes(q) ||
+        (event.driverName || "").toLowerCase().includes(q) ||
+        (event.imei || "").toLowerCase().includes(q)
+    );
+  }, [events, eventsSearchQuery]);
 
   useEffect(() => {
     if (focusPointId && points.length > 0) {
@@ -448,6 +477,11 @@ export function MunicipalityMap({
           position={vehicle.coordinates as [number, number]}
           icon={getBusIcon(vehicle.status, vehicle.heading)}
         >
+          {showVehicleNamesOnMap && (
+            <Tooltip direction="top" offset={[0, -12]} opacity={1} permanent className="!bg-background !border !text-foreground !text-xs font-medium">
+              {vehicle.busNumber}
+            </Tooltip>
+          )}
           <Popup>
             <div className="text-right space-y-1 max-w-[300px]">
               <div className="font-semibold">{vehicle.busNumber}</div>
@@ -475,7 +509,7 @@ export function MunicipalityMap({
         </Marker>
       );
     });
-  }, [activeTab, visibleLiveVehicles, objectByImei, vehicleZoneMap]);
+  }, [activeTab, visibleLiveVehicles, objectByImei, vehicleZoneMap, showVehicleNamesOnMap]);
 
   const pointsMarkersLayer = useMemo(() => {
     if (activeTab !== "points") return null;
@@ -544,7 +578,21 @@ export function MunicipalityMap({
   }, [activeTab, atharMarkers]);
 
   const renderMap = (heightClass: string, attachRef = false) => (
-    <div className={`${heightClass} w-full overflow-hidden rounded-2xl border bg-background`}>
+    <div className={`${heightClass} w-full overflow-hidden rounded-2xl border bg-background relative`}>
+      {/* Map navbar: show/hide vehicle names */}
+      <nav className="absolute top-0 right-0 left-0 z-[1000] flex items-center justify-between gap-2 px-3 py-2 bg-background/95 backdrop-blur-sm border-b border-border/50 rounded-t-2xl">
+        <Button
+          type="button"
+          variant={showVehicleNamesOnMap ? "secondary" : "ghost"}
+          size="sm"
+          className="gap-2 text-xs"
+          onClick={() => setShowVehicleNamesOnMap((v) => !v)}
+          title={showVehicleNamesOnMap ? "إخفاء أسماء السيارات" : "إظهار أسماء السيارات"}
+        >
+          <Tag className="h-3.5 w-3.5" />
+          {showVehicleNamesOnMap ? "إخفاء أسماء السيارات" : "إظهار أسماء السيارات"}
+        </Button>
+      </nav>
       <MapContainer
         key={mapKey}
         center={initialCenter}
@@ -638,6 +686,11 @@ export function MunicipalityMap({
                   },
                 }}
               >
+                {showVehicleNamesOnMap && (
+                  <Tooltip direction="top" offset={[0, -12]} opacity={1} permanent className="!bg-background !border !text-foreground !text-xs font-medium">
+                    {obj.name || obj.plateNumber || obj.imei || `سيارة ${obj.id}`}
+                  </Tooltip>
+                )}
                 <Popup>
                   <div className="text-right space-y-1 max-w-[300px]">
                     <div className="font-semibold">{obj.name}</div>
@@ -742,9 +795,24 @@ export function MunicipalityMap({
             <div className="flex-1 overflow-y-auto p-3 text-right">
               {rightPanel === "cars" && (
                 <>
-                  <div className="text-xs text-muted-foreground mb-2">إجمالي: {atharObjects.length}</div>
+                  <div className="mb-2">
+                    <div className="relative">
+                      <Search className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                      <Input
+                        type="search"
+                        placeholder="بحث بالاسم أو اللوحة أو IMEI..."
+                        value={atharCarsSearchQuery}
+                        onChange={(e) => setAtharCarsSearchQuery(e.target.value)}
+                        className="pr-8 text-xs h-8"
+                      />
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-1.5">
+                      إجمالي: {atharObjects.length}
+                      {atharCarsSearchQuery.trim() && ` • عرض: ${filteredAtharObjects.length}`}
+                    </div>
+                  </div>
                   <div className="space-y-1 max-h-52 overflow-y-auto">
-                    {atharObjects.map((obj) => {
+                    {filteredAtharObjects.map((obj) => {
                       const isSelected = String(obj.id) === String(selectedObjectId);
                       return (
                         <button
@@ -769,8 +837,10 @@ export function MunicipalityMap({
                         </button>
                       );
                     })}
-                    {atharObjects.length === 0 && (
-                      <div className="text-xs text-muted-foreground">لا توجد سيارات قادمة من أثر حالياً.</div>
+                    {filteredAtharObjects.length === 0 && (
+                      <div className="text-xs text-muted-foreground">
+                        {atharObjects.length === 0 ? "لا توجد سيارات قادمة من أثر حالياً." : "لا توجد نتائج للبحث."}
+                      </div>
                     )}
                   </div>
                   {selectedObject && (
@@ -820,16 +890,31 @@ export function MunicipalityMap({
                       </div>
                     </div>
                   )}
-                  {!selectedObject && atharObjects.length > 0 && (
+                  {!selectedObject && filteredAtharObjects.length > 0 && (
                     <div className="mt-4 text-xs text-muted-foreground">اختر سيارة لعرض التفاصيل.</div>
                   )}
                 </>
               )}
               {rightPanel === "events" && (
                 <>
+                  <div className="mb-2">
+                    <div className="relative">
+                      <Search className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                      <Input
+                        type="search"
+                        placeholder="بحث بالأحداث أو المركبة أو النقطة..."
+                        value={eventsSearchQuery}
+                        onChange={(e) => setEventsSearchQuery(e.target.value)}
+                        className="pr-8 text-xs h-8"
+                      />
+                    </div>
+                    {eventsSearchQuery.trim() && (
+                      <div className="text-xs text-muted-foreground mt-1.5">عرض: {filteredEvents.length} من {events.length}</div>
+                    )}
+                  </div>
                   <div className="space-y-3">
-                    {events.length === 0 && <div className="text-sm text-muted-foreground">لا توجد أحداث حالياً.</div>}
-                    {events.map((event) => (
+                    {filteredEvents.length === 0 && <div className="text-sm text-muted-foreground">{events.length === 0 ? "لا توجد أحداث حالياً." : "لا توجد نتائج للبحث."}</div>}
+                    {filteredEvents.map((event) => (
                       <div
                         key={event._id}
                         role="button"
