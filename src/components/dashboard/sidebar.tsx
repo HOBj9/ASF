@@ -27,6 +27,8 @@ import {
   ChevronDown,
   PanelLeftClose,
   PanelLeft,
+  Pin,
+  PinOff,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { apiClient } from "@/lib/api/client"
@@ -50,7 +52,7 @@ interface SidebarProps {
 
 export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarProps) {
   const pathname = usePathname()
-  const { isOpen, toggle, close } = useSidebarStore()
+  const { isOpen, toggle, close, open, isPinned, togglePin } = useSidebarStore()
   const { data: session, status: sessionStatus } = useSession()
   const [roleName, setRoleName] = useState<string | null>(initialUser.roleName || null)
   const { labels, loading: labelsLoading } = useLabels()
@@ -352,6 +354,21 @@ export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarP
 
   const isCollapsed = !isOpen
 
+  const handleSidebarMouseEnter = () => {
+    if (typeof window !== "undefined" && window.innerWidth >= 1024 && !isPinned) open()
+  }
+  const handleSidebarMouseLeave = () => {
+    if (typeof window !== "undefined" && window.innerWidth >= 1024 && !isPinned) close()
+  }
+
+  const handleHeaderButtonClick = () => {
+    if (typeof window !== "undefined" && window.innerWidth >= 1024) {
+      togglePin()
+    } else {
+      toggle()
+    }
+  }
+
   return (
     <>
       {/* Mobile overlay */}
@@ -362,7 +379,7 @@ export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarP
         />
       )}
       
-      {/* Sidebar */}
+      {/* Sidebar: on desktop (lg) opens on hover and closes when mouse leaves */}
       <aside
         className={cn(
           "fixed lg:static inset-y-0 right-0 z-50 flex h-screen lg:h-full flex-col transition-all duration-300 ease-in-out shrink-0",
@@ -376,6 +393,8 @@ export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarP
           "lg:shadow-[0_8px_32px_0_rgba(0,0,0,0.12)] dark:lg:shadow-[0_8px_32px_0_rgba(0,0,0,0.5)]",
           isOpen ? "translate-x-0" : "translate-x-full lg:translate-x-0"
         )}
+        onMouseEnter={handleSidebarMouseEnter}
+        onMouseLeave={handleSidebarMouseLeave}
       >
         {/* Header */}
         <div className="border-b border-border/50 bg-gradient-to-l from-[hsl(var(--primary))]/20 via-[hsl(var(--primary))]/10 to-transparent dark:from-[hsl(var(--primary))]/30 dark:via-[hsl(var(--primary))]/15 backdrop-blur-sm lg:rounded-t-2xl">
@@ -383,21 +402,20 @@ export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarP
             <Button
               variant="ghost"
               size="icon"
-              onClick={toggle}
+              onClick={handleHeaderButtonClick}
               className={cn(
                 "hover:bg-[hsl(var(--sidebar-item-hover))] rounded-lg",
                 "lg:flex",
-                isCollapsed && "lg:mx-auto"
+                isCollapsed && "lg:mx-auto",
+                isPinned && "lg:bg-primary/10"
               )}
-              title={isCollapsed ? "توسيع القائمة" : "طي القائمة"}
+              title={isPinned ? "إلغاء التثبيت" : "تثبيت القائمة (مفتوح أو مغلق)"}
             >
-              {isCollapsed ? (
-                <PanelLeft className="h-5 w-5 lg:block hidden" />
+              <X className="h-5 w-5 lg:hidden" />
+              {isPinned ? (
+                <PinOff className="h-5 w-5 hidden lg:block" />
               ) : (
-                <>
-                  <X className="h-5 w-5 lg:hidden" />
-                  <PanelLeftClose className="h-5 w-5 hidden lg:block" />
-                </>
+                <Pin className="h-5 w-5 hidden lg:block" />
               )}
             </Button>
           </div>

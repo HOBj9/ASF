@@ -473,7 +473,7 @@ export function MunicipalityMap({
       const matchedObject = vehicle.imei ? objectByImei.get(vehicle.imei) : null;
       return (
         <Marker
-          key={vehicle.id}
+          key={`${vehicle.id}-${showVehicleNamesOnMap ? "label" : "nolabel"}`}
           position={vehicle.coordinates as [number, number]}
           icon={getBusIcon(vehicle.status, vehicle.heading)}
         >
@@ -676,7 +676,7 @@ export function MunicipalityMap({
             .filter((obj) => obj.lat !== null && obj.lng !== null)
             .map((obj) => (
               <Marker
-                key={`obj-${obj.id}`}
+                key={`obj-${obj.id}-${showVehicleNamesOnMap ? "label" : "nolabel"}`}
                 position={[Number(obj.lat), Number(obj.lng)]}
                 icon={getBusIcon(obj.active ? "moving" : "stopped", obj.angle)}
                 eventHandlers={{
