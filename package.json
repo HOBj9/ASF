@@ -9,7 +9,8 @@
     "lint": "next lint",
     "seed": "ts-node --project tsconfig.seed.json scripts/seed.ts",
     "seed:js": "node scripts/seed.js",
-    "fresh": "ts-node --project tsconfig.seed.json scripts/fresh.ts"
+    "fresh": "ts-node --project tsconfig.seed.json scripts/fresh.ts",
+    "repair:visits": "ts-node --project tsconfig.seed.json scripts/repair-visit-log.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.3.4",

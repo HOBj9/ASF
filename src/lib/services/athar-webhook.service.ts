@@ -1,4 +1,4 @@
-﻿import { NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import connectDB from '@/lib/mongodb';
 import IncomingAtharEvent from '@/models/IncomingAtharEvent';
 import Branch from '@/models/Branch';
@@ -7,6 +7,8 @@ import Vehicle from '@/models/Vehicle';
 import Driver from '@/models/Driver';
 import ZoneEvent from '@/models/ZoneEvent';
 import PointVisit from '@/models/PointVisit';
+import PointCompletion from '@/models/PointCompletion';
+import { getZonedDateString } from '@/lib/utils/timezone.util';
 import { getZoneEventFeedItemById } from '@/lib/services/zone-event-feed.service';
 import { publishZoneEventUpdate } from '@/lib/services/zone-event-stream-bus.service';
 
@@ -408,7 +410,20 @@ export async function handleAtharWebhookRequest(
       }
     }
 
-    const point = await Point.findOne({ zoneId: parsed.zoneIdNormalized }).lean();
+    const zoneCandidates = [parsed.zoneIdNormalized, parsed.zoneName].filter(Boolean);
+    const zoneIdsToTry = [...new Set(zoneCandidates.map((z) => extractNumericZoneId(z) || z).filter(Boolean))];
+    let point: any = null;
+    for (const zid of zoneIdsToTry) {
+      point = await Point.findOne({ zoneId: zid }).lean();
+      if (point) break;
+    }
+    if (!point && zoneIdsToTry.length > 0) {
+      console.log('[Athar Webhook] Point not found for zone_id:', {
+        zoneIdNormalized: parsed.zoneIdNormalized,
+        zoneName: parsed.zoneName,
+        zoneIdsTried: zoneIdsToTry,
+      });
+    }
     let branchId: string | null = point?.branchId ? String(point.branchId) : null;
     let vehicle: any = null;
 
@@ -459,7 +474,7 @@ export async function handleAtharWebhookRequest(
       'نقطة غير معروفة';
     const eventName = `${pointName} - ${zoneEventType === 'zone_in' ? 'دخول' : 'خروج'}`;
 
-    const zoneEvent = await ZoneEvent.create({
+    let zoneEvent: any = await ZoneEvent.create({
       branchId,
       vehicleId: vehicle?._id || null,
       driverId: vehicle?.driverId || null,
@@ -482,17 +497,29 @@ export async function handleAtharWebhookRequest(
         status: 'open',
       }).lean();
 
-      if (!existingVisit) {
-        await PointVisit.create({
-          branchId,
-          vehicleId: vehicle._id,
-          pointId: point._id,
-          zoneId: parsed.zoneIdNormalized,
-          entryEventId: zoneEvent._id,
-          entryTime: eventTimestamp,
-          status: 'open',
+      if (existingVisit) {
+        await ZoneEvent.findByIdAndUpdate(zoneEvent._id, { isRepeatedEntry: true });
+        const durationSeconds = Math.max(
+          0,
+          Math.floor((eventTimestamp.getTime() - new Date(existingVisit.entryTime).getTime()) / 1000)
+        );
+        await PointVisit.findByIdAndUpdate(existingVisit._id, {
+          exitEventId: zoneEvent._id,
+          exitTime: eventTimestamp,
+          durationSeconds,
+          status: 'closed',
+          visitKind: 'repeated',
         });
       }
+      await PointVisit.create({
+        branchId,
+        vehicleId: vehicle._id,
+        pointId: point._id,
+        zoneId: parsed.zoneIdNormalized,
+        entryEventId: zoneEvent._id,
+        entryTime: eventTimestamp,
+        status: 'open',
+      });
     }
 
     if (zoneEventType === 'zone_out' && point?._id && vehicle?._id) {
@@ -515,7 +542,91 @@ export async function handleAtharWebhookRequest(
         openVisit.exitTime = eventTimestamp;
         openVisit.durationSeconds = durationSeconds;
         openVisit.status = 'closed';
+
+        const branch = await Branch.findById(branchId).select('timezone').lean();
+        const timeZone = branch?.timezone || 'Asia/Riyadh';
+        const completionDate = getZonedDateString(timeZone, eventTimestamp);
+        const existingCompletion = await PointCompletion.findOne({
+          branchId,
+          pointId: point._id,
+          completionDate,
+        }).lean();
+        if (!existingCompletion) {
+          await PointCompletion.create({
+            branchId,
+            pointId: point._id,
+            completionDate,
+            pointVisitId: openVisit._id,
+            completedAt: eventTimestamp,
+          });
+          openVisit.visitKind = 'first';
+        } else {
+          openVisit.visitKind = 'repeated';
+        }
         await openVisit.save();
+      } else {
+        // لا توجد زيارة مفتوحة: البحث عن zone_in مطابق وإنشاء زيارة استرجاعية
+        const zoneIdsToMatch = [
+          parsed.zoneIdNormalized,
+          ...zoneIdsToTry.filter((z) => z !== parsed.zoneIdNormalized),
+        ].filter(Boolean);
+        const matchingEntry = await ZoneEvent.findOne({
+          branchId,
+          $or: [{ vehicleId: vehicle._id }, { imei: parsed.imei }],
+          type: 'zone_in',
+          zoneId: { $in: zoneIdsToMatch },
+          eventTimestamp: { $lt: eventTimestamp },
+          _id: { $ne: zoneEvent._id },
+        })
+          .sort({ eventTimestamp: -1 })
+          .lean();
+
+        const alreadyUsed =
+          matchingEntry &&
+          (await PointVisit.exists({ entryEventId: matchingEntry._id }));
+
+        if (matchingEntry && !alreadyUsed) {
+          const entryTime = new Date(matchingEntry.eventTimestamp);
+          const durationSeconds = Math.max(
+            0,
+            Math.floor((eventTimestamp.getTime() - entryTime.getTime()) / 1000)
+          );
+          const newVisit = await PointVisit.create({
+            branchId,
+            vehicleId: vehicle._id,
+            pointId: point._id,
+            zoneId: parsed.zoneIdNormalized,
+            entryEventId: matchingEntry._id,
+            exitEventId: zoneEvent._id,
+            entryTime,
+            exitTime: eventTimestamp,
+            durationSeconds,
+            status: 'closed',
+          });
+
+          const branch = await Branch.findById(branchId).select('timezone').lean();
+          const timeZone = branch?.timezone || 'Asia/Riyadh';
+          const completionDate = getZonedDateString(timeZone, eventTimestamp);
+          const existingCompletion = await PointCompletion.findOne({
+            branchId,
+            pointId: point._id,
+            completionDate,
+          }).lean();
+          if (!existingCompletion) {
+            await PointCompletion.create({
+              branchId,
+              pointId: point._id,
+              completionDate,
+              pointVisitId: newVisit._id,
+              completedAt: eventTimestamp,
+            });
+            await PointVisit.findByIdAndUpdate(newVisit._id, { visitKind: 'first' });
+          } else {
+            await PointVisit.findByIdAndUpdate(newVisit._id, { visitKind: 'repeated' });
+          }
+        } else {
+          await ZoneEvent.findByIdAndUpdate(zoneEvent._id, { isOrphanExit: true });
+        }
       }
     }
 

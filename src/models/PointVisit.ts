@@ -1,6 +1,8 @@
-﻿import mongoose, { Schema, Document, Model } from 'mongoose';
+import mongoose, { Schema, Document, Model } from 'mongoose';
 
 export type VisitStatus = 'open' | 'closed';
+
+export type VisitKind = 'first' | 'repeated';
 
 export interface IPointVisit extends Document {
   branchId: mongoose.Types.ObjectId;
@@ -13,6 +15,8 @@ export interface IPointVisit extends Document {
   exitTime?: Date;
   durationSeconds?: number;
   status: VisitStatus;
+  /** First completion of the point for that day, or repeated visit */
+  visitKind?: VisitKind;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -70,6 +74,12 @@ const PointVisitSchema: Schema = new Schema(
       type: String,
       enum: ['open', 'closed'],
       default: 'open',
+      index: true,
+    },
+    visitKind: {
+      type: String,
+      enum: ['first', 'repeated'],
+      default: undefined,
       index: true,
     },
   },

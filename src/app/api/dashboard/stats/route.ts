@@ -3,8 +3,9 @@ import { requirePermission, handleApiError } from '@/lib/middleware/api-auth.mid
 import { resolveBranchId } from '@/lib/utils/municipality.util';
 import Branch from '@/models/Branch';
 import PointVisit from '@/models/PointVisit';
+import PointCompletion from '@/models/PointCompletion';
 import Point from '@/models/Point';
-import { getZonedDayRange } from '@/lib/utils/timezone.util';
+import { getZonedDateString, getZonedDayRange } from '@/lib/utils/timezone.util';
 import { permissionActions, permissionResources } from '@/constants/permissions';
 import { AtharService } from '@/lib/services/athar.service';
 
@@ -41,22 +42,20 @@ export async function GET(request: Request) {
       status: 'open',
     });
 
-    const visitedPointIdsToday = await PointVisit.distinct('pointId', {
+    const completionDateToday = getZonedDateString(timezone, new Date());
+    const visitedPointsToday = await PointCompletion.countDocuments({
       branchId,
-      status: 'closed',
-      exitTime: { $gte: start, $lte: end },
+      completionDate: completionDateToday,
     });
 
     const totalPoints = await Point.countDocuments({ branchId, isActive: true });
     const dailyCompletionPercent =
       totalPoints === 0
         ? 0
-        : Math.round((visitedPointIdsToday.length / totalPoints) * 100);
+        : Math.round((visitedPointsToday / totalPoints) * 100);
 
     let activeVehicles = activeVehicleIds.length;
     let activePoints = activePointIds.length;
-    let visitedPointsToday = visitedPointIdsToday.length;
-    let dailyCompletionPercentOut = dailyCompletionPercent;
 
     try {
       const atharService = await AtharService.forBranch(branchId);
@@ -64,8 +63,6 @@ export async function GET(request: Request) {
       const activeCount = (objectsRaw as Record<string, unknown>[]).filter(isAtharObjectActive).length;
       activeVehicles = activeCount;
       activePoints = activeCount;
-      visitedPointsToday = 35;
-      dailyCompletionPercentOut = 42;
     } catch {
       // لا مفتاح أثر أو فشل استدعاء أثر: نبقى على القيم من DB
     }
@@ -73,7 +70,7 @@ export async function GET(request: Request) {
     return NextResponse.json({
       activeVehicles,
       activePoints,
-      dailyCompletionPercent: dailyCompletionPercentOut,
+      dailyCompletionPercent,
       totalPoints,
       visitedPointsToday,
     });

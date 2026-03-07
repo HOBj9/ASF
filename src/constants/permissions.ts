@@ -110,13 +110,15 @@ export const defaultPermissions: PermissionDefinition[] = [
   { name: 'forms_delete', nameAr: 'حذف الاستبيانات', resource: permissionResources.FORMS, action: permissionActions.DELETE },
   { name: 'form_submissions_read', nameAr: 'قراءة إرسالات الاستبيان', resource: permissionResources.FORM_SUBMISSIONS, action: permissionActions.READ },
   { name: 'form_submissions_create', nameAr: 'إرسال الاستبيان', resource: permissionResources.FORM_SUBMISSIONS, action: permissionActions.CREATE },
+  { name: 'form_submissions_update', nameAr: 'تحديث إرسالات الاستبيان', resource: permissionResources.FORM_SUBMISSIONS, action: permissionActions.UPDATE },
+  { name: 'form_submissions_delete', nameAr: 'حذف إرسالات الاستبيان', resource: permissionResources.FORM_SUBMISSIONS, action: permissionActions.DELETE },
 ];
 
 /**
  * Default Roles
  * - super_admin: كل الصلاحيات (manage_all)
  * - organization_admin: المؤسسة والفروع والمستخدمون + الاستبيانات + نقاط المؤسسة + المواد والوحدات (بدون إدارة أدوار النظام)
- * - line_supervisor: قراءة الاستبيانات + إرسال الاستبيان + قراءة النقاط (للمؤسسة)
+ * - line_supervisor: قراءة استبيانات المؤسسة التابع لها + الرد عليها + رؤية ردوده فقط
  * - branch_admin: إدارة الفرع (مركبات، سائقون، نقاط، مسارات، تقارير، مواد، وحدات)
  * - branch_user: قراءة فقط (مركبات، سائقون، نقاط، مسارات، تقارير، مواد، وحدات)
  */
@@ -166,6 +168,8 @@ export const defaultRoles = {
       'forms_update',
       'forms_delete',
       'form_submissions_read',
+      'form_submissions_update',
+      'form_submissions_delete',
       'points_create',
       'points_update',
       'points_delete',

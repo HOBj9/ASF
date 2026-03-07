@@ -242,6 +242,13 @@ export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarP
       permissions: [{ resource: permissionResources.REPORTS, action: permissionActions.READ }],
     },
     {
+      group: "reports" as const,
+      title: "سجل الزيارات",
+      href: "/dashboard/visit-log",
+      icon: ClipboardList,
+      permissions: [{ resource: permissionResources.REPORTS, action: permissionActions.READ }],
+    },
+    {
       group: "userManagement" as const,
       title: "المستخدمون",
       href: "/dashboard/admin/users",

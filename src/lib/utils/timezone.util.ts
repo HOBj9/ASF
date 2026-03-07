@@ -1,4 +1,4 @@
-﻿export function getTimeZoneOffsetMs(date: Date, timeZone: string): number {
+export function getTimeZoneOffsetMs(date: Date, timeZone: string): number {
   const dtf = new Intl.DateTimeFormat('en-US', {
     timeZone,
     hour12: false,
@@ -25,6 +25,21 @@
     Number(values.second)
   );
   return asUTC - date.getTime();
+}
+
+/** Returns date string YYYY-MM-DD in the given timezone for the given date */
+export function getZonedDateString(timeZone: string, date: Date = new Date()): string {
+  const dateParts = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+  const values: Record<string, string> = {};
+  for (const part of dateParts) {
+    if (part.type !== 'literal') values[part.type] = part.value;
+  }
+  return `${values.year}-${values.month}-${values.day}`;
 }
 
 export function getZonedDayRange(timeZone: string, now: Date = new Date()): {

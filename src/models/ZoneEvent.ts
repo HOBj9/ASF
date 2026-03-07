@@ -1,4 +1,4 @@
-﻿import mongoose, { Schema, Document, Model } from 'mongoose';
+import mongoose, { Schema, Document, Model } from 'mongoose';
 
 export type ZoneEventType = 'zone_in' | 'zone_out';
 
@@ -16,6 +16,10 @@ export interface IZoneEvent extends Document {
   eventTimestamp?: Date;
   receivedAt: Date;
   rawPayload?: Record<string, any>;
+  /** دخول متكرر: كان هناك زيارة مفتوحة للمنطقة نفسها */
+  isRepeatedEntry?: boolean;
+  /** خروج يتيم: لا توجد زيارة مفتوحة مطابقة */
+  isOrphanExit?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -90,6 +94,16 @@ const ZoneEventSchema: Schema = new Schema(
     rawPayload: {
       type: Schema.Types.Mixed,
       default: null,
+    },
+    isRepeatedEntry: {
+      type: Boolean,
+      default: undefined,
+      index: true,
+    },
+    isOrphanExit: {
+      type: Boolean,
+      default: undefined,
+      index: true,
     },
   },
   {
