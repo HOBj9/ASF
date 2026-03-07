@@ -22,6 +22,7 @@ export const permissionResources = {
   UNITS: 'units',
   FORMS: 'forms',
   FORM_SUBMISSIONS: 'form_submissions',
+  POINT_CLASSIFICATIONS: 'point_classifications',
 } as const;
 
 export const permissionActions = {
@@ -30,6 +31,7 @@ export const permissionActions = {
   UPDATE: 'update',
   DELETE: 'delete',
   MANAGE: 'manage',
+  TRANSFER_TO_ATHAR: 'transfer_to_athar',
 } as const;
 
 export type PermissionResource = typeof permissionResources[keyof typeof permissionResources];
@@ -112,6 +114,11 @@ export const defaultPermissions: PermissionDefinition[] = [
   { name: 'form_submissions_create', nameAr: 'إرسال الاستبيان', resource: permissionResources.FORM_SUBMISSIONS, action: permissionActions.CREATE },
   { name: 'form_submissions_update', nameAr: 'تحديث إرسالات الاستبيان', resource: permissionResources.FORM_SUBMISSIONS, action: permissionActions.UPDATE },
   { name: 'form_submissions_delete', nameAr: 'حذف إرسالات الاستبيان', resource: permissionResources.FORM_SUBMISSIONS, action: permissionActions.DELETE },
+  { name: 'point_classifications_read', nameAr: 'قراءة تصنيفات النقاط', resource: permissionResources.POINT_CLASSIFICATIONS, action: permissionActions.READ },
+  { name: 'point_classifications_create', nameAr: 'إنشاء تصنيفات النقاط', resource: permissionResources.POINT_CLASSIFICATIONS, action: permissionActions.CREATE },
+  { name: 'point_classifications_update', nameAr: 'تحديث تصنيفات النقاط', resource: permissionResources.POINT_CLASSIFICATIONS, action: permissionActions.UPDATE },
+  { name: 'point_classifications_delete', nameAr: 'حذف تصنيفات النقاط', resource: permissionResources.POINT_CLASSIFICATIONS, action: permissionActions.DELETE },
+  { name: 'points_transfer_to_athar', nameAr: 'نقل النقاط إلى أثر', resource: permissionResources.POINTS, action: permissionActions.TRANSFER_TO_ATHAR },
 ];
 
 /**
@@ -173,6 +180,11 @@ export const defaultRoles = {
       'points_create',
       'points_update',
       'points_delete',
+      'point_classifications_read',
+      'point_classifications_create',
+      'point_classifications_update',
+      'point_classifications_delete',
+      'points_transfer_to_athar',
     ],
   },
   lineSupervisor: {
@@ -220,6 +232,9 @@ export const defaultRoles = {
       'units_create',
       'units_update',
       'units_delete',
+      'point_classifications_read',
+      'point_classifications_create',
+      'points_transfer_to_athar',
     ],
   },
   branchUser: {

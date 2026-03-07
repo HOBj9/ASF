@@ -15,6 +15,9 @@ export interface IPoint extends Document {
   radiusMeters: number;
   zoneId?: string;
   addressText?: string;
+  primaryClassificationId?: mongoose.Types.ObjectId | null;
+  secondaryClassificationId?: mongoose.Types.ObjectId | null;
+  otherIdentifier?: string | null;
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -84,6 +87,23 @@ const PointSchema: Schema = new Schema(
       default: null,
     },
     addressText: {
+      type: String,
+      trim: true,
+      default: null,
+    },
+    primaryClassificationId: {
+      type: Schema.Types.ObjectId,
+      ref: 'PointPrimaryClassification',
+      default: null,
+      index: true,
+    },
+    secondaryClassificationId: {
+      type: Schema.Types.ObjectId,
+      ref: 'PointSecondaryClassification',
+      default: null,
+      index: true,
+    },
+    otherIdentifier: {
       type: String,
       trim: true,
       default: null,

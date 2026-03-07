@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useSession } from "next-auth/react"
 import { apiClient } from "@/lib/api/client"
-import { isAdmin, isOrganizationAdmin } from "@/lib/permissions"
+import { isAdmin, isOrganizationAdmin, isBranchAdmin } from "@/lib/permissions"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -17,6 +17,7 @@ import { Progress } from "@/components/ui/progress"
 import toast from "react-hot-toast"
 import { useLabels } from "@/hooks/use-labels"
 import { ExportExcelDialog, type ExportColumn } from "@/components/municipality/export-excel-dialog"
+import { BranchPointClassificationsAdd } from "@/components/municipality/branch-point-classifications-add"
 import { Loading } from "@/components/ui/loading"
 import dynamic from "next/dynamic"
 
@@ -36,6 +37,9 @@ type Point = {
   radiusMeters: number
   zoneId?: string
   addressText?: string
+  primaryClassificationId?: string | null
+  secondaryClassificationId?: string | null
+  otherIdentifier?: string | null
   isActive: boolean
 }
 
@@ -63,6 +67,9 @@ const emptyForm: Partial<Point> = {
   lng: 0,
   radiusMeters: 500,
   addressText: "",
+  primaryClassificationId: null,
+  secondaryClassificationId: null,
+  otherIdentifier: "",
   isActive: true,
 }
 
@@ -102,6 +109,7 @@ export function PointsManager() {
   const [localSearch, setLocalSearch] = useState("")
   const [localStatusFilter, setLocalStatusFilter] = useState("all")
   const [localTypeFilter, setLocalTypeFilter] = useState("all")
+  const [localAtharFilter, setLocalAtharFilter] = useState("all")
   const [localPage, setLocalPage] = useState(1)
 
   const [markersSearch, setMarkersSearch] = useState("")
@@ -124,11 +132,16 @@ export function PointsManager() {
   const [bulkProgress, setBulkProgress] = useState({ processed: 0, success: 0, total: 0 })
   const [pointToDelete, setPointToDelete] = useState<Point | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [pointFormClassifications, setPointFormClassifications] = useState<{
+    primaries: { _id: string; name: string; nameAr?: string | null }[]
+    secondaries: { _id: string; primaryClassificationId: string; name: string; nameAr?: string | null }[]
+  }>({ primaries: [], secondaries: [] })
   const excelFileInputRef = useRef<HTMLInputElement | null>(null)
   const resolvedBranchIdRef = useRef<string>("")
 
   const userIsAdmin = useMemo(() => isAdmin(session?.user?.role as any), [session?.user?.role])
   const userIsOrgAdmin = useMemo(() => isOrganizationAdmin(session?.user?.role as any), [session?.user?.role])
+  const userIsBranchAdmin = useMemo(() => isBranchAdmin(session?.user?.role as any), [session?.user?.role])
   const sessionBranchId = (session?.user as any)?.branchId ?? null
   const needsBranchSelector = userIsAdmin || (userIsOrgAdmin && !sessionBranchId)
   const resolvedBranchId = selectedBranchId || sessionBranchId
@@ -277,6 +290,8 @@ export function PointsManager() {
       if (localStatusFilter === "active" && !item.isActive) return false
       if (localStatusFilter === "inactive" && item.isActive) return false
       if (localTypeFilter !== "all" && item.type !== localTypeFilter) return false
+      if (localAtharFilter === "transferred" && (!item.zoneId || item.zoneId.trim() === "")) return false
+      if (localAtharFilter === "not_transferred" && item.zoneId && item.zoneId.trim() !== "") return false
       if (!q) return true
       const searchable = [item.name, item.nameAr, item.nameEn, item.zoneId, item.addressText]
         .filter(Boolean)
@@ -284,7 +299,7 @@ export function PointsManager() {
         .toLowerCase()
       return searchable.includes(q)
     })
-  }, [localPoints, localSearch, localStatusFilter, localTypeFilter])
+  }, [localPoints, localSearch, localStatusFilter, localTypeFilter, localAtharFilter])
   const totalLocalPages = Math.max(1, Math.ceil(filteredLocalPoints.length / PAGE_SIZE))
   const paginatedLocalPoints = useMemo(() => {
     const start = (localPage - 1) * PAGE_SIZE
@@ -319,7 +334,7 @@ export function PointsManager() {
 
   useEffect(() => {
     setLocalPage(1)
-  }, [localSearch, localStatusFilter, localTypeFilter])
+  }, [localSearch, localStatusFilter, localTypeFilter, localAtharFilter])
 
   useEffect(() => {
     if (localPage > totalLocalPages) setLocalPage(totalLocalPages)
@@ -341,10 +356,24 @@ export function PointsManager() {
     if (zonesPage > totalZonesPages) setZonesPage(totalZonesPages)
   }, [zonesPage, totalZonesPages])
 
+  const loadClassificationsForForm = useCallback(async () => {
+    if (!resolvedBranchId) return
+    try {
+      const res: any = await apiClient.get(`points/classifications?branchId=${resolvedBranchId}`)
+      setPointFormClassifications({
+        primaries: res.primaries || [],
+        secondaries: res.secondaries || [],
+      })
+    } catch {
+      setPointFormClassifications({ primaries: [], secondaries: [] })
+    }
+  }, [resolvedBranchId])
+
   const openCreate = () => {
     setEditing(null)
     setForm({ ...emptyForm })
     setOpen(true)
+    loadClassificationsForForm()
   }
 
   const openEdit = (item: Point) => {
@@ -354,8 +383,12 @@ export function PointsManager() {
       nameAr: item.nameAr || "",
       nameEn: item.nameEn || "",
       addressText: item.addressText || "",
+      primaryClassificationId: item.primaryClassificationId || null,
+      secondaryClassificationId: item.secondaryClassificationId || null,
+      otherIdentifier: item.otherIdentifier || "",
     })
     setOpen(true)
+    loadClassificationsForForm()
   }
 
   const submit = async () => {
@@ -371,9 +404,16 @@ export function PointsManager() {
       return
     }
 
-    const payload: Record<string, unknown> = { ...form, lat, lng }
-      if (resolvedBranchId) payload.branchId = resolvedBranchId
-      if (userIsAdmin && selectedOrganizationId) payload.organizationId = selectedOrganizationId
+    const payload: Record<string, unknown> = {
+      ...form,
+      lat,
+      lng,
+      primaryClassificationId: form.primaryClassificationId || null,
+      secondaryClassificationId: form.secondaryClassificationId || null,
+      otherIdentifier: form.otherIdentifier?.trim() || null,
+    }
+    if (resolvedBranchId) payload.branchId = resolvedBranchId
+    if (userIsAdmin && selectedOrganizationId) payload.organizationId = selectedOrganizationId
     try {
       if (editing) {
         await apiClient.patch(`/points/${editing._id}`, payload)
@@ -657,7 +697,10 @@ export function PointsManager() {
           </TabsList>
 
           <TabsContent value="local" className="space-y-3">
-            <div className="grid gap-3 md:grid-cols-3">
+            {userIsBranchAdmin && (
+              <BranchPointClassificationsAdd branchId={resolvedBranchId} canAdd={true} />
+            )}
+            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
               <Input
                 placeholder={`بحث في ${labels.pointLabel}...`}
                 value={localSearch}
@@ -669,6 +712,14 @@ export function PointsManager() {
                   <SelectItem value="all">كل الحالات</SelectItem>
                   <SelectItem value="active">مفعّل</SelectItem>
                   <SelectItem value="inactive">معطّل</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={localAtharFilter} onValueChange={setLocalAtharFilter}>
+                <SelectTrigger className="text-right"><SelectValue placeholder="حالة أثر" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">كل الحالات</SelectItem>
+                  <SelectItem value="transferred">منقول لأثر</SelectItem>
+                  <SelectItem value="not_transferred">غير منقول</SelectItem>
                 </SelectContent>
               </Select>
               <Select value={localTypeFilter} onValueChange={setLocalTypeFilter}>
@@ -705,6 +756,7 @@ export function PointsManager() {
                       <th className="p-2">خط العرض</th>
                       <th className="p-2">خط الطول</th>
                       <th className="p-2">معرّف المنطقة</th>
+                      <th className="p-2">حالة أثر</th>
                       <th className="p-2">الحالة</th>
                       <th className="p-2">الإجراءات</th>
                     </tr>
@@ -724,6 +776,17 @@ export function PointsManager() {
                         <td className="p-2">{item.lat}</td>
                         <td className="p-2">{item.lng}</td>
                         <td className="p-2">{item.zoneId || "-"}</td>
+                        <td className="p-2">
+                          {item.zoneId && item.zoneId.trim() !== "" ? (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
+                              منقول لأثر
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400">
+                              غير منقول
+                            </span>
+                          )}
+                        </td>
                         <td className="p-2">{item.isActive ? "مفعّل" : "معطّل"}</td>
                         <td className="p-2 space-x-2 space-x-reverse">
                           <Button
@@ -741,7 +804,7 @@ export function PointsManager() {
                     ))}
                     {paginatedLocalPoints.length === 0 && (
                       <tr>
-                        <td className="p-4 text-center text-muted-foreground" colSpan={8}>
+                        <td className="p-4 text-center text-muted-foreground" colSpan={9}>
                           لا توجد نتائج
                         </td>
                       </tr>
@@ -955,6 +1018,63 @@ export function PointsManager() {
             <div>
               <Label>العنوان</Label>
               <Input value={form.addressText || ""} onChange={(e) => setForm({ ...form, addressText: e.target.value })} />
+            </div>
+            <div>
+              <Label>التصنيف الأساسي (اختياري)</Label>
+              <Select
+                value={form.primaryClassificationId || "none"}
+                onValueChange={(v) =>
+                  setForm({
+                    ...form,
+                    primaryClassificationId: v === "none" ? null : v,
+                    secondaryClassificationId: null,
+                  })
+                }
+              >
+                <SelectTrigger className="text-right">
+                  <SelectValue placeholder="اختيار التصنيف الأساسي" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">— لا شيء —</SelectItem>
+                  {pointFormClassifications.primaries.map((p) => (
+                    <SelectItem key={p._id} value={p._id}>
+                      {p.nameAr || p.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>التصنيف الفرعي (اختياري)</Label>
+              <Select
+                value={form.secondaryClassificationId || "none"}
+                onValueChange={(v) =>
+                  setForm({ ...form, secondaryClassificationId: v === "none" ? null : v })
+                }
+                disabled={!form.primaryClassificationId}
+              >
+                <SelectTrigger className="text-right">
+                  <SelectValue placeholder="اختيار التصنيف الفرعي" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">— لا شيء —</SelectItem>
+                  {pointFormClassifications.secondaries
+                    .filter((s) => String(s.primaryClassificationId) === String(form.primaryClassificationId))
+                    .map((s) => (
+                      <SelectItem key={s._id} value={s._id}>
+                        {s.nameAr || s.name}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>رقم تعريفي آخر (اختياري)</Label>
+              <Input
+                value={form.otherIdentifier || ""}
+                onChange={(e) => setForm({ ...form, otherIdentifier: e.target.value })}
+                placeholder="مثال: MED-2024-001"
+              />
             </div>
             <div className="flex items-center justify-between border rounded-lg p-2">
               <span>مفعّل</span>

@@ -13,7 +13,7 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   try {
-    const authResult = await requirePermission(permissionResources.POINTS, permissionActions.UPDATE);
+    const authResult = await requirePermission(permissionResources.POINTS, permissionActions.TRANSFER_TO_ATHAR);
     if (authResult instanceof NextResponse) return authResult;
 
     const { session } = authResult;

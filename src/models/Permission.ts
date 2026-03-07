@@ -1,4 +1,4 @@
-﻿import mongoose, { Schema, Document, Model } from 'mongoose';
+import mongoose, { Schema, Document, Model } from 'mongoose';
 
 export interface IPermission extends Document {
   name: string;
@@ -27,7 +27,7 @@ const PermissionSchema: Schema = new Schema(
     action: {
       type: String,
       required: true,
-      enum: ['create', 'read', 'update', 'delete', 'manage'],
+      enum: ['create', 'read', 'update', 'delete', 'manage', 'transfer_to_athar'],
     },
   },
   {

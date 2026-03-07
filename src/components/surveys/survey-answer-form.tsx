@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Loader2, MapPin, ChevronRight, ChevronLeft } from "lucide-react"
 import { Stepper } from "@/components/ui/stepper"
 
@@ -51,6 +52,14 @@ export function SurveyAnswerForm({ surveyId }: { surveyId: string }) {
   const [deviceLng, setDeviceLng] = useState<number | null>(null)
   const [currentLocationConfirmed, setCurrentLocationConfirmed] = useState<Record<number, boolean>>({})
   const [currentStep, setCurrentStep] = useState(0)
+  const [pointName, setPointName] = useState("")
+  const [primaryClassificationId, setPrimaryClassificationId] = useState<string>("")
+  const [secondaryClassificationId, setSecondaryClassificationId] = useState<string>("")
+  const [otherIdentifier, setOtherIdentifier] = useState("")
+  const [classifications, setClassifications] = useState<{
+    primaries: { _id: string; name: string; nameAr?: string | null }[]
+    secondaries: { _id: string; primaryClassificationId: string; name: string; nameAr?: string | null }[]
+  }>({ primaries: [], secondaries: [] })
 
   const loadSurvey = useCallback(async () => {
     setLoading(true)
@@ -75,7 +84,19 @@ export function SurveyAnswerForm({ surveyId }: { surveyId: string }) {
         })
         setAnswers(initial)
       }
+      setPointName("")
+      setPrimaryClassificationId("")
+      setSecondaryClassificationId("")
+      setOtherIdentifier("")
       setCurrentStep(0)
+      if (s.organizationId) {
+        try {
+          const clsRes: any = await apiClient.get(`points/classifications?organizationId=${s.organizationId}`)
+          setClassifications({ primaries: clsRes.primaries || [], secondaries: clsRes.secondaries || [] })
+        } catch {
+          setClassifications({ primaries: [], secondaries: [] })
+        }
+      }
     } catch (e: any) {
       toast.error(e?.message || "فشل تحميل الاستبيان")
       router.push("/dashboard/surveys")
@@ -116,6 +137,22 @@ export function SurveyAnswerForm({ surveyId }: { surveyId: string }) {
 
   const handleSubmit = async () => {
     if (!survey) return
+    if (!pointName.trim()) {
+      toast.error("اسم النقطة مطلوب")
+      return
+    }
+    if (!primaryClassificationId) {
+      toast.error("التصنيف الأساسي مطلوب")
+      return
+    }
+    if (!secondaryClassificationId) {
+      toast.error("التصنيف الفرعي مطلوب")
+      return
+    }
+    if (!otherIdentifier.trim()) {
+      toast.error("الرقم التعريفي الآخر مطلوب")
+      return
+    }
     if (mapLat === 0 && mapLng === 0) {
       toast.error("حدد موقع النقطة على الخريطة")
       return
@@ -148,7 +185,13 @@ export function SurveyAnswerForm({ surveyId }: { surveyId: string }) {
           mapLng,
           deviceLat,
           deviceLng,
-          answers,
+          answers: {
+            ...answers,
+            pointName: pointName.trim(),
+            primaryClassificationId,
+            secondaryClassificationId,
+            otherIdentifier: otherIdentifier.trim(),
+          },
         }
       )
       toast.success("تم إرسال الإجابة وإنشاء النقطة. يمكنك تعبئة النموذج وإرسال إجابة جديدة.")
@@ -165,6 +208,10 @@ export function SurveyAnswerForm({ surveyId }: { surveyId: string }) {
       setDeviceLat(null)
       setDeviceLng(null)
       setCurrentLocationConfirmed({})
+      setPointName("")
+      setPrimaryClassificationId("")
+      setSecondaryClassificationId("")
+      setOtherIdentifier("")
       setCurrentStep(0)
     } catch (e: any) {
       toast.error(e?.message || "فشل الإرسال")
@@ -215,19 +262,29 @@ export function SurveyAnswerForm({ surveyId }: { surveyId: string }) {
 
   const questions = survey.questions ?? []
   const steps = [
+    { title: "بيانات النقطة", description: "اسم النقطة، التصنيفات، الرقم التعريفي" },
     ...questions.map((q) => ({ title: q.questionTextAr || q.questionText })),
     { title: "موقع النقطة على الخريطة", description: "حدد الموقع على الخريطة أو استخدم موقع الجهاز" },
   ]
   const totalSteps = steps.length
-  const isMapStep = currentStep === questions.length
+  const isPointDataStep = currentStep === 0
+  const isMapStep = currentStep === questions.length + 1
   const isLastStep = currentStep === totalSteps - 1
 
   const isCurrentStepValid = (): boolean => {
-    if (currentStep >= questions.length) return mapLat !== 0 && mapLng !== 0
-    const q = questions[currentStep]
+    if (currentStep === 0) {
+      return (
+        pointName.trim() !== "" &&
+        !!primaryClassificationId &&
+        !!secondaryClassificationId &&
+        otherIdentifier.trim() !== ""
+      )
+    }
+    if (currentStep >= questions.length + 1) return mapLat !== 0 && mapLng !== 0
+    const q = questions[currentStep - 1]
     if (q.type === "current_location") return true
     if (q.required) {
-      const val = answers[`question_${currentStep}`]
+      const val = answers[`question_${currentStep - 1}`]
       return val !== undefined && val !== "" && val !== null
     }
     return true
@@ -248,9 +305,65 @@ export function SurveyAnswerForm({ surveyId }: { surveyId: string }) {
       <CardContent className="space-y-6">
         <Stepper steps={steps} currentStep={currentStep + 1} className="mb-6" />
 
-        {!isMapStep && questions[currentStep] && (() => {
-          const q = questions[currentStep]
-          const index = currentStep
+        {isPointDataStep && (
+          <div className="space-y-4 min-h-[200px]">
+            {classifications.primaries.length === 0 && (
+              <p className="text-sm text-amber-600 dark:text-amber-500 bg-amber-50 dark:bg-amber-950/30 p-3 rounded-lg">
+                لا توجد تصنيفات. يرجى طلب إضافة التصنيفات من مدير المؤسسة في الإعدادات أولاً.
+              </p>
+            )}
+            <div>
+              <Label className="text-base">اسم النقطة <span className="text-destructive">*</span></Label>
+              <Input
+                value={pointName}
+                onChange={(e) => setPointName(e.target.value)}
+                placeholder="أدخل اسم النقطة"
+                className="text-right mt-1"
+              />
+            </div>
+            <div>
+              <Label className="text-base">التصنيف الأساسي <span className="text-destructive">*</span></Label>
+              <Select value={primaryClassificationId} onValueChange={(v) => { setPrimaryClassificationId(v); setSecondaryClassificationId("") }}>
+                <SelectTrigger className="text-right mt-1">
+                  <SelectValue placeholder="اختر التصنيف الأساسي" />
+                </SelectTrigger>
+                <SelectContent>
+                  {classifications.primaries.map((p) => (
+                    <SelectItem key={p._id} value={p._id}>{p.nameAr || p.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-base">التصنيف الفرعي <span className="text-destructive">*</span></Label>
+              <Select value={secondaryClassificationId} onValueChange={setSecondaryClassificationId} disabled={!primaryClassificationId}>
+                <SelectTrigger className="text-right mt-1">
+                  <SelectValue placeholder="اختر التصنيف الفرعي" />
+                </SelectTrigger>
+                <SelectContent>
+                  {classifications.secondaries
+                    .filter((s) => String(s.primaryClassificationId) === primaryClassificationId)
+                    .map((s) => (
+                      <SelectItem key={s._id} value={s._id}>{s.nameAr || s.name}</SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-base">الرقم التعريفي الآخر <span className="text-destructive">*</span></Label>
+              <Input
+                value={otherIdentifier}
+                onChange={(e) => setOtherIdentifier(e.target.value)}
+                placeholder="مثال: STR-001"
+                className="text-right mt-1"
+              />
+            </div>
+          </div>
+        )}
+
+        {!isMapStep && !isPointDataStep && questions[currentStep - 1] && (() => {
+          const q = questions[currentStep - 1]
+          const index = currentStep - 1
           return (
             <div className="space-y-4 min-h-[200px]">
               <Label className="text-base">

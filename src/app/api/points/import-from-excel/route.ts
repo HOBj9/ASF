@@ -87,6 +87,9 @@ export async function POST(request: Request) {
       const idStr = getCell(raw, 'id');
       const lat = getNum(raw, 'lat', 'latitude');
       const lng = getNum(raw, 'long', 'lng', 'longitude');
+      const otherIdentifier = getCell(raw, 'otherIdentifier', 'other_identifier', 'رقم تعريفي');
+      const primaryClassificationId = getCell(raw, 'primaryClassificationId', 'primary_classification_id');
+      const secondaryClassificationId = getCell(raw, 'secondaryClassificationId', 'secondary_classification_id');
 
       if (!name) {
         errors.push(`صف ${i + 2}: الاسم مطلوب`);
@@ -115,6 +118,9 @@ export async function POST(request: Request) {
           type: 'container',
           isActive: true,
           createdByUserId: session?.user?.id ?? null,
+          otherIdentifier: otherIdentifier || null,
+          primaryClassificationId: primaryClassificationId || null,
+          secondaryClassificationId: secondaryClassificationId || null,
         });
         imported += 1;
       } catch (err: any) {

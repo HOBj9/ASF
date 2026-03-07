@@ -6,6 +6,9 @@ import User from "@/models/User"
 import { ProfileManager } from "@/components/profile/profile-manager"
 import { OrganizationLabelsSettings } from "@/components/settings/organization-labels-settings"
 import { NotificationSettings } from "@/components/settings/notification-settings"
+import { PointClassificationsManager } from "@/components/settings/point-classifications-manager"
+import { hasPermission, isAdmin, isOrganizationAdmin } from "@/lib/permissions"
+import { permissionActions, permissionResources } from "@/constants/permissions"
 
 export default async function SettingsPage() {
   const session = await getServerSession(authOptions)
@@ -48,6 +51,14 @@ export default async function SettingsPage() {
         <h2 className="text-xl font-semibold mb-3">تخصيص الإشعارات</h2>
         <NotificationSettings />
       </div>
+
+      {(isAdmin(session.user?.role as any) || isOrganizationAdmin(session.user?.role as any) ||
+        hasPermission(session.user?.role as any, permissionResources.POINT_CLASSIFICATIONS, permissionActions.READ)) && (
+        <div>
+          <h2 className="text-xl font-semibold mb-3">تصنيفات النقاط</h2>
+          <PointClassificationsManager />
+        </div>
+      )}
     </div>
   )
 }
