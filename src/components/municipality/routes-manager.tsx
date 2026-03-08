@@ -2,11 +2,12 @@
 
 import dynamic from "next/dynamic"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useSearchParams } from "next/navigation"
 import { useSession } from "next-auth/react"
 import toast from "react-hot-toast"
 import { apiClient } from "@/lib/api/client"
 import { useLabels } from "@/hooks/use-labels"
-import { isAdmin, isOrganizationAdmin } from "@/lib/permissions"
+import { isAdmin, isOrganizationAdmin, isBranchAdmin } from "@/lib/permissions"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -16,9 +17,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch"
 import { ExportExcelDialog, type ExportColumn } from "@/components/municipality/export-excel-dialog"
 import { Loading } from "@/components/ui/loading"
+import { Map as MapIcon, List, BarChart3 } from "lucide-react"
+import Link from "next/link"
 
 const RoutePreviewMap = dynamic(
   () => import("@/components/municipality/route-preview-map").then((m) => m.RoutePreviewMap),
+  { ssr: false }
+)
+
+const AllRoutesMapView = dynamic(
+  () => import("@/components/municipality/all-routes-map-view").then((m) => m.AllRoutesMapView),
   { ssr: false }
 )
 
@@ -26,7 +34,10 @@ type RouteItem = {
   _id: string
   name: string
   description?: string
+  color?: string
   isActive: boolean
+  zoneIds?: string[] | Array<{ _id: string; name?: string; nameAr?: string }>
+  workScheduleId?: string | { _id: string; name?: string; nameAr?: string } | null
 }
 
 type PointItem = {
@@ -54,9 +65,21 @@ type PreviewResponse = {
 
 const PAGE_SIZE = 10
 
+const ROUTE_COLOR_PALETTE = [
+  "#16a34a",
+  "#2563eb",
+  "#ea580c",
+  "#7c3aed",
+  "#dc2626",
+  "#0891b2",
+  "#db2777",
+  "#1e3a5f",
+]
+
 const emptyForm: Partial<RouteItem> = {
   name: "",
   description: "",
+  color: "#16a34a",
   isActive: true,
 }
 
@@ -77,6 +100,8 @@ type VehicleItem = {
   fuelPricePerKm?: number
   routeId?: string
 }
+
+type RouteZoneItem = { _id: string; name: string; nameAr?: string | null; cityId: string; branchId: string; order?: number }
 
 export function RoutesManager() {
   const { data: session } = useSession()
@@ -112,12 +137,25 @@ export function RoutesManager() {
   const [optimalOrderLoading, setOptimalOrderLoading] = useState(false)
   const [mapSelectMode, setMapSelectMode] = useState<"start" | "end" | null>(null)
   const [formVehicleId, setFormVehicleId] = useState<string>("")
+  const [formZoneIds, setFormZoneIds] = useState<string[]>([])
+  const [formWorkScheduleId, setFormWorkScheduleId] = useState<string>("")
+  const formWorkScheduleIdRef = useRef<string>("")
+  useEffect(() => {
+    formWorkScheduleIdRef.current = formWorkScheduleId
+  }, [formWorkScheduleId])
+  const [workSchedules, setWorkSchedules] = useState<Array<{ _id: string; name: string; nameAr?: string | null }>>([])
+  const [viewMode, setViewMode] = useState<"table" | "map">("table")
 
+  const searchParams = useSearchParams()
+  const editRouteIdFromUrl = searchParams.get("edit")
+  const branchIdFromUrl = searchParams.get("branchId")
   const userIsAdmin = useMemo(() => isAdmin(session?.user?.role as any), [session?.user?.role])
   const userIsOrgAdmin = useMemo(() => isOrganizationAdmin(session?.user?.role as any), [session?.user?.role])
+  const userIsBranchAdmin = useMemo(() => isBranchAdmin(session?.user?.role as any), [session?.user?.role])
   const sessionBranchId = (session?.user as any)?.branchId ?? null
   const needsBranchSelector = userIsAdmin || (userIsOrgAdmin && !sessionBranchId)
-  const resolvedBranchId = selectedBranchId || sessionBranchId
+  const resolvedBranchId = selectedBranchId || branchIdFromUrl || sessionBranchId
+  const [routeZones, setRouteZones] = useState<RouteZoneItem[]>([])
 
   const pointMap = useMemo(() => new Map(points.map((p) => [p._id, p])), [points])
 
@@ -181,6 +219,26 @@ export function RoutesManager() {
     }
   }
 
+  const loadRouteZones = async (branchId: string | null) => {
+    if (!branchId) { setRouteZones([]); return }
+    try {
+      const res: any = await apiClient.get(`/route-zones?branchId=${branchId}`)
+      setRouteZones(res.zones || [])
+    } catch {
+      setRouteZones([])
+    }
+  }
+
+  const loadWorkSchedules = async (branchId: string | null) => {
+    if (!branchId) { setWorkSchedules([]); return }
+    try {
+      const res: any = await apiClient.get(`/work-schedules?branchId=${branchId}`)
+      setWorkSchedules(res.schedules || [])
+    } catch {
+      setWorkSchedules([])
+    }
+  }
+
   const loadPoints = async (branchId: string | null) => {
     if (needsBranchSelector && !branchId) {
       setPoints([])
@@ -207,17 +265,25 @@ export function RoutesManager() {
       })
     } else if (userIsOrgAdmin && !sessionBranchId) {
       loadBranchesForOrgUser()
+    } else if (userIsBranchAdmin) {
+      loadBranchesForOrgUser()
     } else {
       load(null)
     }
   }, [session?.user])
 
   useEffect(() => {
+    if (branchIdFromUrl && needsBranchSelector) {
+      setSelectedBranchId(branchIdFromUrl)
+    }
+  }, [branchIdFromUrl, needsBranchSelector])
+
+  useEffect(() => {
     if (userIsAdmin && selectedOrganizationId) {
       loadBranches(selectedOrganizationId)
-      setSelectedBranchId("")
+      if (!branchIdFromUrl) setSelectedBranchId("")
     }
-  }, [userIsAdmin, selectedOrganizationId])
+  }, [userIsAdmin, selectedOrganizationId, branchIdFromUrl])
 
   useEffect(() => {
     if (!needsBranchSelector) return
@@ -225,9 +291,29 @@ export function RoutesManager() {
     else setItems([])
   }, [needsBranchSelector, resolvedBranchId])
 
+  const hasHandledEditFromUrl = useRef(false)
   useEffect(() => {
-    if (!needsBranchSelector && session?.user) load(null)
-  }, [needsBranchSelector, session?.user])
+    if (!editRouteIdFromUrl || items.length === 0 || !resolvedBranchId || hasHandledEditFromUrl.current) return
+    const item = items.find((i) => i._id === editRouteIdFromUrl)
+    if (item) {
+      hasHandledEditFromUrl.current = true
+      openEdit(item)
+    }
+  }, [editRouteIdFromUrl, items, resolvedBranchId])
+
+  useEffect(() => {
+    if (!needsBranchSelector && session?.user) load(resolvedBranchId)
+  }, [needsBranchSelector, session?.user, resolvedBranchId])
+
+  useEffect(() => {
+    if (resolvedBranchId) {
+      loadRouteZones(resolvedBranchId)
+      loadWorkSchedules(resolvedBranchId)
+    } else {
+      setRouteZones([])
+      setWorkSchedules([])
+    }
+  }, [resolvedBranchId])
 
   const filteredItems = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -358,6 +444,8 @@ export function RoutesManager() {
     setEditing(null)
     setForm({ ...emptyForm })
     setFormVehicleId("")
+    setFormZoneIds([])
+    setFormWorkScheduleId("")
     setRoutePoints([])
     setPointSearch("")
     setInlinePreviewData(null)
@@ -365,7 +453,11 @@ export function RoutesManager() {
     setEndPointId(null)
     setMapSelectMode(null)
     setOpen(true)
-    await loadPoints(resolvedBranchId || null)
+    await Promise.all([
+      loadPoints(resolvedBranchId || null),
+      loadWorkSchedules(resolvedBranchId),
+      loadRouteZones(resolvedBranchId),
+    ])
   }
 
   const openEdit = async (item: RouteItem) => {
@@ -373,9 +465,18 @@ export function RoutesManager() {
     setForm({
       ...item,
       description: item.description || "",
+      color: item.color || "#16a34a",
     })
     const assignedVehicle = vehicles.find((v) => v.routeId === item._id)
     setFormVehicleId(assignedVehicle?._id || "")
+    const wsId = item.workScheduleId
+    setFormWorkScheduleId(
+      typeof wsId === "string" ? wsId : (wsId as any)?._id ? String((wsId as any)._id) : ""
+    )
+    const zIds = Array.isArray(item.zoneIds)
+      ? item.zoneIds.map((z) => String(typeof z === "string" ? z : (z as any)?._id ?? "")).filter(Boolean)
+      : []
+    setFormZoneIds(zIds)
     setRoutePoints([])
     setPointSearch("")
     setInlinePreviewData(null)
@@ -387,6 +488,8 @@ export function RoutesManager() {
     const branchParam = resolvedBranchId ? `?branchId=${resolvedBranchId}` : ""
     await Promise.all([
       loadPoints(resolvedBranchId || null),
+      loadWorkSchedules(resolvedBranchId),
+      loadRouteZones(resolvedBranchId),
       (async () => {
         try {
           const res: any = await apiClient.get(`/routes/${item._id}/points${branchParam}`)
@@ -441,7 +544,20 @@ export function RoutesManager() {
       return
     }
 
-    const routePayload = { ...form } as Record<string, unknown>
+    const wsIdForConfirm = formWorkScheduleIdRef.current || formWorkScheduleId
+    if (!wsIdForConfirm?.trim() && !confirm("المسار غير مربوط بأيام عمل – لن تُحسب الإحصائيات. هل تريد المتابعة؟")) {
+      return
+    }
+
+    const wsId = formWorkScheduleIdRef.current || formWorkScheduleId
+    const routePayload = {
+      name: form.name,
+      description: form.description ?? "",
+      color: form.color ?? "#16a34a",
+      isActive: form.isActive ?? true,
+      zoneIds: formZoneIds.filter(Boolean).map((id) => String(id)),
+      workScheduleId: wsId?.trim() ? String(wsId).trim() : null,
+    } as Record<string, unknown>
     if (resolvedBranchId) routePayload.branchId = resolvedBranchId
     const pointsPayload = { points: routePoints } as Record<string, unknown>
     if (resolvedBranchId) pointsPayload.branchId = resolvedBranchId
@@ -501,9 +617,9 @@ export function RoutesManager() {
   return (
     <Card className="text-right">
       <CardHeader>
-        <div className="flex items-center justify-between flex-row-reverse">
+        <div className="flex flex-wrap items-center justify-between gap-3 flex-row-reverse">
           <CardTitle>{labels.routeLabel}</CardTitle>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <ExportExcelDialog
               title={`Export ${labels.routeLabel} to Excel`}
               rows={filteredItems}
@@ -548,11 +664,45 @@ export function RoutesManager() {
                 ))}
               </SelectContent>
             </Select>
-            {!resolvedBranchId && (
+            {!resolvedBranchId && (userIsAdmin || userIsOrgAdmin) && (
               <span className="text-sm text-muted-foreground">يرجى تحديد {labels.branchLabel || "الفرع"} لتحميل البيانات</span>
             )}
           </div>
         )}
+
+        <div className="flex items-center gap-2 py-2 border-b">
+          <span className="text-sm text-muted-foreground">طريقة العرض:</span>
+          <Button
+            variant={viewMode === "table" ? "default" : "outline"}
+            size="sm"
+            className="gap-1.5"
+            onClick={() => setViewMode("table")}
+          >
+            <List className="h-4 w-4" />
+            جدول
+          </Button>
+          <Button
+            variant={viewMode === "map" ? "default" : "outline"}
+            size="sm"
+            className="gap-1.5"
+            onClick={() => setViewMode("map")}
+          >
+            <MapIcon className="h-4 w-4" />
+            عرض كل المسارات على الخريطة
+          </Button>
+        </div>
+
+        {viewMode === "map" ? (
+          <AllRoutesMapView
+            branchId={resolvedBranchId}
+            labels={{
+              routeLabel: labels.routeLabel,
+              pointLabel: labels.pointLabel,
+              branchLabel: labels.branchLabel,
+            }}
+          />
+        ) : (
+          <>
         <div className="grid gap-3 md:grid-cols-2">
           <Input
             placeholder={`بحث في ${labels.routeLabel}...`}
@@ -578,26 +728,45 @@ export function RoutesManager() {
                 <tr className="border-b text-right">
                   <th className="p-2">الاسم</th>
                   <th className="p-2">الوصف</th>
+                  <th className="p-2">جدول العمل</th>
                   <th className="p-2">الحالة</th>
                   <th className="p-2">الإجراءات</th>
                 </tr>
               </thead>
               <tbody>
-                {paginatedItems.map((item) => (
+                {paginatedItems.map((item) => {
+                  const ws = item.workScheduleId
+                  const wsName = typeof ws === "object" && ws ? (ws.nameAr || ws.name) : null
+                  const hasWorkSchedule = !!wsName || (typeof ws === "string" && !!ws)
+                  return (
                   <tr key={item._id} className="border-b">
                     <td className="p-2">{item.name}</td>
                     <td className="p-2">{item.description || "-"}</td>
+                    <td className="p-2">
+                      {wsName || "-"}
+                      {!hasWorkSchedule && (
+                        <span className="mr-2 inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
+                          غير مربوط
+                        </span>
+                      )}
+                    </td>
                     <td className="p-2">{item.isActive ? "مفعّل" : "معطّل"}</td>
                     <td className="p-2 space-x-2 space-x-reverse">
+                      <Link href={`/dashboard/routes/${item._id}/stats${resolvedBranchId ? `?branchId=${resolvedBranchId}` : ""}`}>
+                        <Button variant="outline" size="sm" className="gap-1">
+                          <BarChart3 className="h-4 w-4" />
+                          إحصائيات
+                        </Button>
+                      </Link>
                       <Button variant="outline" onClick={() => openEdit(item)}>عرض المسار</Button>
                       <Button variant="outline" onClick={() => openEdit(item)}>تعديل</Button>
                       <Button variant="destructive" onClick={() => remove(item)}>حذف</Button>
                     </td>
                   </tr>
-                ))}
+                )})}
                 {paginatedItems.length === 0 && (
                   <tr>
-                    <td className="p-4 text-center text-muted-foreground" colSpan={4}>
+                    <td className="p-4 text-center text-muted-foreground" colSpan={5}>
                       لا توجد نتائج
                     </td>
                   </tr>
@@ -614,6 +783,8 @@ export function RoutesManager() {
             <Button variant="outline" size="sm" onClick={() => setPage((p) => p - 1)} disabled={page <= 1}>السابق</Button>
           </div>
         </div>
+          </>
+        )}
       </CardContent>
 
       <Dialog open={open} onOpenChange={setOpen}>
@@ -635,6 +806,33 @@ export function RoutesManager() {
             </div>
 
             <div>
+              <Label>لون المسار</Label>
+              <div className="flex flex-wrap items-center gap-2 mt-2">
+                {ROUTE_COLOR_PALETTE.map((hex) => (
+                  <button
+                    key={hex}
+                    type="button"
+                    className={`w-8 h-8 rounded-full border-2 transition-all ${
+                      (form.color || "#16a34a") === hex ? "border-foreground scale-110" : "border-transparent hover:scale-105"
+                    }`}
+                    style={{ backgroundColor: hex }}
+                    onClick={() => setForm({ ...form, color: hex })}
+                    title={hex}
+                  />
+                ))}
+                <div className="flex items-center gap-2">
+                  <input
+                    type="color"
+                    value={form.color || "#16a34a"}
+                    onChange={(e) => setForm({ ...form, color: e.target.value })}
+                    className="w-10 h-8 cursor-pointer rounded border"
+                  />
+                  <span className="text-xs text-muted-foreground">{(form.color || "#16a34a").toUpperCase()}</span>
+                </div>
+              </div>
+            </div>
+
+            <div>
               <Label>المركبة (اختياري)</Label>
               <Select value={formVehicleId || "none"} onValueChange={(v) => setFormVehicleId(v === "none" ? "" : v)}>
                 <SelectTrigger className="text-right">
@@ -649,6 +847,55 @@ export function RoutesManager() {
               </Select>
               <p className="text-xs text-muted-foreground mt-1">يمكنك ربط المسار بمركبة عند الحفظ؛ ستظهر تكلفة الوقود حسب المركبة أدناه.</p>
             </div>
+
+            {resolvedBranchId && (
+              <div>
+                <Label>جدول العمل (اختياري)</Label>
+                <select
+                  value={formWorkScheduleId || ""}
+                  onChange={(e) => setFormWorkScheduleId(e.target.value || "")}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 text-right"
+                >
+                  <option value="">بدون جدول عمل</option>
+                  {workSchedules.map((ws) => (
+                    <option key={ws._id} value={String(ws._id)}>{ws.nameAr || ws.name}</option>
+                  ))}
+                </select>
+                {workSchedules.length === 0 && (
+                  <p className="text-xs text-muted-foreground mt-1">لا توجد جداول عمل. أضف جدولاً من صفحة &quot;أيام العمل&quot; أولاً.</p>
+                )}
+              </div>
+            )}
+
+            {resolvedBranchId && (
+              <div>
+                <Label>المناطق (اختياري)</Label>
+                <div className="flex flex-wrap gap-2 mt-2 border rounded-lg p-2 max-h-32 overflow-y-auto">
+                  {routeZones.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">لا توجد مناطق. أضف مناطق من صفحة الجغرافيا أولاً.</p>
+                  ) : (
+                    routeZones.map((z) => {
+                      const zId = String(z._id)
+                      const checked = formZoneIds.some((id) => String(id) === zId)
+                      return (
+                        <label key={z._id} className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={(e) => {
+                              if (e.target.checked) setFormZoneIds((p) => [...p, zId])
+                              else setFormZoneIds((p) => p.filter((id) => String(id) !== zId))
+                            }}
+                            className="rounded"
+                          />
+                          <span className="text-sm">{z.nameAr || z.name}</span>
+                        </label>
+                      )
+                    })
+                  )}
+                </div>
+              </div>
+            )}
 
             <div className="grid gap-4 lg:grid-cols-2">
               <div className="border rounded-lg p-3 space-y-3">
@@ -788,6 +1035,7 @@ export function RoutesManager() {
                       onPointSelect={handleMapPointSelect}
                       selectedStartId={startPointId}
                       selectedEndId={endPointId}
+                      color={form.color || "#16a34a"}
                     />
                   </div>
                 ) : (

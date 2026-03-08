@@ -31,7 +31,7 @@ export async function POST(request: Request) {
     const body = await request.json();
     const branchId = resolveBranchId(session, body.branchId);
 
-    const { name, description, isActive } = body;
+    const { name, description, color, isActive, zoneIds, workScheduleId } = body;
     if (!name) {
       return NextResponse.json(
         { error: 'اسم المسار مطلوب' },
@@ -43,7 +43,10 @@ export async function POST(request: Request) {
       branchId,
       name,
       description,
+      color,
       isActive: isActive ?? true,
+      zoneIds: Array.isArray(zoneIds) ? zoneIds : undefined,
+      workScheduleId: workScheduleId || undefined,
     });
 
     return NextResponse.json({ route }, { status: 201 });

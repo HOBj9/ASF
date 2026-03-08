@@ -29,13 +29,15 @@ import {
   PanelLeft,
   Pin,
   PinOff,
+  Globe,
+  CalendarClock,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { apiClient } from "@/lib/api/client"
 import { cn } from "@/lib/utils"
 import { useSidebarStore } from "@/store/sidebar-store"
 import { useEffect, useState, useMemo } from "react"
-import { hasAnyPermission, hasPermission, isAdmin, isOrganizationAdmin } from "@/lib/permissions"
+import { hasAnyPermission, hasPermission, isAdmin, isOrganizationAdmin, isBranchAdmin } from "@/lib/permissions"
 import { permissionActions, permissionResources } from "@/constants/permissions"
 import { useLabels } from "@/hooks/use-labels"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -61,6 +63,7 @@ export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarP
     general: false,
     organizations: false,
     branchOps: false,
+    geography: false,
     surveys: false,
     reports: false,
     userManagement: false,
@@ -212,6 +215,20 @@ export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarP
       permissions: [{ resource: permissionResources.ROUTES, action: permissionActions.READ }],
     },
     {
+      group: "branchOps" as const,
+      title: "أيام العمل",
+      href: "/dashboard/work-schedules",
+      icon: CalendarClock,
+      permissions: [{ resource: permissionResources.WORK_SCHEDULES, action: permissionActions.READ }],
+    },
+    {
+      group: "geography" as const,
+      title: "الإدارة الجغرافية",
+      href: "/dashboard/geography",
+      icon: Globe,
+      geographyPermission: true,
+    },
+    {
       group: "surveys" as const,
       title: labels.surveyLabel || "الاستبيانات",
       href: "/dashboard/surveys",
@@ -305,6 +322,18 @@ export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarP
       if (item.adminOnly && !userIsAdmin) return false
       if ((item as any).superAdminOnly && !userIsSuperAdmin) return false
       if (userIsAdmin) return true
+      if ((item as any).geographyPermission) {
+        return (
+          userIsOrgAdmin ||
+          userIsAdmin ||
+          (isBranchAdmin(session?.user?.role as any) &&
+            hasAnyPermission(session?.user?.role as any, [
+              { resource: permissionResources.GOVERNORATES, action: permissionActions.READ },
+              { resource: permissionResources.CITIES, action: permissionActions.READ },
+              { resource: permissionResources.ROUTE_ZONES, action: permissionActions.READ },
+            ]))
+        )
+      }
       if ((item as any).lineSupervisorCanSee && (userIsOrgAdmin || userIsAdmin)) return true
       if (item.permissions && item.permissions.length > 0) {
         const role = session?.user?.role || null
@@ -318,6 +347,7 @@ export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarP
     general: "عام",
     organizations: "إدارة المؤسسات",
     branchOps: "الفرع والعمليات",
+    geography: "الإدارة الجغرافية",
     surveys: "الاستبيانات",
     reports: "التقارير",
     userManagement: "إدارة المستخدمين",
@@ -329,6 +359,7 @@ export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarP
     general: LayoutDashboard,
     organizations: Building,
     branchOps: Building2,
+    geography: Globe,
     surveys: ClipboardList,
     reports: FileText,
     userManagement: UserCog,
@@ -347,6 +378,7 @@ export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarP
       "general",
       "organizations",
       "branchOps",
+      "geography",
       "surveys",
       "reports",
       "userManagement",

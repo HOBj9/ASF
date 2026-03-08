@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Centralized TypeScript Types
  * Single source of truth for all type definitions
  */
@@ -266,6 +266,7 @@ export interface Route {
   branchId: string
   name: string
   description?: string
+  color?: string
   path?: {
     type: "LineString"
     coordinates: number[][]

@@ -40,7 +40,7 @@ type Vehicle = {
 }
 
 type Driver = { _id: string; name: string }
-type RouteItem = { _id: string; name: string }
+type RouteItem = { _id: string; name: string; color?: string }
 type Organization = { _id: string; name: string }
 type Branch = {
   _id: string
@@ -843,7 +843,11 @@ export function VehiclesManager() {
                         )
                       })()}
                     </div>
-                    <RoutePreviewMap points={assignPreviewData.points} geometry={assignPreviewData.geometry} />
+                    <RoutePreviewMap
+                      points={assignPreviewData.points}
+                      geometry={assignPreviewData.geometry}
+                      color={routes.find((r) => r._id === assignRouteId)?.color || "#16a34a"}
+                    />
                   </div>
                 ) : assignPreviewData === null && !assignPreviewLoading ? (
                   <div className="text-xs text-muted-foreground">المسار المحدد لا يحتوي على نقطتين أو أكثر، أو فشل تحميل المعاينة.</div>
