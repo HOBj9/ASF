@@ -89,9 +89,13 @@ export function SurveyAnswerForm({ surveyId }: { surveyId: string }) {
       setSecondaryClassificationId("")
       setOtherIdentifier("")
       setCurrentStep(0)
-      if (s.organizationId) {
+      const userBranchId = (session?.user as any)?.branchId
+      if (userBranchId || s.organizationId) {
         try {
-          const clsRes: any = await apiClient.get(`points/classifications?organizationId=${s.organizationId}`)
+          const classificationQuery = userBranchId
+            ? `points/classifications?branchId=${userBranchId}`
+            : `points/classifications?organizationId=${s.organizationId}`
+          const clsRes: any = await apiClient.get(classificationQuery)
           setClassifications({ primaries: clsRes.primaries || [], secondaries: clsRes.secondaries || [] })
         } catch {
           setClassifications({ primaries: [], secondaries: [] })
@@ -103,7 +107,7 @@ export function SurveyAnswerForm({ surveyId }: { surveyId: string }) {
     } finally {
       setLoading(false)
     }
-  }, [surveyId, router])
+  }, [surveyId, router, session])
 
   useEffect(() => {
     loadSurvey()
@@ -142,11 +146,11 @@ export function SurveyAnswerForm({ surveyId }: { surveyId: string }) {
       return
     }
     if (!primaryClassificationId) {
-      toast.error("التصنيف الأساسي مطلوب")
+      toast.error("الفئة الأساسية مطلوبة")
       return
     }
     if (!secondaryClassificationId) {
-      toast.error("التصنيف الفرعي مطلوب")
+      toast.error("الفئة الفرعية مطلوبة")
       return
     }
     if (!otherIdentifier.trim()) {
@@ -262,7 +266,7 @@ export function SurveyAnswerForm({ surveyId }: { surveyId: string }) {
 
   const questions = survey.questions ?? []
   const steps = [
-    { title: "بيانات النقطة", description: "اسم النقطة، التصنيفات، الرقم التعريفي" },
+    { title: "بيانات النقطة", description: "اسم النقطة، الفئات الأساسية والفرعية، الرقم التعريفي" },
     ...questions.map((q) => ({ title: q.questionTextAr || q.questionText })),
     { title: "موقع النقطة على الخريطة", description: "حدد الموقع على الخريطة أو استخدم موقع الجهاز" },
   ]
@@ -309,7 +313,7 @@ export function SurveyAnswerForm({ surveyId }: { surveyId: string }) {
           <div className="space-y-4 min-h-[200px]">
             {classifications.primaries.length === 0 && (
               <p className="text-sm text-amber-600 dark:text-amber-500 bg-amber-50 dark:bg-amber-950/30 p-3 rounded-lg">
-                لا توجد تصنيفات. يرجى طلب إضافة التصنيفات من مدير المؤسسة في الإعدادات أولاً.
+                لا توجد فئات. يرجى طلب إضافة الفئات من مدير المؤسسة (فئات النقاط الأساسية والفرعية) أولاً.
               </p>
             )}
             <div>
@@ -322,10 +326,10 @@ export function SurveyAnswerForm({ surveyId }: { surveyId: string }) {
               />
             </div>
             <div>
-              <Label className="text-base">التصنيف الأساسي <span className="text-destructive">*</span></Label>
+              <Label className="text-base">الفئة الأساسية <span className="text-destructive">*</span></Label>
               <Select value={primaryClassificationId} onValueChange={(v) => { setPrimaryClassificationId(v); setSecondaryClassificationId("") }}>
                 <SelectTrigger className="text-right mt-1">
-                  <SelectValue placeholder="اختر التصنيف الأساسي" />
+                  <SelectValue placeholder="اختر الفئة الأساسية" />
                 </SelectTrigger>
                 <SelectContent>
                   {classifications.primaries.map((p) => (
@@ -335,10 +339,10 @@ export function SurveyAnswerForm({ surveyId }: { surveyId: string }) {
               </Select>
             </div>
             <div>
-              <Label className="text-base">التصنيف الفرعي <span className="text-destructive">*</span></Label>
+              <Label className="text-base">الفئة الفرعية <span className="text-destructive">*</span></Label>
               <Select value={secondaryClassificationId} onValueChange={setSecondaryClassificationId} disabled={!primaryClassificationId}>
                 <SelectTrigger className="text-right mt-1">
-                  <SelectValue placeholder="اختر التصنيف الفرعي" />
+                  <SelectValue placeholder="اختر الفئة الفرعية" />
                 </SelectTrigger>
                 <SelectContent>
                   {classifications.secondaries

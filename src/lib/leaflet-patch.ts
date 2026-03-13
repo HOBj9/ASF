@@ -1,17 +1,14 @@
 /**
  * Patch Leaflet to avoid "Cannot read properties of undefined (reading '_leaflet_events')"
- * when markers/layers are removed during React unmount (e.g. MapContainer unmounts before
- * child Marker cleanups run, or icon refs are already cleared).
- * Import this once from any component that uses Leaflet (e.g. map-picker, municipality-map).
+ * and "_zoom" null errors when markers/layers are removed during React unmount.
+ * Applied synchronously on first import (client-side) so it runs before any map unmount.
  */
+import L from "leaflet";
+
 const patchApplied = "__leaflet_events_patch_applied";
 
-async function applyLeafletPatch() {
+function applyLeafletPatch() {
   if (typeof window === "undefined") return;
-
-  const leafletModule = await import("leaflet");
-  const L = (leafletModule as any).default ?? leafletModule;
-
   if ((L as any)[patchApplied]) return;
 
   // 1) Guard Evented.off so it no-ops when _leaflet_events is missing (stale ref during unmount)
@@ -49,14 +46,14 @@ async function applyLeafletPatch() {
     };
   }
 
-  // 4) Guard Map.removeLayer so ANY layer removal (including Zoom control which overrides onRemove) never throws
+  // 4) Guard Map.removeLayer so ANY layer removal never throws (leaflet-arrowheads / Zoom / controls can throw _zoom null when map is destroyed)
   if (L.Map?.prototype?.removeLayer) {
     const origRemoveLayer = L.Map.prototype.removeLayer;
     L.Map.prototype.removeLayer = function (this: any, layer: any) {
       try {
         origRemoveLayer.call(this, layer);
       } catch {
-        // Zoom/controls can throw _zoom null when map is already destroyed during React unmount
+        // ignore _zoom null or other teardown errors when map is already destroyed
       }
     };
   }
@@ -64,4 +61,4 @@ async function applyLeafletPatch() {
   (L as any)[patchApplied] = true;
 }
 
-void applyLeafletPatch();
+applyLeafletPatch();

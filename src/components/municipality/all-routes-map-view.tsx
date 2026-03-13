@@ -2,8 +2,9 @@
 
 import "@/lib/leaflet-patch";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { MapContainer, Marker, Polyline, Popup, TileLayer, Tooltip, useMapEvents } from "react-leaflet";
+import { MapContainer, Marker, Popup, TileLayer, Tooltip, useMapEvents } from "react-leaflet";
 import L from "leaflet";
+import { ArrowheadPolyline } from "@/components/ui/arrowhead-polyline";
 
 const ZOOM_THRESHOLD_FOR_LABELS = 14;
 
@@ -192,20 +193,12 @@ export function AllRoutesMapView({
                     .map((p) => [p.lat, p.lng] as [number, number]);
 
             return (
-              <Polyline
+              <ArrowheadPolyline
                 key={route._id}
                 positions={polylinePositions}
-                pathOptions={{ color: route.color, weight: 4 }}
-              >
-                <Popup>
-                  <div className="text-right">
-                    <div className="font-semibold">{route.name}</div>
-                    <div className="text-xs text-muted-foreground mt-1">
-                      {route.points.length} {labels.pointLabel || "نقطة"}
-                    </div>
-                  </div>
-                </Popup>
-              </Polyline>
+                color={route.color}
+                weight={4}
+              />
             );
           })}
 
@@ -221,7 +214,7 @@ export function AllRoutesMapView({
                     direction="top"
                     offset={[0, -16]}
                     opacity={1}
-                    permanent={mapZoom >= ZOOM_THRESHOLD_FOR_LABELS}
+                    permanent
                   >
                     {point.nameAr || point.name || `${labels.pointLabel || "نقطة"} ${idx + 1}`}
                   </Tooltip>

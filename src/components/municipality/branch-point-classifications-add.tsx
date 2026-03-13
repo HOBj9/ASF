@@ -52,7 +52,7 @@ export function BranchPointClassificationsAdd({ branchId, canAdd }: BranchPointC
       setPrimaries(res.primaries || [])
       setSecondaries(res.secondaries || [])
     } catch (e: any) {
-      toast.error(e?.message || "فشل تحميل التصنيفات")
+      toast.error(e?.message || "فشل تحميل الفئات")
     } finally {
       setLoading(false)
     }
@@ -119,7 +119,7 @@ export function BranchPointClassificationsAdd({ branchId, canAdd }: BranchPointC
         <div className="flex items-center justify-between">
           <CardTitle className="text-base flex items-center gap-2">
             {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-            تصنيفات النقاط (إضافة فقط)
+            فئات النقاط الأساسية والفرعية (إضافة فقط)
           </CardTitle>
           <span className="text-xs text-muted-foreground">
             يمكنك إضافة تصنيفات جديدة. التعديل والحذف من إعدادات المؤسسة.

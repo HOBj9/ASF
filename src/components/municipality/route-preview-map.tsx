@@ -2,8 +2,9 @@
 
 import "@/lib/leaflet-patch";
 import { useMemo } from "react";
-import { MapContainer, Marker, Polyline, Popup, TileLayer, Tooltip } from "react-leaflet";
+import { MapContainer, Marker, Popup, TileLayer, Tooltip } from "react-leaflet";
 import L from "leaflet";
+import { ArrowheadPolyline } from "@/components/ui/arrowhead-polyline";
 import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
 import markerIcon from "leaflet/dist/images/marker-icon.png";
 import markerShadow from "leaflet/dist/images/marker-shadow.png";
@@ -139,7 +140,11 @@ export function RoutePreviewMap({
         })}
 
         {polylinePositions.length >= 2 && (
-          <Polyline positions={polylinePositions} pathOptions={{ color: color || "#16a34a", weight: 5 }} />
+          <ArrowheadPolyline
+            positions={polylinePositions}
+            color={color || "#16a34a"}
+            weight={5}
+          />
         )}
       </MapContainer>
     </div>

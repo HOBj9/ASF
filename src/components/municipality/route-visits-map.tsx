@@ -2,10 +2,11 @@
 
 import "@/lib/leaflet-patch";
 import { useMemo, useState } from "react";
-import { MapContainer, Marker, Polyline, Popup, TileLayer, Tooltip } from "react-leaflet";
+import { MapContainer, Marker, Popup, TileLayer, Tooltip } from "react-leaflet";
 import L from "leaflet";
 import { Button } from "@/components/ui/button";
 import { Route, MapPin } from "lucide-react";
+import { ArrowheadPolyline } from "@/components/ui/arrowhead-polyline";
 
 export type RouteVisitPoint = {
   pointId: string;
@@ -40,18 +41,24 @@ function pointIcon(visited: boolean, order: number) {
   });
 }
 
+/** GeoJSON LineString: coordinates are [lng, lat] */
+type PathGeometry = { type: "LineString"; coordinates: number[][] };
+
 export function RouteVisitsMap({
   points,
   visitedPointIds,
   orderAnalysis,
   routeColor = "#16a34a",
   pointLabel = "نقطة",
+  pathGeometry,
 }: {
   points: RouteVisitPoint[];
   visitedPointIds: string[];
   orderAnalysis?: VisitOrderAnalysis | null;
   routeColor?: string;
   pointLabel?: string;
+  /** Optional: route path along roads (GeoJSON [lng,lat]). When set, "المسار الأصلي" uses this instead of straight segments. */
+  pathGeometry?: PathGeometry | null;
 }) {
   const [pathMode, setPathMode] = useState<PathMode>("original");
   const visitedSet = useMemo(() => new Set(visitedPointIds), [visitedPointIds]);
@@ -74,6 +81,14 @@ export function RouteVisitsMap({
       .map((id) => pointMap.get(id))
       .filter(Boolean) as Array<[number, number]>;
   }, [points, orderAnalysis?.expectedOrder, sortedPoints]);
+
+  /** Original path: use stored path geometry (along roads) when available, else point-to-point. */
+  const originalPathPositions: Array<[number, number]> = useMemo(() => {
+    if (pathGeometry?.type === "LineString" && Array.isArray(pathGeometry.coordinates) && pathGeometry.coordinates.length >= 2) {
+      return pathGeometry.coordinates.map((c) => [Number(c[1]), Number(c[0])] as [number, number]);
+    }
+    return expectedPositions;
+  }, [pathGeometry, expectedPositions]);
 
   const actualPositions: Array<[number, number]> = useMemo(() => {
     const pointMap = new Map(points.map((p) => [p.pointId, [p.lat, p.lng] as [number, number]]));
@@ -125,57 +140,50 @@ export function RouteVisitsMap({
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
 
-          {(pathMode === "original" || !hasOrderAnalysis) && expectedPositions.length >= 2 && (
-            <Polyline
-              positions={expectedPositions}
-              pathOptions={{ color: routeColor, weight: 4, opacity: 0.9 }}
-            >
-              <Popup>
-                <div className="text-right text-sm">المسار الأصلي (الترتيب المتوقع)</div>
-              </Popup>
-            </Polyline>
+          {(pathMode === "original" || !hasOrderAnalysis) && originalPathPositions.length >= 2 && (
+            <ArrowheadPolyline
+              positions={originalPathPositions}
+              color={routeColor}
+              weight={4}
+              opacity={0.9}
+            />
           )}
 
           {pathMode === "actual" && hasOrderAnalysis && (
-            <Polyline
+            <ArrowheadPolyline
               positions={actualPositions}
-              pathOptions={{
-                color: orderAnalysis!.inOrder ? "#22c55e" : "#f59e0b",
-                weight: 4,
-                opacity: 0.9,
-              }}
-            >
-              <Popup>
-                <div className="text-right text-sm">
-                  {orderAnalysis!.inOrder ? "الزيارة تمت بالترتيب الصحيح" : "مسار المركبة الفعلي"}
-                </div>
-              </Popup>
-            </Polyline>
+              color={orderAnalysis!.inOrder ? "#22c55e" : "#f59e0b"}
+              weight={4}
+              opacity={0.9}
+            />
           )}
 
-          {sortedPoints.map((point) => (
-            <Marker
-              key={point.pointId}
-              position={[point.lat, point.lng]}
-              icon={pointIcon(visitedSet.has(point.pointId), point.order)}
-            >
-              <Tooltip direction="top" offset={[0, -16]} opacity={1}>
-                <span className="font-medium">{point.order}. </span>
-                {point.nameAr || point.name || `${pointLabel} ${point.order}`}
-                {visitedSet.has(point.pointId) ? " ✓" : " ✗"}
-              </Tooltip>
-              <Popup>
-                <div className="text-right">
-                  <div className="font-medium">
-                    {point.order}. {point.nameAr || point.name || "—"}
+          {sortedPoints.map((point) => {
+            const displayNumber = point.order + 1;
+            return (
+              <Marker
+                key={point.pointId}
+                position={[point.lat, point.lng]}
+                icon={pointIcon(visitedSet.has(point.pointId), displayNumber)}
+              >
+                <Tooltip direction="top" offset={[0, -16]} opacity={1} permanent>
+                  <span className="font-medium">{displayNumber}. </span>
+                  {point.nameAr || point.name || `${pointLabel} ${displayNumber}`}
+                  {visitedSet.has(point.pointId) ? " ✓" : " ✗"}
+                </Tooltip>
+                <Popup>
+                  <div className="text-right">
+                    <div className="font-medium">
+                      {displayNumber}. {point.nameAr || point.name || "—"}
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-1">
+                      {visitedSet.has(point.pointId) ? "مزارة" : "غير مزارة"}
+                    </div>
                   </div>
-                  <div className="text-xs text-muted-foreground mt-1">
-                    {visitedSet.has(point.pointId) ? "مزارة" : "غير مزارة"}
-                  </div>
-                </div>
-              </Popup>
-            </Marker>
-          ))}
+                </Popup>
+              </Marker>
+            );
+          })}
         </MapContainer>
       </div>
     </div>

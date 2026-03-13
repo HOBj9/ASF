@@ -46,6 +46,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       const ws = body.workScheduleId;
       updateData.workScheduleId = (ws && String(ws).trim()) ? String(ws).trim() : null;
     }
+    if (body.path !== undefined) {
+      const p = body.path;
+      if (p && typeof p === 'object' && p.type === 'LineString' && Array.isArray(p.coordinates) && p.coordinates.length >= 2) {
+        updateData.path = { type: 'LineString', coordinates: p.coordinates };
+      } else {
+        updateData.path = null;
+      }
+    }
 
     const { id } = await params;
     const route = await routeService.update(id, branchId, updateData);

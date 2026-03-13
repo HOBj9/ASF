@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useSession } from "next-auth/react"
 import { apiClient } from "@/lib/api/client"
 import { isAdmin, isOrganizationAdmin, isBranchAdmin } from "@/lib/permissions"

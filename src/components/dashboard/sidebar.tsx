@@ -31,6 +31,7 @@ import {
   PinOff,
   Globe,
   CalendarClock,
+  Tags,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { apiClient } from "@/lib/api/client"
@@ -202,7 +203,7 @@ export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarP
     },
     {
       group: "branchOps" as const,
-      title: "نقاط المؤسسة",
+      title: "نقاط المؤسسة (من الاستبيانات)",
       href: "/dashboard/organization-points",
       icon: MapPinned,
       permissions: [{ resource: permissionResources.POINTS, action: permissionActions.READ }],
@@ -220,6 +221,13 @@ export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarP
       href: "/dashboard/work-schedules",
       icon: CalendarClock,
       permissions: [{ resource: permissionResources.WORK_SCHEDULES, action: permissionActions.READ }],
+    },
+    {
+      group: "branchOps" as const,
+      title: "فئات النقاط الأساسية والفرعية",
+      href: "/dashboard/point-classifications",
+      icon: Tags,
+      permissions: [{ resource: permissionResources.POINT_CLASSIFICATIONS, action: permissionActions.READ }],
     },
     {
       group: "geography" as const,

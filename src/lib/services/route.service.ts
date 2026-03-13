@@ -28,6 +28,7 @@ export interface UpdateRouteData {
   isActive?: boolean;
   zoneIds?: string[];
   workScheduleId?: string | null;
+  path?: { type: 'LineString'; coordinates: number[][] } | null;
 }
 
 export interface RoutePointInput {
@@ -128,6 +129,9 @@ export class RouteService {
     if (data.workScheduleId !== undefined) {
       const wsVal = data.workScheduleId && String(data.workScheduleId).trim();
       updateData.workScheduleId = wsVal ? new mongoose.Types.ObjectId(wsVal) : null;
+    }
+    if (data.path !== undefined) {
+      updateData.path = data.path;
     }
 
     const updated = await Route.findByIdAndUpdate(route._id, { $set: updateData }, {

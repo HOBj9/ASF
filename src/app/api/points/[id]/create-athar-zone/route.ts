@@ -1,10 +1,12 @@
 import { NextResponse } from 'next/server';
-import { requirePermission, handleApiError } from '@/lib/middleware/api-auth.middleware';
+import { requireAuth, requirePermission, handleApiError } from '@/lib/middleware/api-auth.middleware';
 import { PointService } from '@/lib/services/point.service';
 import { resolveBranchId } from '@/lib/utils/municipality.util';
 import { AtharService } from '@/lib/services/athar.service';
 import Vehicle from '@/models/Vehicle';
+import Branch from '@/models/Branch';
 import { permissionActions, permissionResources } from '@/constants/permissions';
+import { isOrganizationAdmin } from '@/lib/permissions';
 
 const pointService = new PointService();
 
@@ -13,13 +15,41 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   try {
-    const authResult = await requirePermission(permissionResources.POINTS, permissionActions.TRANSFER_TO_ATHAR);
+    const authResult = await requireAuth();
     if (authResult instanceof NextResponse) return authResult;
-
     const { session } = authResult;
+
     const body = await request.json().catch(() => ({}));
     const { searchParams } = new URL(request.url);
-    const branchId = resolveBranchId(session, body.branchId ?? searchParams.get('branchId'));
+    const providedBranchId = body.branchId ?? searchParams.get('branchId');
+
+    const hasTransferPermission = await (async () => {
+      const permResult = await requirePermission(permissionResources.POINTS, permissionActions.TRANSFER_TO_ATHAR);
+      if (permResult instanceof NextResponse) return false;
+      return true;
+    })();
+
+    const isOrgAdminWithBranch =
+      isOrganizationAdmin(session?.user?.role) &&
+      providedBranchId &&
+      typeof providedBranchId === 'string' &&
+      providedBranchId.trim() !== '';
+
+    if (!hasTransferPermission && !isOrgAdminWithBranch) {
+      return NextResponse.json({ error: 'غير مسموح' }, { status: 403 });
+    }
+
+    if (isOrgAdminWithBranch && !hasTransferPermission) {
+      const orgId = (session?.user as any)?.organizationId?.toString?.();
+      if (orgId) {
+        const branch = await Branch.findById(providedBranchId).select('organizationId').lean();
+        if (!branch || String(branch.organizationId) !== orgId) {
+          return NextResponse.json({ error: 'غير مسموح' }, { status: 403 });
+        }
+      }
+    }
+
+    const branchId = resolveBranchId(session, providedBranchId);
 
     const point = await pointService.getById(params.id, branchId);
     if (!point) {

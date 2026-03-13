@@ -54,7 +54,7 @@ export function PointClassificationsManager() {
       setAvailable(true)
     } catch (e: any) {
       setAvailable(false)
-      if (e?.status !== 403) toast.error(e?.message || "فشل تحميل التصنيفات")
+      if (e?.status !== 403) toast.error(e?.message || "فشل تحميل الفئات")
     } finally {
       setLoading(false)
     }
@@ -88,13 +88,13 @@ export function PointClassificationsManager() {
           `organizations/${organizationId}/point-classifications/primary/${editingPrimary._id}`,
           { name: primaryForm.name.trim(), nameAr: primaryForm.nameAr.trim() || null }
         )
-        toast.success("تم تحديث التصنيف الأساسي")
+        toast.success("تم تحديث الفئة الأساسية")
       } else {
         await apiClient.post(`organizations/${organizationId}/point-classifications/primary`, {
           name: primaryForm.name.trim(),
           nameAr: primaryForm.nameAr.trim() || null,
         })
-        toast.success("تم إضافة التصنيف الأساسي")
+        toast.success("تم إضافة الفئة الأساسية")
       }
       setPrimaryDialogOpen(false)
       await loadClassifications()
@@ -106,7 +106,7 @@ export function PointClassificationsManager() {
   }
 
   const deletePrimary = async (p: Primary) => {
-    if (!confirm(`حذف التصنيف الأساسي "${p.nameAr || p.name}"؟ سيتم حذف جميع التصنيفات الفرعية المرتبطة.`)) return
+    if (!confirm(`حذف الفئة الأساسية "${p.nameAr || p.name}"؟ سيتم حذف جميع الفئات الفرعية المرتبطة.`)) return
     setSaving(true)
     try {
       await apiClient.delete(
@@ -139,7 +139,7 @@ export function PointClassificationsManager() {
       return
     }
     if (!secondaryForm.primaryId) {
-      toast.error("التصنيف الأساسي مطلوب")
+      toast.error("الفئة الأساسية مطلوبة")
       return
     }
     setSaving(true)
@@ -149,14 +149,14 @@ export function PointClassificationsManager() {
           `organizations/${organizationId}/point-classifications/secondary/${editingSecondary._id}`,
           { name: secondaryForm.name.trim(), nameAr: secondaryForm.nameAr.trim() || null }
         )
-        toast.success("تم تحديث التصنيف الفرعي")
+        toast.success("تم تحديث الفئة الفرعية")
       } else {
         await apiClient.post(`organizations/${organizationId}/point-classifications/secondary`, {
           name: secondaryForm.name.trim(),
           nameAr: secondaryForm.nameAr.trim() || null,
           primaryClassificationId: secondaryForm.primaryId,
         })
-        toast.success("تم إضافة التصنيف الفرعي")
+        toast.success("تم إضافة الفئة الفرعية")
       }
       setSecondaryDialogOpen(false)
       await loadClassifications()
@@ -168,7 +168,7 @@ export function PointClassificationsManager() {
   }
 
   const deleteSecondary = async (s: Secondary) => {
-    if (!confirm(`حذف التصنيف الفرعي "${s.nameAr || s.name}"؟`)) return
+    if (!confirm(`حذف الفئة الفرعية "${s.nameAr || s.name}"؟`)) return
     setSaving(true)
     try {
       await apiClient.delete(
@@ -199,11 +199,11 @@ export function PointClassificationsManager() {
     return (
       <Card className="text-right">
         <CardHeader>
-          <CardTitle>تصنيفات النقاط</CardTitle>
+          <CardTitle>فئات النقاط الأساسية والفرعية</CardTitle>
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground">
-            لا تملك صلاحية إدارة تصنيفات النقاط أو لا توجد مؤسسة مرتبطة بهذا الحساب.
+            لا تملك صلاحية إدارة فئات النقاط أو لا توجد مؤسسة مرتبطة بهذا الحساب.
           </p>
         </CardContent>
       </Card>
@@ -214,22 +214,22 @@ export function PointClassificationsManager() {
     <Card className="text-right">
       <CardHeader>
         <div className="flex items-center justify-between flex-row-reverse">
-          <CardTitle>تصنيفات النقاط</CardTitle>
+          <CardTitle>فئات النقاط الأساسية والفرعية</CardTitle>
           <Button size="sm" onClick={openAddPrimary} disabled={loading}>
             <Plus className="h-4 w-4 ml-2" />
-            إضافة تصنيف أساسي
+            إضافة فئة أساسية
           </Button>
         </div>
         <p className="text-sm text-muted-foreground">
-          التصنيفات الأساسية والفرعية للنقاط. تُستخدم عند إضافة نقطة أو الإجابة على الاستبيان.
+          الفئات الأساسية والفرعية للنقاط. تُستخدم عند إضافة نقطة أو الإجابة على الاستبيان.
         </p>
       </CardHeader>
       <CardContent>
         {loading ? (
-          <Loading text="جاري تحميل التصنيفات..." />
+          <Loading text="جاري تحميل الفئات..." />
         ) : primaries.length === 0 ? (
           <p className="text-sm text-muted-foreground py-4">
-            لا توجد تصنيفات. أضف تصنيفاً أساسياً أولاً.
+            لا توجد فئات. أضف فئة أساسية أولاً.
           </p>
         ) : (
           <div className="space-y-2">
@@ -282,12 +282,12 @@ export function PointClassificationsManager() {
                   {isExpanded && (
                     <div className="border-t bg-muted/20 p-2 space-y-1">
                       {subs.length === 0 ? (
-                        <p className="text-sm text-muted-foreground py-2 px-3">لا توجد تصنيفات فرعية</p>
+                        <p className="text-sm text-muted-foreground py-2 px-3 pr-8">لا توجد فئات فرعية</p>
                       ) : (
                         subs.map((s) => (
                           <div
                             key={s._id}
-                            className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-muted/30"
+                            className="flex items-center justify-between py-2 px-3 pr-8 rounded-lg hover:bg-muted/30 border-r-2 border-muted-foreground/30"
                           >
                             <span className="text-sm">{s.nameAr || s.name}</span>
                             <div className="flex items-center gap-1">
@@ -325,7 +325,7 @@ export function PointClassificationsManager() {
         <DialogContent className="text-right">
           <DialogHeader>
             <DialogTitle>
-              {editingPrimary ? "تعديل تصنيف أساسي" : "إضافة تصنيف أساسي"}
+              {editingPrimary ? "تعديل فئة أساسية" : "إضافة فئة أساسية"}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -362,13 +362,13 @@ export function PointClassificationsManager() {
         <DialogContent className="text-right">
           <DialogHeader>
             <DialogTitle>
-              {editingSecondary ? "تعديل تصنيف فرعي" : "إضافة تصنيف فرعي"}
+              {editingSecondary ? "تعديل فئة فرعية" : "إضافة فئة فرعية"}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
             {!editingSecondary && (
               <div>
-                <Label>التصنيف الأساسي</Label>
+                <Label>الفئة الأساسية</Label>
                 <Input
                   value={
                     primaries.find((x) => String(x._id) === secondaryForm.primaryId)?.nameAr ||

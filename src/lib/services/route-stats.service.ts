@@ -41,6 +41,7 @@ export interface CompletionStatsResult {
     name: string;
     workScheduleId: string | null;
     pointsCount: number;
+    path?: { type: 'LineString'; coordinates: number[][] } | null;
   };
 }
 
@@ -106,6 +107,7 @@ export class RouteStatsService {
           color: (route as any).color || '#16a34a',
           workScheduleId: (route as any).workScheduleId ? String((route as any).workScheduleId) : null,
           pointsCount: 0,
+          path: (route as any).path ?? null,
           points: routeWithPoints?.points ?? [],
         },
       };
@@ -123,6 +125,7 @@ export class RouteStatsService {
           color: (route as any).color || '#16a34a',
           workScheduleId: null,
           pointsCount: totalCount,
+          path: (route as any).path ?? null,
           points: routeWithPoints?.points ?? [],
         },
       };
@@ -140,6 +143,7 @@ export class RouteStatsService {
           color: (route as any).color || '#16a34a',
           workScheduleId: String(workScheduleId),
           pointsCount: totalCount,
+          path: (route as any).path ?? null,
           points: routeWithPoints?.points ?? [],
         },
       };
@@ -205,6 +209,7 @@ export class RouteStatsService {
         color: (route as any).color || '#16a34a',
         workScheduleId: String(workScheduleId),
         pointsCount: totalCount,
+        path: (route as any).path ?? null,
         points: routeWithPoints?.points ?? [],
       },
     };

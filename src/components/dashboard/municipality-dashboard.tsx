@@ -5,7 +5,7 @@ import Link from "next/link";
 import { MunicipalityMap, type MapTab } from "./municipality-map";
 import { cn } from "@/lib/utils";
 import { Loading } from "@/components/ui/loading";
-import { Info, Download } from "lucide-react";
+import { Info, Download, ChevronDown, ChevronUp, BarChart2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   BarChart,
@@ -171,9 +171,9 @@ function StatCard({
   };
 
   return (
-    <div className={`rounded-xl border bg-gradient-to-br ${toneClasses[tone]} p-4 text-right shadow-sm backdrop-blur-sm`}>
-      <div className="text-sm text-foreground/75">{label}</div>
-      <div className="text-2xl font-semibold mt-2">{value}</div>
+    <div className={`rounded-lg border bg-gradient-to-br ${toneClasses[tone]} p-3 text-right shadow-sm backdrop-blur-sm`}>
+      <div className="text-xs text-foreground/75">{label}</div>
+      <div className="text-xl font-semibold mt-1">{value}</div>
     </div>
   );
 }
@@ -224,6 +224,7 @@ export function MunicipalityDashboard({
   const [newEventIds, setNewEventIds] = useState<Record<string, boolean>>({});
   const [mapFocusPointId, setMapFocusPointId] = useState<string | null>(null);
   const [mapFocusEvent, setMapFocusEvent] = useState<EventItem | null>(null);
+  const [statsSectionCollapsed, setStatsSectionCollapsed] = useState(true);
   const mapSectionRef = useRef<HTMLDivElement | null>(null);
   const eventsStreamConnectedRef = useRef(false);
   const seenEventIdsRef = useRef<Set<string>>(new Set());
@@ -742,29 +743,26 @@ export function MunicipalityDashboard({
 
   if (isOrganizationAdmin && !selectedBranchId) {
     return (
-      <div className="space-y-6">
-        <div className="rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-emerald-950/60 via-emerald-900/30 to-cyan-900/20 p-6 shadow-sm text-right">
-          <div className="text-sm text-muted-foreground">{labels.branchLabel || "الفرع"}</div>
-          <div className="mt-3 flex flex-wrap items-center gap-3">
-            <span className="text-sm font-medium">اختر الفرع لعرض البيانات على الخريطة:</span>
-            <Select
-              value={selectedBranchId}
-              onValueChange={(v) => setSelectedBranchId(v)}
-            >
-              <SelectTrigger className="w-[280px]">
-                <SelectValue placeholder="اختر الفرع" />
-              </SelectTrigger>
-              <SelectContent>
-                {orgBranches.map((b) => (
-                  <SelectItem key={b._id} value={b._id}>
-                    {b.nameAr || b.name || b._id}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+      <div className="space-y-4">
+        <div className="flex flex-wrap items-center justify-start gap-3 text-right">
+          <span className="text-sm text-muted-foreground">تحديد {labels.branchLabel || "الفرع"} لعرض الخريطة:</span>
+          <Select
+            value={selectedBranchId}
+            onValueChange={(v) => setSelectedBranchId(v)}
+          >
+            <SelectTrigger className="w-[220px] h-9">
+              <SelectValue placeholder="اختر الفرع" />
+            </SelectTrigger>
+            <SelectContent>
+              {orgBranches.map((b) => (
+                <SelectItem key={b._id} value={b._id}>
+                  {b.nameAr || b.name || b._id}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
-        <div className="rounded-xl border bg-muted/30 p-8 text-center text-muted-foreground">
+        <div className="rounded-lg border bg-muted/30 py-6 text-center text-sm text-muted-foreground">
           اختر فرعاً من القائمة أعلاه لعرض الخريطة والإحصائيات.
         </div>
       </div>
@@ -787,22 +785,16 @@ export function MunicipalityDashboard({
   }
 
   return (
-    <div className="space-y-6">
-      <div className="rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-emerald-950/60 via-emerald-900/30 to-cyan-900/20 p-6 shadow-sm text-right">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <div className="text-sm text-muted-foreground">إدارة {labels.branchLabel}</div>
-            <h2 className="text-2xl font-semibold mt-2">{branch?.name || "غير محدد بعد"}</h2>
-            {branch?.addressText && (
-              <p className="text-sm text-muted-foreground mt-1">{branch.addressText}</p>
-            )}
-          </div>
-          {isOrganizationAdmin && (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-start gap-3 text-right">
+        {isOrganizationAdmin && (
+          <>
+            <span className="text-sm text-muted-foreground">تحديد {labels.branchLabel || "الفرع"}:</span>
             <Select
               value={selectedBranchId}
               onValueChange={(v) => setSelectedBranchId(v)}
             >
-              <SelectTrigger className="w-[240px]">
+              <SelectTrigger className="w-[220px] h-9">
                 <SelectValue placeholder="اختر الفرع" />
               </SelectTrigger>
               <SelectContent>
@@ -813,15 +805,34 @@ export function MunicipalityDashboard({
                 ))}
               </SelectContent>
             </Select>
-          )}
-        </div>
+          </>
+        )}
       </div>
 
-      <div className="grid gap-4 md:grid-cols-4">
-        <StatCard label={`${labels.vehicleLabel} العاملة الآن`} value={stats?.activeVehicles ?? "--"} tone="emerald" />
-        <StatCard label={`${labels.pointLabel} النشطة الآن`} value={stats?.activePoints ?? "--"} tone="sky" />
-        <StatCard label={`${labels.pointLabel} المنجزة اليوم`} value={stats?.visitedPointsToday ?? "--"} tone="amber" />
-        <StatCard label="نسبة الإنجاز اليومية" value={`${stats?.dailyCompletionPercent ?? 0}%`} tone="violet" />
+      <div className="rounded-lg border bg-card/50 overflow-hidden">
+        <Button
+          variant="ghost"
+          className="w-full justify-between gap-2 rounded-none h-9 px-3 text-right font-medium text-sm"
+          onClick={() => setStatsSectionCollapsed((c) => !c)}
+        >
+          <span className="flex items-center gap-2">
+            <BarChart2 className="h-3.5 w-3.5 text-muted-foreground" />
+            {statsSectionCollapsed ? "إظهار الإحصائيات" : "إخفاء الإحصائيات"}
+          </span>
+          {statsSectionCollapsed ? (
+            <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+          ) : (
+            <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" />
+          )}
+        </Button>
+        {!statsSectionCollapsed && (
+          <div className="grid gap-3 md:grid-cols-4 p-3 pt-0 border-t">
+            <StatCard label={`${labels.vehicleLabel} العاملة الآن`} value={stats?.activeVehicles ?? "--"} tone="emerald" />
+            <StatCard label={`${labels.pointLabel} النشطة الآن`} value={stats?.activePoints ?? "--"} tone="sky" />
+            <StatCard label={`${labels.pointLabel} المنجزة اليوم`} value={stats?.visitedPointsToday ?? "--"} tone="amber" />
+            <StatCard label="نسبة الإنجاز اليومية" value={`${stats?.dailyCompletionPercent ?? 0}%`} tone="violet" />
+          </div>
+        )}
       </div>
 
       <div className="space-y-4">
@@ -861,6 +872,7 @@ export function MunicipalityDashboard({
         </div>
       </div>
 
+      {/* TEMPORARILY HIDDEN — statistics charts
       <div className="rounded-2xl border bg-card p-4 text-right shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -1110,6 +1122,7 @@ export function MunicipalityDashboard({
           </a>
         </div>
       </div>
+      END TEMPORARILY HIDDEN */}
     </div>
   );
 }

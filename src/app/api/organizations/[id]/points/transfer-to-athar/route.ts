@@ -8,7 +8,6 @@ import Vehicle from '@/models/Vehicle';
 import { permissionActions, permissionResources } from '@/constants/permissions';
 import { isAdmin } from '@/lib/permissions';
 import connectDB from '@/lib/mongodb';
-import Branch from '@/models/Branch';
 
 const pointService = new PointService();
 
