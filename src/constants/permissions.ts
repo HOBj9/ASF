@@ -22,6 +22,11 @@ export const permissionResources = {
   UNITS: 'units',
   FORMS: 'forms',
   FORM_SUBMISSIONS: 'form_submissions',
+  POINT_CLASSIFICATIONS: 'point_classifications',
+  GOVERNORATES: 'governorates',
+  CITIES: 'cities',
+  ROUTE_ZONES: 'route_zones',
+  WORK_SCHEDULES: 'work_schedules',
 } as const;
 
 export const permissionActions = {
@@ -30,6 +35,7 @@ export const permissionActions = {
   UPDATE: 'update',
   DELETE: 'delete',
   MANAGE: 'manage',
+  TRANSFER_TO_ATHAR: 'transfer_to_athar',
 } as const;
 
 export type PermissionResource = typeof permissionResources[keyof typeof permissionResources];
@@ -110,13 +116,36 @@ export const defaultPermissions: PermissionDefinition[] = [
   { name: 'forms_delete', nameAr: 'حذف الاستبيانات', resource: permissionResources.FORMS, action: permissionActions.DELETE },
   { name: 'form_submissions_read', nameAr: 'قراءة إرسالات الاستبيان', resource: permissionResources.FORM_SUBMISSIONS, action: permissionActions.READ },
   { name: 'form_submissions_create', nameAr: 'إرسال الاستبيان', resource: permissionResources.FORM_SUBMISSIONS, action: permissionActions.CREATE },
+  { name: 'form_submissions_update', nameAr: 'تحديث إرسالات الاستبيان', resource: permissionResources.FORM_SUBMISSIONS, action: permissionActions.UPDATE },
+  { name: 'form_submissions_delete', nameAr: 'حذف إرسالات الاستبيان', resource: permissionResources.FORM_SUBMISSIONS, action: permissionActions.DELETE },
+  { name: 'point_classifications_read', nameAr: 'قراءة تصنيفات النقاط', resource: permissionResources.POINT_CLASSIFICATIONS, action: permissionActions.READ },
+  { name: 'point_classifications_create', nameAr: 'إنشاء تصنيفات النقاط', resource: permissionResources.POINT_CLASSIFICATIONS, action: permissionActions.CREATE },
+  { name: 'point_classifications_update', nameAr: 'تحديث تصنيفات النقاط', resource: permissionResources.POINT_CLASSIFICATIONS, action: permissionActions.UPDATE },
+  { name: 'point_classifications_delete', nameAr: 'حذف تصنيفات النقاط', resource: permissionResources.POINT_CLASSIFICATIONS, action: permissionActions.DELETE },
+  { name: 'points_transfer_to_athar', nameAr: 'نقل النقاط إلى أثر', resource: permissionResources.POINTS, action: permissionActions.TRANSFER_TO_ATHAR },
+  { name: 'governorates_read', nameAr: 'قراءة المحافظات', resource: permissionResources.GOVERNORATES, action: permissionActions.READ },
+  { name: 'governorates_create', nameAr: 'إنشاء المحافظات', resource: permissionResources.GOVERNORATES, action: permissionActions.CREATE },
+  { name: 'governorates_update', nameAr: 'تحديث المحافظات', resource: permissionResources.GOVERNORATES, action: permissionActions.UPDATE },
+  { name: 'governorates_delete', nameAr: 'حذف المحافظات', resource: permissionResources.GOVERNORATES, action: permissionActions.DELETE },
+  { name: 'cities_read', nameAr: 'قراءة المدن', resource: permissionResources.CITIES, action: permissionActions.READ },
+  { name: 'cities_create', nameAr: 'إنشاء المدن', resource: permissionResources.CITIES, action: permissionActions.CREATE },
+  { name: 'cities_update', nameAr: 'تحديث المدن', resource: permissionResources.CITIES, action: permissionActions.UPDATE },
+  { name: 'cities_delete', nameAr: 'حذف المدن', resource: permissionResources.CITIES, action: permissionActions.DELETE },
+  { name: 'route_zones_read', nameAr: 'قراءة المناطق', resource: permissionResources.ROUTE_ZONES, action: permissionActions.READ },
+  { name: 'route_zones_create', nameAr: 'إنشاء المناطق', resource: permissionResources.ROUTE_ZONES, action: permissionActions.CREATE },
+  { name: 'route_zones_update', nameAr: 'تحديث المناطق', resource: permissionResources.ROUTE_ZONES, action: permissionActions.UPDATE },
+  { name: 'route_zones_delete', nameAr: 'حذف المناطق', resource: permissionResources.ROUTE_ZONES, action: permissionActions.DELETE },
+  { name: 'work_schedules_read', nameAr: 'قراءة أيام العمل', resource: permissionResources.WORK_SCHEDULES, action: permissionActions.READ },
+  { name: 'work_schedules_create', nameAr: 'إنشاء أيام العمل', resource: permissionResources.WORK_SCHEDULES, action: permissionActions.CREATE },
+  { name: 'work_schedules_update', nameAr: 'تحديث أيام العمل', resource: permissionResources.WORK_SCHEDULES, action: permissionActions.UPDATE },
+  { name: 'work_schedules_delete', nameAr: 'حذف أيام العمل', resource: permissionResources.WORK_SCHEDULES, action: permissionActions.DELETE },
 ];
 
 /**
  * Default Roles
  * - super_admin: كل الصلاحيات (manage_all)
  * - organization_admin: المؤسسة والفروع والمستخدمون + الاستبيانات + نقاط المؤسسة + المواد والوحدات (بدون إدارة أدوار النظام)
- * - line_supervisor: قراءة الاستبيانات + إرسال الاستبيان + قراءة النقاط (للمؤسسة)
+ * - line_supervisor: قراءة استبيانات المؤسسة التابع لها + الرد عليها + رؤية ردوده فقط
  * - branch_admin: إدارة الفرع (مركبات، سائقون، نقاط، مسارات، تقارير، مواد، وحدات)
  * - branch_user: قراءة فقط (مركبات، سائقون، نقاط، مسارات، تقارير، مواد، وحدات)
  */
@@ -144,9 +173,13 @@ export const defaultRoles = {
       'roles_read',
       'permissions_read',
       'vehicles_read',
+      'vehicles_create',
       'drivers_read',
       'points_read',
       'routes_read',
+      'routes_create',
+      'routes_update',
+      'routes_delete',
       'reports_read',
       'events_read',
       'materials_read',
@@ -166,9 +199,32 @@ export const defaultRoles = {
       'forms_update',
       'forms_delete',
       'form_submissions_read',
+      'form_submissions_update',
+      'form_submissions_delete',
       'points_create',
       'points_update',
       'points_delete',
+      'point_classifications_read',
+      'point_classifications_create',
+      'point_classifications_update',
+      'point_classifications_delete',
+      'points_transfer_to_athar',
+      'governorates_read',
+      'governorates_create',
+      'governorates_update',
+      'governorates_delete',
+      'cities_read',
+      'cities_create',
+      'cities_update',
+      'cities_delete',
+      'route_zones_read',
+      'route_zones_create',
+      'route_zones_update',
+      'route_zones_delete',
+      'work_schedules_read',
+      'work_schedules_create',
+      'work_schedules_update',
+      'work_schedules_delete',
     ],
   },
   lineSupervisor: {
@@ -216,6 +272,19 @@ export const defaultRoles = {
       'units_create',
       'units_update',
       'units_delete',
+      'point_classifications_read',
+      'point_classifications_create',
+      'points_transfer_to_athar',
+      'governorates_read',
+      'cities_read',
+      'route_zones_read',
+      'route_zones_create',
+      'route_zones_update',
+      'route_zones_delete',
+      'work_schedules_read',
+      'work_schedules_create',
+      'work_schedules_update',
+      'work_schedules_delete',
     ],
   },
   branchUser: {
@@ -232,6 +301,7 @@ export const defaultRoles = {
       'materials_read',
       'material_categories_read',
       'units_read',
+      'work_schedules_read',
     ],
   },
 } as const;

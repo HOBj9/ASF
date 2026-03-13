@@ -19,6 +19,9 @@ export interface CreatePointData {
   radiusMeters?: number;
   zoneId?: string;
   addressText?: string;
+  primaryClassificationId?: string | null;
+  secondaryClassificationId?: string | null;
+  otherIdentifier?: string | null;
   isActive?: boolean;
   createdByUserId?: string | null;
 }
@@ -32,6 +35,9 @@ export interface CreateOrgPointData {
   lng: number;
   radiusMeters?: number;
   addressText?: string;
+  primaryClassificationId?: string | null;
+  secondaryClassificationId?: string | null;
+  otherIdentifier?: string | null;
   isActive?: boolean;
   createdByUserId?: string | null;
 }
@@ -46,6 +52,9 @@ export interface UpdatePointData {
   radiusMeters?: number;
   zoneId?: string;
   addressText?: string;
+  primaryClassificationId?: string | null;
+  secondaryClassificationId?: string | null;
+  otherIdentifier?: string | null;
   isActive?: boolean;
 }
 
@@ -77,6 +86,9 @@ export class PointService {
       radiusMeters: data.radiusMeters ?? 500,
       zoneId: data.zoneId || null,
       addressText: data.addressText || null,
+      primaryClassificationId: data.primaryClassificationId || null,
+      secondaryClassificationId: data.secondaryClassificationId || null,
+      otherIdentifier: data.otherIdentifier || null,
       isActive: data.isActive ?? true,
       createdByUserId: data.createdByUserId || null,
     });
@@ -108,6 +120,9 @@ export class PointService {
     if (data.nameEn !== undefined && data.nameEn === '') updateData.nameEn = null;
     if (data.zoneId !== undefined) updateData.zoneId = data.zoneId ?? null;
     if (data.addressText !== undefined && data.addressText === '') updateData.addressText = null;
+    if (data.primaryClassificationId !== undefined) updateData.primaryClassificationId = data.primaryClassificationId ?? null;
+    if (data.secondaryClassificationId !== undefined) updateData.secondaryClassificationId = data.secondaryClassificationId ?? null;
+    if (data.otherIdentifier !== undefined) updateData.otherIdentifier = data.otherIdentifier ?? null;
 
     const updated = await Point.findByIdAndUpdate(point._id, updateData, {
       new: true,
@@ -155,6 +170,9 @@ export class PointService {
       radiusMeters: data.radiusMeters ?? 500,
       zoneId: null,
       addressText: data.addressText || null,
+      primaryClassificationId: data.primaryClassificationId || null,
+      secondaryClassificationId: data.secondaryClassificationId || null,
+      otherIdentifier: data.otherIdentifier || null,
       isActive: data.isActive ?? true,
       createdByUserId: data.createdByUserId || null,
     });
@@ -200,6 +218,9 @@ export class PointService {
       radiusMeters: p.radiusMeters ?? 500,
       zoneId: null,
       addressText: p.addressText || null,
+      primaryClassificationId: (p as any).primaryClassificationId || null,
+      secondaryClassificationId: (p as any).secondaryClassificationId || null,
+      otherIdentifier: (p as any).otherIdentifier || null,
       isActive: p.isActive !== false,
       createdByUserId: (p as any).createdByUserId || null,
     }));
@@ -238,6 +259,9 @@ export class PointService {
         radiusMeters: orgPoint.radiusMeters ?? 500,
         zoneId: null,
         addressText: orgPoint.addressText || null,
+        primaryClassificationId: (orgPoint as any).primaryClassificationId || null,
+        secondaryClassificationId: (orgPoint as any).secondaryClassificationId || null,
+        otherIdentifier: (orgPoint as any).otherIdentifier || null,
         isActive: orgPoint.isActive !== false,
         createdByUserId: (orgPoint as any).createdByUserId || null,
       });

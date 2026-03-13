@@ -1,9 +1,15 @@
-﻿import mongoose, { Schema, Document, Model } from 'mongoose';
+import mongoose, { Schema, Document, Model } from 'mongoose';
+// Ensure RouteZone and WorkSchedule are registered for populate ref
+import './RouteZone';
+import './WorkSchedule';
 
 export interface IRoute extends Document {
   branchId: mongoose.Types.ObjectId;
+  zoneIds?: mongoose.Types.ObjectId[];
+  workScheduleId?: mongoose.Types.ObjectId | null;
   name: string;
   description?: string;
+  color?: string;
   path?: {
     type: 'LineString';
     coordinates: number[][];
@@ -21,6 +27,16 @@ const RouteSchema: Schema = new Schema(
       required: true,
       index: true,
     },
+    zoneIds: {
+      type: [Schema.Types.ObjectId],
+      ref: 'RouteZone',
+      default: [],
+    },
+    workScheduleId: {
+      type: Schema.Types.ObjectId,
+      ref: 'WorkSchedule',
+      default: null,
+    },
     name: {
       type: String,
       required: true,
@@ -30,6 +46,11 @@ const RouteSchema: Schema = new Schema(
       type: String,
       trim: true,
       default: null,
+    },
+    color: {
+      type: String,
+      trim: true,
+      default: '#16a34a',
     },
     path: {
       type: {

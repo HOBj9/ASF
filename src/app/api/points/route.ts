@@ -36,7 +36,7 @@ export async function POST(request: Request) {
     const branchId = resolveBranchId(session, body.branchId);
     const organizationId = await resolveOrganizationId(session, body.organizationId);
 
-    const { name, nameAr, nameEn, type, lat, lng, radiusMeters, addressText, isActive } = body;
+    const { name, nameAr, nameEn, type, lat, lng, radiusMeters, addressText, isActive, primaryClassificationId, secondaryClassificationId, otherIdentifier } = body;
     if (!name || lat === undefined || lng === undefined) {
       return NextResponse.json(
         { error: 'الاسم والإحداثيات مطلوبة' },
@@ -67,6 +67,9 @@ export async function POST(request: Request) {
       radiusMeters: radius,
       zoneId,
       addressText,
+      primaryClassificationId: primaryClassificationId || null,
+      secondaryClassificationId: secondaryClassificationId || null,
+      otherIdentifier: otherIdentifier || null,
       isActive: isActive ?? true,
       createdByUserId: session?.user?.id ?? null,
     });

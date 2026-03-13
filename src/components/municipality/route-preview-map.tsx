@@ -2,8 +2,9 @@
 
 import "@/lib/leaflet-patch";
 import { useMemo } from "react";
-import { MapContainer, Marker, Polyline, Popup, TileLayer, Tooltip } from "react-leaflet";
+import { MapContainer, Marker, Popup, TileLayer, Tooltip } from "react-leaflet";
 import L from "leaflet";
+import { ArrowheadPolyline } from "@/components/ui/arrowhead-polyline";
 import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
 import markerIcon from "leaflet/dist/images/marker-icon.png";
 import markerShadow from "leaflet/dist/images/marker-shadow.png";
@@ -61,6 +62,7 @@ export function RoutePreviewMap({
   onPointSelect,
   selectedStartId,
   selectedEndId,
+  color,
 }: {
   points: PreviewPoint[];
   geometry: PreviewGeometry | null;
@@ -68,6 +70,7 @@ export function RoutePreviewMap({
   onPointSelect?: (pointId: string) => void;
   selectedStartId?: string | null;
   selectedEndId?: string | null;
+  color?: string;
 }) {
   const center: [number, number] = useMemo(() => {
     if (points.length > 0) return [points[0].lat, points[0].lng];
@@ -106,16 +109,14 @@ export function RoutePreviewMap({
                   : undefined
               }
             >
-              {(isStart || isEnd) && !interactive && (
-                <Tooltip direction="top" offset={[0, -20]} opacity={1} permanent>
-                  {isStart ? "1 - البداية" : `${points.length} - النهاية`}
-                </Tooltip>
-              )}
-              {interactive && (isSelectedStart || isSelectedEnd) && (
-                <Tooltip direction="top" offset={[0, -20]} opacity={1} permanent>
-                  {isSelectedStart ? "نقطة البداية" : "نقطة النهاية"}
-                </Tooltip>
-              )}
+              <Tooltip direction="top" offset={[0, -20]} opacity={1} permanent>
+                {(() => {
+                  const pointName = point.nameAr || point.name || "نقطة";
+                  if (isStart) return `1. ${pointName} - البداية`;
+                  if (isEnd && points.length > 1) return `${points.length}. ${pointName} - النهاية`;
+                  return `${index + 1}. ${pointName}`;
+                })()}
+              </Tooltip>
               <Popup>
                 <div className="text-right">
                   <div className="font-medium">
@@ -139,7 +140,11 @@ export function RoutePreviewMap({
         })}
 
         {polylinePositions.length >= 2 && (
-          <Polyline positions={polylinePositions} pathOptions={{ color: "#16a34a", weight: 5 }} />
+          <ArrowheadPolyline
+            positions={polylinePositions}
+            color={color || "#16a34a"}
+            weight={5}
+          />
         )}
       </MapContainer>
     </div>

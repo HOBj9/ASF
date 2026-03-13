@@ -57,6 +57,22 @@ services:
     networks:
       - app-network
 
+  # One-off: مزامنة الصلاحيات (شغّل: docker compose run --rm sync-permissions)
+  sync-permissions:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: waste-management-system-sync-permissions
+    environment:
+      MONGODB_URI: mongodb://admin:admin123@mongodb:27017/waste-management-system?authSource=admin
+    depends_on:
+      - mongodb
+    networks:
+      - app-network
+    command: npm run sync:permissions
+    profiles:
+      - tools
+
 volumes:
   mongodb_data:
 

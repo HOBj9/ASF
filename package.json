@@ -9,7 +9,9 @@
     "lint": "next lint",
     "seed": "ts-node --project tsconfig.seed.json scripts/seed.ts",
     "seed:js": "node scripts/seed.js",
-    "fresh": "ts-node --project tsconfig.seed.json scripts/fresh.ts"
+    "fresh": "ts-node --project tsconfig.seed.json scripts/fresh.ts",
+    "repair:visits": "ts-node --project tsconfig.seed.json scripts/repair-visit-log.ts",
+    "sync:permissions": "ts-node --project tsconfig.seed.json scripts/sync-permissions.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.3.4",
@@ -29,6 +31,7 @@
     "bcryptjs": "^2.4.3",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
+    "leaflet": "^1.9.4",
     "lucide-react": "^0.427.0",
     "mongodb": "^6.3.0",
     "mongoose": "^8.3.1",
@@ -42,7 +45,6 @@
     "react-leaflet": "^4.2.1",
     "recharts": "^2.12.7",
     "tailwind-merge": "^2.4.0",
-    "leaflet": "^1.9.4",
     "xlsx": "^0.18.5",
     "zod": "^3.23.8",
     "zustand": "^4.5.2"

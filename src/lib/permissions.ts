@@ -63,3 +63,12 @@ export function isLineSupervisor(role: IRole | null): boolean {
   return false
 }
 
+export function isBranchAdmin(role: IRole | null): boolean {
+  if (!role) return false
+  if (typeof role === 'string') return role === 'branch_admin'
+  if (typeof role === 'object' && 'name' in role) {
+    return role.name === 'branch_admin'
+  }
+  return false
+}
+

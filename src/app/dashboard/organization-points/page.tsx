@@ -24,7 +24,7 @@ export default async function OrganizationPointsPage() {
     <div className="text-right">
       <div className="mb-6 lg:mb-8">
         <h1 className="text-2xl lg:text-3xl font-bold">{pageTitle}</h1>
-        <p className="text-muted-foreground mt-2">النقاط على مستوى المؤسسة ونسخها إلى الفروع ونقلها إلى أثر</p>
+        <p className="text-muted-foreground mt-2">نقاط منشأة من الاستبيانات على مستوى المؤسسة، يمكن نسخها إلى الفروع ونقلها إلى أثر</p>
       </div>
       <OrganizationPointsManager />
     </div>

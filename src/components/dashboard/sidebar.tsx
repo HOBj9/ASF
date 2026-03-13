@@ -27,13 +27,18 @@ import {
   ChevronDown,
   PanelLeftClose,
   PanelLeft,
+  Pin,
+  PinOff,
+  Globe,
+  CalendarClock,
+  Tags,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { apiClient } from "@/lib/api/client"
 import { cn } from "@/lib/utils"
 import { useSidebarStore } from "@/store/sidebar-store"
 import { useEffect, useState, useMemo } from "react"
-import { hasAnyPermission, hasPermission, isAdmin, isOrganizationAdmin } from "@/lib/permissions"
+import { hasAnyPermission, hasPermission, isAdmin, isOrganizationAdmin, isBranchAdmin } from "@/lib/permissions"
 import { permissionActions, permissionResources } from "@/constants/permissions"
 import { useLabels } from "@/hooks/use-labels"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -50,7 +55,7 @@ interface SidebarProps {
 
 export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarProps) {
   const pathname = usePathname()
-  const { isOpen, toggle, close } = useSidebarStore()
+  const { isOpen, toggle, close, open, isPinned, togglePin } = useSidebarStore()
   const { data: session, status: sessionStatus } = useSession()
   const [roleName, setRoleName] = useState<string | null>(initialUser.roleName || null)
   const { labels, loading: labelsLoading } = useLabels()
@@ -59,6 +64,7 @@ export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarP
     general: false,
     organizations: false,
     branchOps: false,
+    geography: false,
     surveys: false,
     reports: false,
     userManagement: false,
@@ -197,7 +203,7 @@ export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarP
     },
     {
       group: "branchOps" as const,
-      title: "نقاط المؤسسة",
+      title: "نقاط المؤسسة (من الاستبيانات)",
       href: "/dashboard/organization-points",
       icon: MapPinned,
       permissions: [{ resource: permissionResources.POINTS, action: permissionActions.READ }],
@@ -208,6 +214,27 @@ export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarP
       href: "/dashboard/routes",
       icon: Route,
       permissions: [{ resource: permissionResources.ROUTES, action: permissionActions.READ }],
+    },
+    {
+      group: "branchOps" as const,
+      title: "أيام العمل",
+      href: "/dashboard/work-schedules",
+      icon: CalendarClock,
+      permissions: [{ resource: permissionResources.WORK_SCHEDULES, action: permissionActions.READ }],
+    },
+    {
+      group: "branchOps" as const,
+      title: "فئات النقاط الأساسية والفرعية",
+      href: "/dashboard/point-classifications",
+      icon: Tags,
+      permissions: [{ resource: permissionResources.POINT_CLASSIFICATIONS, action: permissionActions.READ }],
+    },
+    {
+      group: "geography" as const,
+      title: "الإدارة الجغرافية",
+      href: "/dashboard/geography",
+      icon: Globe,
+      geographyPermission: true,
     },
     {
       group: "surveys" as const,
@@ -237,6 +264,13 @@ export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarP
       title: labels.eventsReportLabel || "تقارير الأحداث",
       href: "/dashboard/event-reports",
       icon: Activity,
+      permissions: [{ resource: permissionResources.REPORTS, action: permissionActions.READ }],
+    },
+    {
+      group: "reports" as const,
+      title: "سجل الزيارات",
+      href: "/dashboard/visit-log",
+      icon: ClipboardList,
       permissions: [{ resource: permissionResources.REPORTS, action: permissionActions.READ }],
     },
     {
@@ -296,6 +330,18 @@ export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarP
       if (item.adminOnly && !userIsAdmin) return false
       if ((item as any).superAdminOnly && !userIsSuperAdmin) return false
       if (userIsAdmin) return true
+      if ((item as any).geographyPermission) {
+        return (
+          userIsOrgAdmin ||
+          userIsAdmin ||
+          (isBranchAdmin(session?.user?.role as any) &&
+            hasAnyPermission(session?.user?.role as any, [
+              { resource: permissionResources.GOVERNORATES, action: permissionActions.READ },
+              { resource: permissionResources.CITIES, action: permissionActions.READ },
+              { resource: permissionResources.ROUTE_ZONES, action: permissionActions.READ },
+            ]))
+        )
+      }
       if ((item as any).lineSupervisorCanSee && (userIsOrgAdmin || userIsAdmin)) return true
       if (item.permissions && item.permissions.length > 0) {
         const role = session?.user?.role || null
@@ -309,6 +355,7 @@ export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarP
     general: "عام",
     organizations: "إدارة المؤسسات",
     branchOps: "الفرع والعمليات",
+    geography: "الإدارة الجغرافية",
     surveys: "الاستبيانات",
     reports: "التقارير",
     userManagement: "إدارة المستخدمين",
@@ -320,6 +367,7 @@ export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarP
     general: LayoutDashboard,
     organizations: Building,
     branchOps: Building2,
+    geography: Globe,
     surveys: ClipboardList,
     reports: FileText,
     userManagement: UserCog,
@@ -338,6 +386,7 @@ export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarP
       "general",
       "organizations",
       "branchOps",
+      "geography",
       "surveys",
       "reports",
       "userManagement",
@@ -352,6 +401,21 @@ export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarP
 
   const isCollapsed = !isOpen
 
+  const handleSidebarMouseEnter = () => {
+    if (typeof window !== "undefined" && window.innerWidth >= 1024 && !isPinned) open()
+  }
+  const handleSidebarMouseLeave = () => {
+    if (typeof window !== "undefined" && window.innerWidth >= 1024 && !isPinned) close()
+  }
+
+  const handleHeaderButtonClick = () => {
+    if (typeof window !== "undefined" && window.innerWidth >= 1024) {
+      togglePin()
+    } else {
+      toggle()
+    }
+  }
+
   return (
     <>
       {/* Mobile overlay */}
@@ -362,7 +426,7 @@ export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarP
         />
       )}
       
-      {/* Sidebar */}
+      {/* Sidebar: on desktop (lg) opens on hover and closes when mouse leaves */}
       <aside
         className={cn(
           "fixed lg:static inset-y-0 right-0 z-50 flex h-screen lg:h-full flex-col transition-all duration-300 ease-in-out shrink-0",
@@ -376,6 +440,8 @@ export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarP
           "lg:shadow-[0_8px_32px_0_rgba(0,0,0,0.12)] dark:lg:shadow-[0_8px_32px_0_rgba(0,0,0,0.5)]",
           isOpen ? "translate-x-0" : "translate-x-full lg:translate-x-0"
         )}
+        onMouseEnter={handleSidebarMouseEnter}
+        onMouseLeave={handleSidebarMouseLeave}
       >
         {/* Header */}
         <div className="border-b border-border/50 bg-gradient-to-l from-[hsl(var(--primary))]/20 via-[hsl(var(--primary))]/10 to-transparent dark:from-[hsl(var(--primary))]/30 dark:via-[hsl(var(--primary))]/15 backdrop-blur-sm lg:rounded-t-2xl">
@@ -383,21 +449,20 @@ export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarP
             <Button
               variant="ghost"
               size="icon"
-              onClick={toggle}
+              onClick={handleHeaderButtonClick}
               className={cn(
                 "hover:bg-[hsl(var(--sidebar-item-hover))] rounded-lg",
                 "lg:flex",
-                isCollapsed && "lg:mx-auto"
+                isCollapsed && "lg:mx-auto",
+                isPinned && "lg:bg-primary/10"
               )}
-              title={isCollapsed ? "توسيع القائمة" : "طي القائمة"}
+              title={isPinned ? "إلغاء التثبيت" : "تثبيت القائمة (مفتوح أو مغلق)"}
             >
-              {isCollapsed ? (
-                <PanelLeft className="h-5 w-5 lg:block hidden" />
+              <X className="h-5 w-5 lg:hidden" />
+              {isPinned ? (
+                <PinOff className="h-5 w-5 hidden lg:block" />
               ) : (
-                <>
-                  <X className="h-5 w-5 lg:hidden" />
-                  <PanelLeftClose className="h-5 w-5 hidden lg:block" />
-                </>
+                <Pin className="h-5 w-5 hidden lg:block" />
               )}
             </Button>
           </div>

@@ -125,9 +125,9 @@ export class SurveyService {
       throw new Error('المؤسسة غير موجودة');
     }
 
+    const answers = data.answers && typeof data.answers === 'object' ? (data.answers as Record<string, unknown>) : {};
     const nameFromAnswers =
-      (data.answers && typeof data.answers === 'object' && String((data.answers as any).name ?? (data.answers as any).question_0 ?? '').trim()) ||
-      '';
+      String(answers.pointName ?? answers.name ?? answers.question_0 ?? '').trim() || '';
     const pointName =
       nameFromAnswers ||
       `نقطة من مسح – ${new Date().toLocaleDateString('ar-SY')}`;
@@ -140,6 +140,9 @@ export class SurveyService {
       radiusMeters: 500,
       isActive: true,
       createdByUserId: userId,
+      primaryClassificationId: answers.primaryClassificationId || null,
+      secondaryClassificationId: answers.secondaryClassificationId || null,
+      otherIdentifier: answers.otherIdentifier || null,
     });
 
     const submission = await SurveySubmission.create({

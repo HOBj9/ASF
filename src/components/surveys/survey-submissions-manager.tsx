@@ -13,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { MapPin, Loader2 } from "lucide-react"
+import { MapPin, Loader2, Send } from "lucide-react"
 
 type Submission = {
   _id: string
@@ -58,6 +58,7 @@ export function SurveySubmissionsManager({
   const [submissions, setSubmissions] = useState<Submission[]>([])
   const [loading, setLoading] = useState(false)
   const [convertingId, setConvertingId] = useState<string | null>(null)
+  const [convertingToAtharId, setConvertingToAtharId] = useState<string | null>(null)
 
   const loadSurveys = useCallback(async () => {
     if (!organizationId) return
@@ -107,6 +108,26 @@ export function SurveySubmissionsManager({
       toast.error(e?.message || "فشل تحويل الرد إلى نقطة")
     } finally {
       setConvertingId(null)
+    }
+  }
+
+  const handleConvertToPointAndAthar = async (submissionId: string) => {
+    setConvertingToAtharId(submissionId)
+    try {
+      const res: any = await apiClient.post(
+        `organizations/${organizationId}/survey-submissions/${submissionId}/convert-to-point-and-athar`
+      )
+      const zonesCreated = res.zonesCreated ?? 0
+      const pushed = res.pushed ?? 0
+      toast.success(`تم التحويل. نسخ إلى ${pushed} فرع، إنشاء ${zonesCreated} منطقة في أثر`)
+      if (res.errors?.length) {
+        res.errors.slice(0, 2).forEach((msg: string) => toast.error(msg))
+      }
+      await loadSubmissions()
+    } catch (e: any) {
+      toast.error(e?.message || "فشل تحويل الرد إلى نقطة ثم إلى أثر")
+    } finally {
+      setConvertingToAtharId(null)
     }
   }
 
@@ -169,7 +190,7 @@ export function SurveySubmissionsManager({
                   <th className="p-3 font-medium">التاريخ</th>
                   <th className="p-3 font-medium">الموقع</th>
                   <th className="p-3 font-medium max-w-[200px]">ملخص الإجابات</th>
-                  {!onlyMine && <th className="p-3 font-medium text-center">تحويل إلى نقطة</th>}
+                  {!onlyMine && <th className="p-3 font-medium text-center">الإجراءات</th>}
                 </tr>
               </thead>
               <tbody>
@@ -207,7 +228,7 @@ export function SurveySubmissionsManager({
                         {answersSummary(s.answers)}
                       </td>
                       {!onlyMine && (
-                        <td className="p-3 text-center">
+                        <td className="p-3 text-center space-x-2 space-x-reverse">
                           {!s.pointId ? (
                             <Button
                               size="sm"
@@ -222,7 +243,24 @@ export function SurveySubmissionsManager({
                               )}
                             </Button>
                           ) : (
-                            <span className="text-xs text-muted-foreground">تم التحويل</span>
+                            <>
+                              <Button
+                                size="sm"
+                                variant="default"
+                                disabled={convertingToAtharId === s._id}
+                                onClick={() => handleConvertToPointAndAthar(s._id)}
+                              >
+                                {convertingToAtharId === s._id ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <>
+                                    <Send className="h-4 w-4 ml-2" />
+                                    تحويل إلى نقطة ثم إلى أثر
+                                  </>
+                                )}
+                              </Button>
+                              <span className="text-xs text-muted-foreground">تم التحويل إلى نقطة</span>
+                            </>
                           )}
                         </td>
                       )}

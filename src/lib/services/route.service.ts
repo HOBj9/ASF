@@ -1,31 +1,42 @@
-﻿/**
+/**
  * Route Service
  * Business logic for route management
  */
 
+import mongoose from 'mongoose';
 import connectDB from '@/lib/mongodb';
 import Route, { IRoute } from '@/models/Route';
 import RoutePoint, { IRoutePoint } from '@/models/RoutePoint';
 import Point from '@/models/Point';
 import Branch from '@/models/Branch';
+import { WorkScheduleService } from '@/lib/services/work-schedule.service';
 
 export interface CreateRouteData {
   branchId: string;
   name: string;
   description?: string;
+  color?: string;
   isActive?: boolean;
+  zoneIds?: string[];
+  workScheduleId?: string | null;
 }
 
 export interface UpdateRouteData {
   name?: string;
   description?: string;
+  color?: string;
   isActive?: boolean;
+  zoneIds?: string[];
+  workScheduleId?: string | null;
+  path?: { type: 'LineString'; coordinates: number[][] } | null;
 }
 
 export interface RoutePointInput {
   pointId: string;
   order: number;
 }
+
+const workScheduleService = new WorkScheduleService();
 
 export class RouteService {
   async create(data: CreateRouteData): Promise<IRoute> {
@@ -36,11 +47,33 @@ export class RouteService {
       throw new Error('الفرع غير موجود');
     }
 
+    if (data.workScheduleId) {
+      const available = await workScheduleService.isAvailableForBranch(
+        data.workScheduleId,
+        data.branchId
+      );
+      if (!available) {
+        throw new Error('جدول العمل المحدد غير متاح لهذا الفرع');
+      }
+    }
+
+    const zoneIds = Array.isArray(data.zoneIds)
+      ? data.zoneIds
+          .filter((id) => id && String(id).trim())
+          .map((id) => new mongoose.Types.ObjectId(String(id)))
+      : [];
+    const workScheduleId = data.workScheduleId && String(data.workScheduleId).trim()
+      ? new mongoose.Types.ObjectId(String(data.workScheduleId))
+      : null;
+
     const route = await Route.create({
       branchId: data.branchId,
       name: data.name.trim(),
       description: data.description || null,
+      color: data.color?.trim() || '#16a34a',
       isActive: data.isActive ?? true,
+      zoneIds,
+      workScheduleId,
     });
 
     return route;
@@ -48,12 +81,20 @@ export class RouteService {
 
   async getAll(branchId: string): Promise<IRoute[]> {
     await connectDB();
-    return Route.find({ branchId }).lean().exec();
+    return Route.find({ branchId })
+      .populate({ path: 'zoneIds', model: 'RouteZone', select: 'name nameAr', strictPopulate: false })
+      .populate({ path: 'workScheduleId', model: 'WorkSchedule', select: 'name nameAr', strictPopulate: false })
+      .lean()
+      .exec();
   }
 
   async getById(id: string, branchId: string): Promise<IRoute | null> {
     await connectDB();
-    return Route.findOne({ _id: id, branchId }).lean().exec();
+    return Route.findOne({ _id: id, branchId })
+      .populate({ path: 'zoneIds', model: 'RouteZone', select: 'name nameAr', strictPopulate: false })
+      .populate({ path: 'workScheduleId', model: 'WorkSchedule', select: 'name nameAr', strictPopulate: false })
+      .lean()
+      .exec();
   }
 
   async update(id: string, branchId: string, data: UpdateRouteData): Promise<IRoute | null> {
@@ -63,14 +104,42 @@ export class RouteService {
       throw new Error('المسار غير موجود');
     }
 
-    const updateData: any = { ...data };
-    if (data.name !== undefined) updateData.name = data.name.trim();
-    if (data.description !== undefined && data.description === '') updateData.description = null;
+    if (data.workScheduleId) {
+      const available = await workScheduleService.isAvailableForBranch(
+        data.workScheduleId,
+        branchId
+      );
+      if (!available) {
+        throw new Error('جدول العمل المحدد غير متاح لهذا الفرع');
+      }
+    }
 
-    const updated = await Route.findByIdAndUpdate(route._id, updateData, {
+    const updateData: any = {};
+    if (data.name !== undefined) updateData.name = String(data.name).trim();
+    if (data.description !== undefined) updateData.description = data.description === '' ? null : data.description;
+    if (data.color !== undefined) updateData.color = data.color?.trim() || '#16a34a';
+    if (data.isActive !== undefined) updateData.isActive = data.isActive;
+    if (data.zoneIds !== undefined) {
+      updateData.zoneIds = Array.isArray(data.zoneIds)
+        ? data.zoneIds
+            .filter((id) => id && String(id).trim())
+            .map((id) => new mongoose.Types.ObjectId(String(id)))
+        : [];
+    }
+    if (data.workScheduleId !== undefined) {
+      const wsVal = data.workScheduleId && String(data.workScheduleId).trim();
+      updateData.workScheduleId = wsVal ? new mongoose.Types.ObjectId(wsVal) : null;
+    }
+    if (data.path !== undefined) {
+      updateData.path = data.path;
+    }
+
+    const updated = await Route.findByIdAndUpdate(route._id, { $set: updateData }, {
       new: true,
       runValidators: true,
     })
+      .populate({ path: 'zoneIds', model: 'RouteZone', select: 'name nameAr', strictPopulate: false })
+      .populate({ path: 'workScheduleId', model: 'WorkSchedule', select: 'name nameAr', strictPopulate: false })
       .lean()
       .exec();
 
@@ -92,6 +161,61 @@ export class RouteService {
     }
 
     return RoutePoint.find({ routeId }).sort({ order: 1 }).lean().exec();
+  }
+
+  /**
+   * Get all routes with path and points for map display
+   */
+  async getRoutesWithPointsForMap(branchId: string): Promise<
+    Array<{
+      _id: string;
+      name: string;
+      color: string;
+      path: { type: string; coordinates: number[][] } | null;
+      points: Array<{ _id: string; name?: string; nameAr?: string; lat: number; lng: number; order: number }>;
+    }>
+  > {
+    await connectDB();
+    const routes = await Route.find({ branchId }).lean().exec();
+    const result: Array<{
+      _id: string;
+      name: string;
+      color: string;
+      path: { type: string; coordinates: number[][] } | null;
+      points: Array<{ _id: string; name?: string; nameAr?: string; lat: number; lng: number; order: number }>;
+    }> = [];
+
+    for (const route of routes) {
+      const routePoints = await RoutePoint.find({ routeId: route._id }).sort({ order: 1 }).lean().exec();
+      const pointIds = routePoints.map((rp: any) => rp.pointId);
+      const pointDocs = await Point.find({ _id: { $in: pointIds } })
+        .select('name nameAr lat lng')
+        .lean();
+      const pointMap = new Map(pointDocs.map((p: any) => [String(p._id), p]));
+
+      const points = routePoints.map((rp: any) => {
+        const p = pointMap.get(String(rp.pointId));
+        if (!p) return null;
+        return {
+          _id: String(p._id),
+          name: (p as any).name,
+          nameAr: (p as any).nameAr,
+          lat: Number((p as any).lat),
+          lng: Number((p as any).lng),
+          order: rp.order,
+        };
+      }).filter(Boolean) as any[];
+
+      result.push({
+        _id: String(route._id),
+        name: route.name,
+        color: (route as any).color || '#16a34a',
+        path: (route as any).path?.coordinates ? { type: 'LineString', coordinates: (route as any).path.coordinates } : null,
+        points,
+      });
+    }
+
+    return result;
   }
 
   async setRoutePoints(

@@ -58,7 +58,7 @@ export async function POST(
 
     const answers = submission.answers && typeof submission.answers === "object" ? submission.answers as Record<string, unknown> : {}
     const nameFromAnswers = String(
-      (answers as any)?.name ?? (answers as any)?.question_0 ?? ""
+      (answers as any)?.pointName ?? (answers as any)?.name ?? (answers as any)?.question_0 ?? ""
     ).trim()
     const pointName =
       nameFromAnswers ||
@@ -72,6 +72,9 @@ export async function POST(
       radiusMeters: 500,
       isActive: true,
       createdByUserId: userId ?? null,
+      primaryClassificationId: (answers as any)?.primaryClassificationId || null,
+      secondaryClassificationId: (answers as any)?.secondaryClassificationId || null,
+      otherIdentifier: (answers as any)?.otherIdentifier || null,
     })
 
     await SurveySubmission.updateOne(
