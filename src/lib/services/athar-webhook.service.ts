@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server';
 import connectDB from '@/lib/mongodb';
 import IncomingAtharEvent from '@/models/IncomingAtharEvent';
 import Branch from '@/models/Branch';
-import Point from '@/models/Point';
 import Vehicle from '@/models/Vehicle';
 import Driver from '@/models/Driver';
 import ZoneEvent from '@/models/ZoneEvent';
@@ -11,6 +10,7 @@ import PointCompletion from '@/models/PointCompletion';
 import { getZonedDateString } from '@/lib/utils/timezone.util';
 import { getZoneEventFeedItemById } from '@/lib/services/zone-event-feed.service';
 import { publishZoneEventUpdate } from '@/lib/services/zone-event-stream-bus.service';
+import { extractNumericZoneId, resolveAtharPoint } from '@/lib/utils/athar-point.util';
 
 type WebhookMethod = 'GET' | 'POST';
 type ZoneEventType = 'zone_in' | 'zone_out';
@@ -72,16 +72,6 @@ function parseNumber(value: unknown): number | null {
   if (value === null || value === undefined || value === '') return null;
   const numeric = Number(value);
   return Number.isFinite(numeric) ? numeric : null;
-}
-
-function extractNumericZoneId(value: string | null): string | null {
-  if (!value) return null;
-  const normalized = value.trim();
-  if (!normalized) return null;
-  const fullNumber = normalized.match(/^(\d+)$/);
-  if (fullNumber) return fullNumber[1];
-  const embedded = normalized.match(/(\d+)/);
-  return embedded ? embedded[1] : normalized;
 }
 
 function normalizeZoneId(zoneIdRaw: string | null): string | null {
@@ -281,7 +271,6 @@ async function parseWebhookPayload(request: Request, method: WebhookMethod): Pro
     body?.zone_id,
     body?.zoneId,
     query.zone_id,
-    zoneName,
     extractNumericZoneId(desc)
   );
 
@@ -372,7 +361,7 @@ export async function handleAtharWebhookRequest(
       return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
     }
 
-    if (!parsed.zoneIdNormalized || !parsed.imei || !parsed.type) {
+    if ((!parsed.zoneIdNormalized && !parsed.zoneName) || !parsed.imei || !parsed.type) {
       await updateIncomingRecord(incomingRecordId, {
         processingStatus: 'rejected',
         errorMessage: 'missing required fields',
@@ -391,11 +380,15 @@ export async function handleAtharWebhookRequest(
     const zoneEventType = parsed.type as ZoneEventType;
 
     if (parsed.eventId) {
-      const duplicate = await ZoneEvent.findOne({
+      const duplicateFilter: Record<string, unknown> = {
         atharEventId: parsed.eventId,
-        zoneId: parsed.zoneIdNormalized,
         type: zoneEventType,
-      })
+      };
+      if (parsed.zoneIdNormalized) {
+        duplicateFilter.zoneId = parsed.zoneIdNormalized;
+      }
+
+      const duplicate = await ZoneEvent.findOne(duplicateFilter)
         .select('_id branchId')
         .lean();
 
@@ -410,44 +403,65 @@ export async function handleAtharWebhookRequest(
       }
     }
 
-    const zoneCandidates = [parsed.zoneIdNormalized, parsed.zoneName].filter(Boolean);
-    const zoneIdsToTry = [...new Set(zoneCandidates.map((z) => extractNumericZoneId(z) || z).filter(Boolean))];
-    let point: any = null;
-    for (const zid of zoneIdsToTry) {
-      point = await Point.findOne({ zoneId: zid }).lean();
-      if (point) break;
-    }
-    if (!point && zoneIdsToTry.length > 0) {
-      console.log('[Athar Webhook] Point not found for zone_id:', {
-        zoneIdNormalized: parsed.zoneIdNormalized,
-        zoneName: parsed.zoneName,
-        zoneIdsTried: zoneIdsToTry,
-      });
-    }
-    let branchId: string | null = point?.branchId ? String(point.branchId) : null;
-    let vehicle: any = null;
-
-    if (branchId) {
-      vehicle = await Vehicle.findOne({
-        branchId,
-        $or: [{ imei: parsed.imei }, ...(parsed.plateNumber ? [{ plateNumber: parsed.plateNumber }] : [])],
-      }).lean();
-    } else {
-      vehicle = await Vehicle.findOne({
-        $or: [{ imei: parsed.imei }, ...(parsed.plateNumber ? [{ plateNumber: parsed.plateNumber }] : [])],
-      }).lean();
-      branchId = vehicle?.branchId ? String(vehicle.branchId) : null;
-    }
+    const vehicleMatchers = [{ imei: parsed.imei }, ...(parsed.plateNumber ? [{ plateNumber: parsed.plateNumber }] : [])];
+    let vehicle: any = await Vehicle.findOne({ $or: vehicleMatchers }).lean();
+    let branchId: string | null = vehicle?.branchId ? String(vehicle.branchId) : null;
 
     if (!branchId && parsed.imei) {
       branchId = await resolveBranchIdByAtharImei(parsed.imei);
     }
 
+    let point: any = await resolveAtharPoint({
+      branchId,
+      zoneIdRaw: parsed.zoneIdRaw,
+      zoneIdNormalized: parsed.zoneIdNormalized,
+      zoneName: parsed.zoneName,
+      desc: parsed.desc,
+    });
+
+    if (point?.branchId) {
+      const pointBranchId = String(point.branchId);
+      if (branchId !== pointBranchId) {
+        branchId = pointBranchId;
+        vehicle =
+          (await Vehicle.findOne({
+            branchId,
+            $or: vehicleMatchers,
+          }).lean()) || vehicle;
+      }
+    }
+
     if (branchId && !vehicle) {
       vehicle = await Vehicle.findOne({
         branchId,
-        $or: [{ imei: parsed.imei }, ...(parsed.plateNumber ? [{ plateNumber: parsed.plateNumber }] : [])],
+        $or: vehicleMatchers,
       }).lean();
+    }
+
+    if (!point && branchId) {
+      point = await resolveAtharPoint({
+        branchId,
+        zoneIdRaw: parsed.zoneIdRaw,
+        zoneIdNormalized: parsed.zoneIdNormalized,
+        zoneName: parsed.zoneName,
+        desc: parsed.desc,
+      });
+    }
+
+    const resolvedZoneId =
+      (typeof point?.zoneId === 'string' && point.zoneId.trim()) ||
+      parsed.zoneIdNormalized ||
+      extractNumericZoneId(parsed.desc) ||
+      null;
+
+    if (!point) {
+      console.log('[Athar Webhook] Point not found for incoming event:', {
+        branchId,
+        zoneIdRaw: parsed.zoneIdRaw,
+        zoneIdNormalized: parsed.zoneIdNormalized,
+        zoneName: parsed.zoneName,
+        desc: parsed.desc,
+      });
     }
 
     if (!branchId) {
@@ -479,7 +493,7 @@ export async function handleAtharWebhookRequest(
       vehicleId: vehicle?._id || null,
       driverId: vehicle?.driverId || null,
       pointId: point?._id || null,
-      zoneId: parsed.zoneIdNormalized,
+      zoneId: resolvedZoneId,
       imei: parsed.imei,
       atharEventId: parsed.eventId || null,
       name: eventName,
@@ -515,7 +529,7 @@ export async function handleAtharWebhookRequest(
         branchId,
         vehicleId: vehicle._id,
         pointId: point._id,
-        zoneId: parsed.zoneIdNormalized,
+        zoneId: resolvedZoneId,
         entryEventId: zoneEvent._id,
         entryTime: eventTimestamp,
         status: 'open',
@@ -567,9 +581,12 @@ export async function handleAtharWebhookRequest(
       } else {
         // لا توجد زيارة مفتوحة: البحث عن zone_in مطابق وإنشاء زيارة استرجاعية
         const zoneIdsToMatch = [
+          resolvedZoneId,
           parsed.zoneIdNormalized,
-          ...zoneIdsToTry.filter((z) => z !== parsed.zoneIdNormalized),
-        ].filter(Boolean);
+          extractNumericZoneId(parsed.zoneIdRaw),
+          extractNumericZoneId(parsed.zoneName),
+          extractNumericZoneId(parsed.desc),
+        ].filter((value, index, array): value is string => Boolean(value) && array.indexOf(value) === index);
         const matchingEntry = await ZoneEvent.findOne({
           branchId,
           $or: [{ vehicleId: vehicle._id }, { imei: parsed.imei }],
@@ -597,7 +614,7 @@ export async function handleAtharWebhookRequest(
             branchId,
             vehicleId: vehicle._id,
             pointId: point._id,
-            zoneId: parsed.zoneIdNormalized,
+            zoneId: resolvedZoneId,
             entryEventId: matchingEntry._id,
             exitEventId: zoneEvent._id,
             entryTime,

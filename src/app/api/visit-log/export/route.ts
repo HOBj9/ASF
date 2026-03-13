@@ -10,6 +10,7 @@ import ZoneEvent from '@/models/ZoneEvent';
 import Point from '@/models/Point';
 import Vehicle from '@/models/Vehicle';
 import Driver from '@/models/Driver';
+import { buildZoneEventPointMatchers } from '@/lib/utils/athar-point.util';
 
 function parseDateTime(value: string | null): Date | null {
   if (!value) return null;
@@ -81,7 +82,16 @@ export async function GET(request: Request) {
         type: typeFilter,
         eventTimestamp: dateFilter,
       };
-      if (pointId) eventFilter.pointId = pointId;
+      if (pointId) {
+        const selectedPoint = await Point.findOne({ _id: pointId, branchId })
+          .select('_id zoneId name nameAr nameEn')
+          .lean();
+        if (selectedPoint) {
+          eventFilter.$or = buildZoneEventPointMatchers(selectedPoint);
+        } else {
+          eventFilter.pointId = pointId;
+        }
+      }
       if (tab === 'repeated-entries') eventFilter.isRepeatedEntry = true;
       if (tab === 'repeated-exits') eventFilter.isOrphanExit = true;
 
