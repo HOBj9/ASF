@@ -39,5 +39,6 @@ EXPOSE 3036
 ENV PORT 3036
 ENV HOSTNAME "0.0.0.0"
 
-CMD ["node", "server.js"]
+# Allow large request headers (NextAuth JWT session cookie) - avoid HTTP 431
+CMD ["node", "--max-http-header-size=65536", "server.js"]
 
