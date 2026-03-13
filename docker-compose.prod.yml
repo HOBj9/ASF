@@ -24,8 +24,8 @@ services:
       - "3036:3036"
     environment:
       MONGODB_URI: mongodb://admin:admin123@mongodb:27017/waste-management-system?authSource=admin
-      NEXTAUTH_URL: http://localhost:3036
-      NEXTAUTH_SECRET: your-secret-key-change-in-production
+      NEXTAUTH_URL: ${NEXTAUTH_URL:-http://wms.alather.net}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-your-secret-key-change-in-production}
     depends_on:
       - mongodb
     networks:
