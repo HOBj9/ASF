@@ -54,7 +54,7 @@ function formatCell(value: string | number | null | undefined): string {
   return s.length ? s : '-';
 }
 
-function formatVisitKind(kind: 'first' | 'repeated' | null): string {
+function formatVisitKind(kind: 'first' | 'repeated' | null | undefined): string {
   if (kind === 'first') return 'أولى';
   if (kind === 'repeated') return 'مكررة';
   return '-';

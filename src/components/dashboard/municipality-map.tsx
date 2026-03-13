@@ -296,7 +296,7 @@ export function MunicipalityMap({
   pointLabel?: string;
   eventsHasMore?: boolean;
   eventsLoadingMore?: boolean;
-  eventsLoadMoreSentinelRef?: React.RefObject<HTMLDivElement | null>;
+  eventsLoadMoreSentinelRef?: React.MutableRefObject<HTMLDivElement | null>;
 }) {
   const [fullscreenOpen, setFullscreenOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -469,15 +469,15 @@ export function MunicipalityMap({
   const matchedVehicle = useMemo(() => {
     if (!selectedObject) return null;
     return (
-      vehicleByAtharId.get(String(selectedObject.id)) ||
-      vehicleByImei.get(String(selectedObject.imei)) ||
+      vehicleByAtharId.get(String(selectedObject?.id)) ||
+      vehicleByImei.get(String(selectedObject?.imei)) ||
       null
     );
   }, [selectedObject, vehicleByAtharId, vehicleByImei]);
 
   const matchedRoute = useMemo(() => {
     if (!matchedVehicle?.routeId) return null;
-    return routeById.get(String(matchedVehicle.routeId)) || null;
+    return routeById.get(String(matchedVehicle?.routeId)) || null;
   }, [matchedVehicle, routeById]);
 
   const showPanel = useCallback((panel: Exclude<RightPanelType, null>) => {
@@ -702,15 +702,11 @@ export function MunicipalityMap({
         center={initialCenter}
         zoom={13}
         className="h-full w-full"
-        whenCreated={
-          attachRef
-            ? (map) => {
-                mapRef.current = map;
-                // Force tile load after layout (fixes empty map on first load)
-                window.setTimeout(() => map.invalidateSize(), 100);
-              }
-            : undefined
-        }
+        ref={attachRef ? mapRef : undefined}
+        whenReady={() => {
+          if (!attachRef) return;
+          window.setTimeout(() => mapRef.current?.invalidateSize(), 100);
+        }}
       >
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
@@ -923,41 +919,41 @@ export function MunicipalityMap({
                       <div className="flex items-center justify-between gap-3">
                         <span
                           className={`rounded-full px-2 py-0.5 text-[11px] ${
-                            selectedObject.active ? "bg-emerald-500/15 text-emerald-700" : "bg-slate-500/15 text-slate-600"
+                            selectedObject?.active ? "bg-emerald-500/15 text-emerald-700" : "bg-slate-500/15 text-slate-600"
                           }`}
                         >
-                          {selectedObject.active ? "نشطة" : "غير نشطة"}
+                          {selectedObject?.active ? "نشطة" : "غير نشطة"}
                         </span>
-                        <div className="font-semibold">{selectedObject.name}</div>
+                        <div className="font-semibold">{selectedObject?.name}</div>
                       </div>
                       <div className="grid grid-cols-2 gap-2 text-[11px] text-muted-foreground">
-                        <div>اللوحة: {selectedObject.plateNumber || "-"}</div>
-                        <div>IMEI: {selectedObject.imei || "-"}</div>
-                        <div>السرعة: {selectedObject.speed} كم/س</div>
-                        <div>الاتجاه: {Math.round(selectedObject.angle || 0)}°</div>
-                        <div>وقت الجهاز: {selectedObject.dtTracker || "-"}</div>
-                        <div>وقت الخادم: {selectedObject.dtServer || "-"}</div>
+                        <div>اللوحة: {selectedObject?.plateNumber || "-"}</div>
+                        <div>IMEI: {selectedObject?.imei || "-"}</div>
+                        <div>السرعة: {selectedObject?.speed ?? 0} كم/س</div>
+                        <div>الاتجاه: {Math.round(selectedObject?.angle || 0)}°</div>
+                        <div>وقت الجهاز: {selectedObject?.dtTracker || "-"}</div>
+                        <div>وقت الخادم: {selectedObject?.dtServer || "-"}</div>
                       </div>
                       {matchedVehicle && (
-                        <div className="text-xs text-muted-foreground">المركبة بالنظام: {matchedVehicle.name}</div>
+                        <div className="text-xs text-muted-foreground">المركبة بالنظام: {matchedVehicle?.name}</div>
                       )}
                       {matchedRoute && (
-                        <div className="text-xs text-muted-foreground">المسار الحالي: {matchedRoute.name}</div>
+                        <div className="text-xs text-muted-foreground">المسار الحالي: {matchedRoute?.name}</div>
                       )}
                       <div className="flex flex-wrap gap-2 pt-1">
-                        <Button size="sm" className="h-8" onClick={() => focusOnObject(selectedObject)} disabled={selectedObject.lat == null || selectedObject.lng == null}>
+                        <Button size="sm" className="h-8" onClick={() => focusOnObject(selectedObject)} disabled={selectedObject?.lat == null || selectedObject?.lng == null}>
                           تحديد على الخريطة
                         </Button>
                         {matchedVehicle?.routeId ? (
                           <Button size="sm" variant="outline" className="h-8" asChild>
-                            <Link href={`/dashboard/routes/${String(matchedVehicle.routeId)}/points`}>عرض المسار</Link>
+                            <Link href={`/dashboard/routes/${String(matchedVehicle?.routeId)}/points`}>عرض المسار</Link>
                           </Button>
                         ) : (
                           <Button size="sm" variant="outline" className="h-8" disabled>عرض المسار</Button>
                         )}
                         {matchedVehicle?._id ? (
                           <Button size="sm" variant="outline" className="h-8" asChild>
-                            <Link href={`/dashboard/reports?vehicleId=${matchedVehicle._id}`}>تقارير المركبة</Link>
+                            <Link href={`/dashboard/reports?vehicleId=${matchedVehicle?._id}`}>تقارير المركبة</Link>
                           </Button>
                         ) : (
                           <Button size="sm" variant="outline" className="h-8" disabled>تقارير المركبة</Button>
@@ -984,7 +980,7 @@ export function MunicipalityMap({
                   <div className="max-h-64 space-y-1 overflow-y-auto">
                     {points.slice(0, layersVisibleLimit).map((point) => {
                       const pointId = String(point._id);
-                      const isSelected = selectedPoint != null && String(selectedPoint._id) === pointId;
+                      const isSelected = selectedPoint != null && String(selectedPoint?._id) === pointId;
                       const zoneName = zoneNameById.get(normalizeZoneId(point.zoneId)) || "غير مرتبطة بمنطقة";
                       return (
                         <button
@@ -1011,35 +1007,35 @@ export function MunicipalityMap({
                   </div>
                   {selectedPoint ? (
                     <div className="mt-4 space-y-2 border-t pt-3">
-                      {eventDetailsForPoint && focusPointId && String(selectedPoint._id) === String(focusPointId) && (
+                      {eventDetailsForPoint && focusPointId && String(selectedPoint?._id) === String(focusPointId) && (
                         <>
                           <div className="text-xs font-semibold text-muted-foreground">الحدث المحدد</div>
                           <div className="space-y-1 rounded-md border bg-muted/40 p-2 text-[11px] text-muted-foreground">
-                            <div>{eventDetailsForPoint.displayText || "—"}</div>
-                            <div>الوقت: {eventDetailsForPoint.eventTimestamp || "—"}</div>
-                            <div>المركبة: {eventDetailsForPoint.vehicleName || "—"}</div>
+                            <div>{eventDetailsForPoint?.displayText || "—"}</div>
+                            <div>الوقت: {eventDetailsForPoint?.eventTimestamp || "—"}</div>
+                            <div>المركبة: {eventDetailsForPoint?.vehicleName || "—"}</div>
                             <div>
                               النوع:{" "}
-                              {eventDetailsForPoint.type === "zone_in"
+                              {eventDetailsForPoint?.type === "zone_in"
                                 ? "دخول"
-                                : eventDetailsForPoint.type === "zone_out"
+                                : eventDetailsForPoint?.type === "zone_out"
                                   ? "خروج"
-                                  : eventDetailsForPoint.type || "—"}
+                                  : eventDetailsForPoint?.type || "—"}
                             </div>
-                            {eventDetailsForPoint.driverName && <div>السائق: {eventDetailsForPoint.driverName}</div>}
+                            {eventDetailsForPoint?.driverName && <div>السائق: {eventDetailsForPoint?.driverName}</div>}
                           </div>
                         </>
                       )}
-                      <div className="font-semibold">{selectedPoint.nameAr || selectedPoint.name || "نقطة"}</div>
+                      <div className="font-semibold">{selectedPoint?.nameAr || selectedPoint?.name || "نقطة"}</div>
                       <div className="grid gap-2 text-[11px] text-muted-foreground">
-                        <div>النوع: {pointTypeLabels[selectedPoint.type || ""] || selectedPoint.type || "—"}</div>
-                        <div>المنطقة المرتبطة: {zoneNameById.get(normalizeZoneId(selectedPoint.zoneId)) || "غير مرتبطة بمنطقة"}</div>
-                        {selectedPoint.zoneId && <div>معرف المنطقة: {selectedPoint.zoneId}</div>}
-                        <div>خط العرض: {Number(selectedPoint.lat).toFixed(6)}</div>
-                        <div>خط الطول: {Number(selectedPoint.lng).toFixed(6)}</div>
-                        <div>نصف القطر: {Number(selectedPoint.radiusMeters) || 500} م</div>
-                        {selectedPoint.addressText && <div>العنوان: {selectedPoint.addressText}</div>}
-                        <div>المعرف: {String(selectedPoint._id)}</div>
+                        <div>النوع: {pointTypeLabels[selectedPoint?.type || ""] || selectedPoint?.type || "—"}</div>
+                        <div>المنطقة المرتبطة: {zoneNameById.get(normalizeZoneId(selectedPoint?.zoneId)) || "غير مرتبطة بمنطقة"}</div>
+                        {selectedPoint?.zoneId && <div>معرف المنطقة: {selectedPoint?.zoneId}</div>}
+                        <div>خط العرض: {Number(selectedPoint?.lat).toFixed(6)}</div>
+                        <div>خط الطول: {Number(selectedPoint?.lng).toFixed(6)}</div>
+                        <div>نصف القطر: {Number(selectedPoint?.radiusMeters) || 500} م</div>
+                        {selectedPoint?.addressText && <div>العنوان: {selectedPoint?.addressText}</div>}
+                        <div>المعرف: {String(selectedPoint?._id)}</div>
                       </div>
                     </div>
                   ) : (
@@ -1053,10 +1049,10 @@ export function MunicipalityMap({
                   {eventDetailsForPoint && focusPointId && (
                     <div className="mb-3 space-y-1 rounded-md border bg-muted/40 p-2 text-[11px] text-muted-foreground">
                       <div className="font-semibold text-foreground">الحدث المحدد</div>
-                      <div>{eventDetailsForPoint.displayText || "—"}</div>
-                      <div>الوقت: {eventDetailsForPoint.eventTimestamp || "—"}</div>
-                      <div>المركبة: {eventDetailsForPoint.vehicleName || "—"}</div>
-                      {eventDetailsForPoint.driverName && <div>السائق: {eventDetailsForPoint.driverName}</div>}
+                      <div>{eventDetailsForPoint?.displayText || "—"}</div>
+                      <div>الوقت: {eventDetailsForPoint?.eventTimestamp || "—"}</div>
+                      <div>المركبة: {eventDetailsForPoint?.vehicleName || "—"}</div>
+                      {eventDetailsForPoint?.driverName && <div>السائق: {eventDetailsForPoint?.driverName}</div>}
                     </div>
                   )}
                   <div className="mb-2">
@@ -1123,7 +1119,17 @@ export function MunicipalityMap({
                         )}
                       </div>
                     ))}
-                    {eventsHasMore && <div ref={eventsLoadMoreSentinelRef} className="h-4 min-h-4" aria-hidden />}
+                    {eventsHasMore && (
+                      <div
+                        ref={(node) => {
+                          if (eventsLoadMoreSentinelRef) {
+                            eventsLoadMoreSentinelRef.current = node;
+                          }
+                        }}
+                        className="h-4 min-h-4"
+                        aria-hidden
+                      />
+                    )}
                     {eventsLoadingMore && <div className="py-2 text-center text-sm text-muted-foreground">جاري التحميل...</div>}
                   </div>
                 </>
@@ -1237,43 +1243,43 @@ export function MunicipalityMap({
                   {selectedObject && (
                     <div className="mt-4 border-t pt-3 space-y-2">
                       <div className="flex items-center justify-between">
-                        <div className="font-semibold">{selectedObject.name}</div>
+                        <div className="font-semibold">{selectedObject?.name}</div>
                         <span
                           className={`rounded-full px-2 py-0.5 text-[11px] ${
-                            selectedObject.active ? "bg-emerald-500/15 text-emerald-700" : "bg-slate-500/15 text-slate-600"
+                            selectedObject?.active ? "bg-emerald-500/15 text-emerald-700" : "bg-slate-500/15 text-slate-600"
                           }`}
                         >
-                          {selectedObject.active ? "نشطة" : "غير نشطة"}
+                          {selectedObject?.active ? "نشطة" : "غير نشطة"}
                         </span>
                       </div>
                       <div className="grid grid-cols-2 gap-2 text-[11px] text-muted-foreground">
-                        <div>اللوحة: {selectedObject.plateNumber || "-"}</div>
-                        <div>IMEI: {selectedObject.imei || "-"}</div>
-                        <div>السرعة: {selectedObject.speed} كم/س</div>
-                        <div>الاتجاه: {Math.round(selectedObject.angle || 0)}°</div>
-                        <div>وقت الجهاز: {selectedObject.dtTracker || "-"}</div>
-                        <div>وقت الخادم: {selectedObject.dtServer || "-"}</div>
+                        <div>اللوحة: {selectedObject?.plateNumber || "-"}</div>
+                        <div>IMEI: {selectedObject?.imei || "-"}</div>
+                        <div>السرعة: {selectedObject?.speed ?? 0} كم/س</div>
+                        <div>الاتجاه: {Math.round(selectedObject?.angle || 0)}°</div>
+                        <div>وقت الجهاز: {selectedObject?.dtTracker || "-"}</div>
+                        <div>وقت الخادم: {selectedObject?.dtServer || "-"}</div>
                       </div>
                       {matchedVehicle && (
-                        <div className="text-xs text-muted-foreground">المركبة بالنظام: {matchedVehicle.name}</div>
+                        <div className="text-xs text-muted-foreground">المركبة بالنظام: {matchedVehicle?.name}</div>
                       )}
                       {matchedRoute && (
-                        <div className="text-xs text-muted-foreground">المسار الحالي: {matchedRoute.name}</div>
+                        <div className="text-xs text-muted-foreground">المسار الحالي: {matchedRoute?.name}</div>
                       )}
                       <div className="flex flex-wrap gap-2 pt-1">
-                        <Button size="sm" className="h-8" onClick={() => focusOnObject(selectedObject)} disabled={selectedObject.lat == null || selectedObject.lng == null}>
+                        <Button size="sm" className="h-8" onClick={() => focusOnObject(selectedObject)} disabled={selectedObject?.lat == null || selectedObject?.lng == null}>
                           تحديد على الخريطة
                         </Button>
                         {matchedVehicle?.routeId ? (
                           <Button size="sm" variant="outline" className="h-8" asChild>
-                            <Link href={`/dashboard/routes/${String(matchedVehicle.routeId)}/points`}>عرض المسار</Link>
+                            <Link href={`/dashboard/routes/${String(matchedVehicle?.routeId)}/points`}>عرض المسار</Link>
                           </Button>
                         ) : (
                           <Button size="sm" variant="outline" className="h-8" disabled>عرض المسار</Button>
                         )}
                         {matchedVehicle?._id ? (
                           <Button size="sm" variant="outline" className="h-8" asChild>
-                            <Link href={`/dashboard/reports?vehicleId=${matchedVehicle._id}`}>تقارير المركبة</Link>
+                            <Link href={`/dashboard/reports?vehicleId=${matchedVehicle?._id}`}>تقارير المركبة</Link>
                           </Button>
                         ) : (
                           <Button size="sm" variant="outline" className="h-8" disabled>تقارير المركبة</Button>
@@ -1343,7 +1349,17 @@ export function MunicipalityMap({
                         )}
                       </div>
                     ))}
-                    {eventsHasMore && <div ref={eventsLoadMoreSentinelRef} className="h-4 min-h-4" aria-hidden />}
+                    {eventsHasMore && (
+                      <div
+                        ref={(node) => {
+                          if (eventsLoadMoreSentinelRef) {
+                            eventsLoadMoreSentinelRef.current = node;
+                          }
+                        }}
+                        className="h-4 min-h-4"
+                        aria-hidden
+                      />
+                    )}
                     {eventsLoadingMore && <div className="text-center py-2 text-sm text-muted-foreground">جاري التحميل...</div>}
                   </div>
                 </>
@@ -1374,9 +1390,9 @@ export function MunicipalityMap({
                           const pointId = point._id != null ? String(point._id) : `${point.lat}-${point.lng}`;
                           const selId =
                             selectedPoint != null
-                              ? selectedPoint._id != null
-                                ? String(selectedPoint._id)
-                                : `${selectedPoint.lat}-${selectedPoint.lng}`
+                              ? selectedPoint?._id != null
+                                ? String(selectedPoint?._id)
+                                : `${selectedPoint?.lat}-${selectedPoint?.lng}`
                               : "";
                           const isSelected = selectedPoint != null && pointId === selId;
                           return (
@@ -1429,36 +1445,36 @@ export function MunicipalityMap({
                       </div>
                       {selectedPoint ? (
                         <div className="mt-4 border-t pt-3 space-y-2">
-                          {eventDetailsForPoint && focusPointId && String(selectedPoint._id) === String(focusPointId) && (
+                          {eventDetailsForPoint && focusPointId && String(selectedPoint?._id) === String(focusPointId) && (
                             <>
                               <div className="text-xs font-semibold text-muted-foreground">الحدث المحدد</div>
                               <div className="rounded-md border bg-muted/40 p-2 text-[11px] text-muted-foreground space-y-1">
-                                <div>{eventDetailsForPoint.displayText || "—"}</div>
-                                <div>الوقت: {eventDetailsForPoint.eventTimestamp || "—"}</div>
-                                <div>المركبة: {eventDetailsForPoint.vehicleName || "—"}</div>
-                                <div>النوع: {eventDetailsForPoint.type === "zone_in" ? "دخول" : eventDetailsForPoint.type === "zone_out" ? "خروج" : eventDetailsForPoint.type || "—"}</div>
-                                {eventDetailsForPoint.driverName && <div>السائق: {eventDetailsForPoint.driverName}</div>}
+                                <div>{eventDetailsForPoint?.displayText || "—"}</div>
+                                <div>الوقت: {eventDetailsForPoint?.eventTimestamp || "—"}</div>
+                                <div>المركبة: {eventDetailsForPoint?.vehicleName || "—"}</div>
+                                <div>النوع: {eventDetailsForPoint?.type === "zone_in" ? "دخول" : eventDetailsForPoint?.type === "zone_out" ? "خروج" : eventDetailsForPoint?.type || "—"}</div>
+                                {eventDetailsForPoint?.driverName && <div>السائق: {eventDetailsForPoint?.driverName}</div>}
                               </div>
                             </>
                           )}
-                          <div className="font-semibold">{selectedPoint.nameAr || selectedPoint.name || "نقطة"}</div>
+                          <div className="font-semibold">{selectedPoint?.nameAr || selectedPoint?.name || "نقطة"}</div>
                           <div className="grid gap-2 text-[11px] text-muted-foreground">
-                            <div>النوع: {pointTypeLabels[selectedPoint.type || ""] || selectedPoint.type || "—"}</div>
-                            <div>خط العرض: {Number(selectedPoint.lat).toFixed(6)}</div>
-                            <div>خط الطول: {Number(selectedPoint.lng).toFixed(6)}</div>
-                            <div>نصف القطر: {Number(selectedPoint.radiusMeters) || 500} م</div>
-                            {selectedPoint.zoneId && <div>معرف المنطقة: {selectedPoint.zoneId}</div>}
-                            {selectedPoint.addressText && <div>العنوان: {selectedPoint.addressText}</div>}
-                            {selectedPoint._id != null && <div>المعرف: {String(selectedPoint._id)}</div>}
+                            <div>النوع: {pointTypeLabels[selectedPoint?.type || ""] || selectedPoint?.type || "—"}</div>
+                            <div>خط العرض: {Number(selectedPoint?.lat).toFixed(6)}</div>
+                            <div>خط الطول: {Number(selectedPoint?.lng).toFixed(6)}</div>
+                            <div>نصف القطر: {Number(selectedPoint?.radiusMeters) || 500} م</div>
+                            {selectedPoint?.zoneId && <div>معرف المنطقة: {selectedPoint?.zoneId}</div>}
+                            {selectedPoint?.addressText && <div>العنوان: {selectedPoint?.addressText}</div>}
+                            {selectedPoint?._id != null && <div>المعرف: {String(selectedPoint?._id)}</div>}
                           </div>
                         </div>
                       ) : selectedMarker ? (
                         <div className="mt-4 border-t pt-3 space-y-2">
-                          <div className="font-semibold">{selectedMarker.name || `نقطة أثر ${selectedMarker.id}`}</div>
+                          <div className="font-semibold">{selectedMarker?.name || `نقطة أثر ${selectedMarker?.id}`}</div>
                           <div className="grid gap-2 text-[11px] text-muted-foreground">
-                            <div>المعرف في أثر: {selectedMarker.id}</div>
-                            <div>خط العرض: {Number(selectedMarker.lat).toFixed(6)}</div>
-                            <div>خط الطول: {Number(selectedMarker.lng).toFixed(6)}</div>
+                            <div>المعرف في أثر: {selectedMarker?.id}</div>
+                            <div>خط العرض: {Number(selectedMarker?.lat).toFixed(6)}</div>
+                            <div>خط الطول: {Number(selectedMarker?.lng).toFixed(6)}</div>
                           </div>
                         </div>
                       ) : (
@@ -1468,23 +1484,23 @@ export function MunicipalityMap({
                   )}
                   {activeTab === "zones" && selectedZone != null && (
                     <div className="mt-3 space-y-2">
-                      <div className="font-semibold">{selectedZone.name}</div>
+                      <div className="font-semibold">{selectedZone?.name}</div>
                       <div className="grid gap-2 text-[11px] text-muted-foreground">
-                        <div>المعرف: {selectedZone.id}</div>
-                        {selectedZone.color && (
+                        <div>المعرف: {selectedZone?.id}</div>
+                        {selectedZone?.color && (
                           <div className="flex items-center gap-2">
                             <span>اللون:</span>
-                            <span className="inline-block h-4 w-4 rounded border border-border" style={{ backgroundColor: selectedZone.color }} title={selectedZone.color} />
-                            <span>{selectedZone.color}</span>
+                            <span className="inline-block h-4 w-4 rounded border border-border" style={{ backgroundColor: selectedZone?.color }} title={selectedZone?.color} />
+                            <span>{selectedZone?.color}</span>
                           </div>
                         )}
-                        {selectedZone.center && (
+                        {selectedZone?.center && (
                           <>
-                            <div>خط العرض (المركز): {selectedZone.center.lat.toFixed(6)}</div>
-                            <div>خط الطول (المركز): {selectedZone.center.lng.toFixed(6)}</div>
+                            <div>خط العرض (المركز): {selectedZone?.center?.lat?.toFixed(6)}</div>
+                            <div>خط الطول (المركز): {selectedZone?.center?.lng?.toFixed(6)}</div>
                           </>
                         )}
-                        <div>عدد الرؤوس: {selectedZone.vertices?.length ?? 0}</div>
+                        <div>عدد الرؤوس: {selectedZone?.vertices?.length ?? 0}</div>
                       </div>
                     </div>
                   )}
@@ -1522,12 +1538,12 @@ export function MunicipalityMap({
                       </div>
                       {selectedObject && (
                         <div className="mt-4 border-t pt-3 space-y-2">
-                          <div className="font-semibold">{selectedObject.name}</div>
+                          <div className="font-semibold">{selectedObject?.name}</div>
                           <div className="grid grid-cols-2 gap-2 text-[11px] text-muted-foreground">
-                            <div>اللوحة: {selectedObject.plateNumber || "-"}</div>
-                            <div>السرعة: {selectedObject.speed} كم/س</div>
+                            <div>اللوحة: {selectedObject?.plateNumber || "-"}</div>
+                            <div>السرعة: {selectedObject?.speed ?? 0} كم/س</div>
                           </div>
-                          <Button size="sm" className="h-8 mt-1" onClick={() => selectedObject.lat != null && selectedObject.lng != null && focusOnObject(selectedObject)}>
+                          <Button size="sm" className="h-8 mt-1" onClick={() => selectedObject?.lat != null && selectedObject?.lng != null && focusOnObject(selectedObject)}>
                             تحديد على الخريطة
                           </Button>
                         </div>

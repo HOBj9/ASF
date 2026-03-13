@@ -13,7 +13,7 @@ export function WelcomeGreetingsManagement({
   return (
     <div className="rounded-xl border bg-card p-6 text-right">
       <p className="text-muted-foreground">
-        {initialGreetings.length} عبارة ترحيب. واجهة إدارة العبارات الترحيبية قيد التطوير.
+        {initialGreetings.length} عبارة ترحيبية. واجهة إدارة العبارات الترحيبية قيد التطوير.
       </p>
     </div>
   );

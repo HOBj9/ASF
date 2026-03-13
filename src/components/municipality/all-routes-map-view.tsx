@@ -52,7 +52,7 @@ export function AllRoutesMapView({
   labels,
 }: {
   branchId: string | null;
-  labels: { routeLabel?: string; pointLabel?: string };
+  labels: { routeLabel?: string; pointLabel?: string; branchLabel?: string };
 }) {
   const [routes, setRoutes] = useState<RouteMapItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -186,7 +186,7 @@ export function AllRoutesMapView({
 
           {visibleRoutes.map((route) => {
             const polylinePositions: Array<[number, number]> =
-              route.path?.coordinates?.length >= 2
+              route.path?.coordinates && route.path.coordinates.length >= 2
                 ? route.path.coordinates.map((c) => [c[1], c[0]]) as Array<[number, number]>
                 : route.points
                     .sort((a, b) => a.order - b.order)

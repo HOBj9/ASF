@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useSession } from "next-auth/react"
 import toast from "react-hot-toast"
 import { apiClient } from "@/lib/api/client"
@@ -67,7 +67,7 @@ export function GeographyManager() {
   const branchOrgId = useMemo(() => branches.find((b) => b._id === resolvedBranchId)?.organizationId, [branches, resolvedBranchId])
   const resolvedOrganizationId = selectedOrganizationId || (userIsOrgAdmin ? sessionOrgId : null) || (userIsBranchAdmin ? branchOrgId : null) || ""
 
-  const loadOrganizations = async () => {
+  const loadOrganizations = useCallback(async () => {
     try {
       const res = await apiClient.get("/organizations").catch(() => ({ organizations: [] } as any))
       const list = res.organizations || res.data?.organizations || []
@@ -76,9 +76,9 @@ export function GeographyManager() {
     } catch {
       return []
     }
-  }
+  }, [])
 
-  const loadBranches = async (organizationId: string | null) => {
+  const loadBranches = useCallback(async (organizationId: string | null) => {
     if (!organizationId) { setBranches([]); return }
     try {
       const res = await apiClient.get(`/branches?organizationId=${organizationId}`)
@@ -86,9 +86,9 @@ export function GeographyManager() {
     } catch {
       setBranches([])
     }
-  }
+  }, [])
 
-  const loadBranchesForOrgUser = async () => {
+  const loadBranchesForOrgUser = useCallback(async () => {
     try {
       const res = await apiClient.get("/branches")
       const list = res.branches || res.data?.branches || []
@@ -97,9 +97,9 @@ export function GeographyManager() {
     } catch {
       setBranches([])
     }
-  }
+  }, [selectedBranchId])
 
-  const loadGovernorates = async (orgId: string | null) => {
+  const loadGovernorates = useCallback(async (orgId: string | null) => {
     if (!orgId) { setGovernorates([]); return }
     setLoadingGov(true)
     try {
@@ -110,9 +110,9 @@ export function GeographyManager() {
     } finally {
       setLoadingGov(false)
     }
-  }
+  }, [])
 
-  const loadCities = async (orgId: string | null, governorateId?: string) => {
+  const loadCities = useCallback(async (orgId: string | null, governorateId?: string) => {
     if (!orgId) { setCities([]); return }
     setLoadingCities(true)
     try {
@@ -124,9 +124,9 @@ export function GeographyManager() {
     } finally {
       setLoadingCities(false)
     }
-  }
+  }, [])
 
-  const loadRouteZones = async (branchId: string | null, cityId?: string) => {
+  const loadRouteZones = useCallback(async (branchId: string | null, cityId?: string) => {
     if (!branchId) { setRouteZones([]); return }
     setLoadingZones(true)
     try {
@@ -138,46 +138,46 @@ export function GeographyManager() {
     } finally {
       setLoadingZones(false)
     }
-  }
+  }, [])
 
   useEffect(() => {
     if (session === undefined) return
     if (userIsAdmin) {
-      loadOrganizations().then((list) => {
+      void loadOrganizations().then((list) => {
         if (list.length === 1 && !selectedOrganizationId) setSelectedOrganizationId(list[0]._id)
       })
     } else if (userIsOrgAdmin && !sessionBranchId) {
-      loadBranchesForOrgUser()
+      void loadBranchesForOrgUser()
     } else if (userIsBranchAdmin) {
-      loadBranchesForOrgUser()
+      void loadBranchesForOrgUser()
     }
-  }, [session?.user])
+  }, [loadBranchesForOrgUser, loadOrganizations, selectedOrganizationId, session, sessionBranchId, userIsAdmin, userIsBranchAdmin, userIsOrgAdmin])
 
   useEffect(() => {
     if (userIsAdmin && selectedOrganizationId) {
-      loadBranches(selectedOrganizationId)
+      void loadBranches(selectedOrganizationId)
       setSelectedBranchId("")
     }
-  }, [userIsAdmin, selectedOrganizationId])
+  }, [loadBranches, selectedOrganizationId, userIsAdmin])
 
   useEffect(() => {
     if ((userIsAdmin || userIsOrgAdmin || userIsBranchAdmin) && resolvedOrganizationId) {
-      if (userIsAdmin || userIsOrgAdmin) loadGovernorates(resolvedOrganizationId)
+      if (userIsAdmin || userIsOrgAdmin) void loadGovernorates(resolvedOrganizationId)
       else setGovernorates([])
-      loadCities(resolvedOrganizationId, cityFilterGov && cityFilterGov !== "all" ? cityFilterGov : undefined)
+      void loadCities(resolvedOrganizationId, cityFilterGov && cityFilterGov !== "all" ? cityFilterGov : undefined)
     } else {
       setGovernorates([])
       setCities([])
     }
-  }, [userIsAdmin, userIsOrgAdmin, userIsBranchAdmin, resolvedOrganizationId, cityFilterGov])
+  }, [cityFilterGov, loadCities, loadGovernorates, resolvedOrganizationId, userIsAdmin, userIsBranchAdmin, userIsOrgAdmin])
 
   useEffect(() => {
     if (resolvedBranchId) {
-      loadRouteZones(resolvedBranchId, zoneFilterCity && zoneFilterCity !== "all" ? zoneFilterCity : undefined)
+      void loadRouteZones(resolvedBranchId, zoneFilterCity && zoneFilterCity !== "all" ? zoneFilterCity : undefined)
     } else {
       setRouteZones([])
     }
-  }, [resolvedBranchId, zoneFilterCity])
+  }, [loadRouteZones, resolvedBranchId, zoneFilterCity])
 
   const handleGovImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]

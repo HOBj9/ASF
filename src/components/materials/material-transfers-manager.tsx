@@ -132,7 +132,7 @@ export function MaterialTransfersManager() {
     } else if (sessionBranchId) {
       setSelectedBranchId(sessionBranchId)
     }
-  }, [canSelectBranch, sessionBranchId])
+  }, [canSelectBranch, selectedBranchId, sessionBranchId])
 
   useEffect(() => {
     if (!activeBranchId) return

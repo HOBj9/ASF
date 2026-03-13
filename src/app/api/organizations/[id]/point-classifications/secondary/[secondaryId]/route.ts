@@ -1,25 +1,12 @@
+export const dynamic = 'force-dynamic';
+
 import { NextResponse } from 'next/server';
 import { requirePermission, handleApiError } from '@/lib/middleware/api-auth.middleware';
 import { permissionActions, permissionResources } from '@/constants/permissions';
 import { PointClassificationService } from '@/lib/services/point-classification.service';
-import { isAdmin } from '@/lib/permissions';
-import connectDB from '@/lib/mongodb';
-import Branch from '@/models/Branch';
+import { resolveOrganizationId } from '@/lib/utils/organization.util';
 
 const service = new PointClassificationService();
-
-async function ensureOrgAccess(session: any, organizationId: string): Promise<void> {
-  if (isAdmin(session?.user?.role)) return;
-  const sessionOrg = session?.user?.organizationId?.toString?.();
-  if (sessionOrg === organizationId) return;
-  const branchId = session?.user?.branchId?.toString?.();
-  if (branchId) {
-    await connectDB();
-    const branch = await Branch.findById(branchId).select('organizationId').lean();
-    if (branch && String(branch.organizationId) === organizationId) return;
-  }
-  throw new Error('لا يمكنك الوصول إلى هذه المؤسسة');
-}
 
 export async function PATCH(
   request: Request,
@@ -33,17 +20,15 @@ export async function PATCH(
     if (authResult instanceof NextResponse) return authResult;
 
     const { session } = authResult;
-    const { id: organizationId, secondaryId } = await params;
-    await ensureOrgAccess(session, organizationId);
-
+    const { id: organizationIdParam, secondaryId } = await params;
+    const organizationId = await resolveOrganizationId(session, organizationIdParam);
     const body = await request.json();
-    const { name, nameAr, order } = body;
-    const updated = await service.updateSecondary(secondaryId, organizationId, {
-      name,
-      nameAr,
-      order,
+    const secondary = await service.updateSecondary(secondaryId, organizationId, {
+      name: body.name?.trim(),
+      nameAr: body.nameAr !== undefined ? (body.nameAr?.trim() || null) : undefined,
+      order: body.order,
     });
-    return NextResponse.json({ secondary: updated });
+    return NextResponse.json({ secondary });
   } catch (error: any) {
     return handleApiError(error);
   }
@@ -61,9 +46,8 @@ export async function DELETE(
     if (authResult instanceof NextResponse) return authResult;
 
     const { session } = authResult;
-    const { id: organizationId, secondaryId } = await params;
-    await ensureOrgAccess(session, organizationId);
-
+    const { id: organizationIdParam, secondaryId } = await params;
+    const organizationId = await resolveOrganizationId(session, organizationIdParam);
     await service.deleteSecondary(secondaryId, organizationId);
     return NextResponse.json({ success: true });
   } catch (error: any) {

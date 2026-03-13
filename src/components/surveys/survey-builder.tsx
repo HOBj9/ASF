@@ -19,6 +19,7 @@ import {
 import { Switch } from "@/components/ui/switch"
 import { Plus, Trash2, Loader2 } from "lucide-react"
 import type { ISurveyQuestion } from "@/models/Survey"
+import { isBranchAdmin } from "@/lib/permissions"
 
 const QUESTION_TYPES = [
   { value: "text", label: "نص حر" },
@@ -34,9 +35,11 @@ type Survey = {
   description?: string
   questions: ISurveyQuestion[]
   isActive: boolean
+  branchId?: string | null
 }
 
 type Organization = { _id: string; name: string }
+type Branch = { _id: string; name?: string; nameAr?: string }
 
 const emptyQuestion: ISurveyQuestion = {
   type: "text",
@@ -49,6 +52,8 @@ export function SurveyBuilder({ surveyId }: { surveyId?: string }) {
   const router = useRouter()
   const [organizations, setOrganizations] = useState<Organization[]>([])
   const [organizationId, setOrganizationId] = useState("")
+  const [branches, setBranches] = useState<Branch[]>([])
+  const [branchId, setBranchId] = useState<string | null>(null)
   const [title, setTitle] = useState("")
   const [titleAr, setTitleAr] = useState("")
   const [description, setDescription] = useState("")
@@ -58,7 +63,10 @@ export function SurveyBuilder({ surveyId }: { surveyId?: string }) {
   const [saving, setSaving] = useState(false)
 
   const userIsAdmin = session?.user && (session.user as any).role?.name === "super_admin"
+  const userIsOrgAdmin = session?.user && (session.user as any).role?.name === "organization_admin"
+  const userIsBranchAdmin = session?.user && isBranchAdmin((session.user as any).role)
   const sessionOrgId = (session?.user as any)?.organizationId?.toString?.() || ""
+  const canChooseScope = userIsAdmin || userIsOrgAdmin
 
   const resolvedOrgId = organizationId || sessionOrgId
 
@@ -71,6 +79,20 @@ export function SurveyBuilder({ surveyId }: { surveyId?: string }) {
       return list
     } catch {
       return []
+    }
+  }, [])
+
+  const loadBranches = useCallback(async (orgId: string) => {
+    if (!orgId) {
+      setBranches([])
+      return
+    }
+    try {
+      const res: any = await apiClient.get(`/branches?organizationId=${orgId}`).catch(() => ({ branches: [] }))
+      const list = res.branches || res.data?.branches || []
+      setBranches(list)
+    } catch {
+      setBranches([])
     }
   }, [])
 
@@ -101,6 +123,7 @@ export function SurveyBuilder({ surveyId }: { surveyId?: string }) {
           : [{ ...emptyQuestion }]
       )
       setOrganizationId((s as any).organizationId?.toString?.() || "")
+      setBranchId((s as any).branchId ? String((s as any).branchId) : null)
     } catch (e: any) {
       toast.error(e?.message || "فشل تحميل الاستبيان")
       router.push("/dashboard/surveys")
@@ -112,6 +135,10 @@ export function SurveyBuilder({ surveyId }: { surveyId?: string }) {
   useEffect(() => {
     if (userIsAdmin) loadOrganizations()
   }, [userIsAdmin, loadOrganizations])
+
+  useEffect(() => {
+    if (resolvedOrgId && canChooseScope) loadBranches(resolvedOrgId)
+  }, [resolvedOrgId, canChooseScope, loadBranches])
 
   useEffect(() => {
     if (surveyId) loadSurvey()
@@ -187,23 +214,19 @@ export function SurveyBuilder({ surveyId }: { surveyId?: string }) {
 
     setSaving(true)
     try {
+      const payload = {
+        title: title.trim(),
+        titleAr: titleAr.trim() || undefined,
+        description: description.trim() || undefined,
+        questions: qs,
+        isActive,
+        ...(canChooseScope && { branchId: branchId && branchId.trim() ? branchId : null }),
+      }
       if (surveyId) {
-        await apiClient.patch(`organizations/${resolvedOrgId}/surveys/${surveyId}`, {
-          title: title.trim(),
-          titleAr: titleAr.trim() || undefined,
-          description: description.trim() || undefined,
-          questions: qs,
-          isActive,
-        })
+        await apiClient.patch(`organizations/${resolvedOrgId}/surveys/${surveyId}`, payload)
         toast.success("تم حفظ التعديلات")
       } else {
-        await apiClient.post(`organizations/${resolvedOrgId}/surveys`, {
-          title: title.trim(),
-          titleAr: titleAr.trim() || undefined,
-          description: description.trim() || undefined,
-          questions: qs,
-          isActive,
-        })
+        await apiClient.post(`organizations/${resolvedOrgId}/surveys`, payload)
         toast.success("تم إنشاء الاستبيان")
       }
       router.push("/dashboard/surveys")
@@ -231,7 +254,7 @@ export function SurveyBuilder({ surveyId }: { surveyId?: string }) {
         {userIsAdmin && organizations.length > 1 && (
           <div className="space-y-2">
             <Label>المؤسسة</Label>
-            <Select value={organizationId} onValueChange={setOrganizationId}>
+            <Select value={organizationId} onValueChange={(v) => { setOrganizationId(v); setBranchId(null); loadBranches(v); }}>
               <SelectTrigger>
                 <SelectValue placeholder="اختر المؤسسة" />
               </SelectTrigger>
@@ -239,6 +262,28 @@ export function SurveyBuilder({ surveyId }: { surveyId?: string }) {
                 {organizations.map((o) => (
                   <SelectItem key={o._id} value={o._id}>
                     {o.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
+        {canChooseScope && (
+          <div className="space-y-2">
+            <Label>نطاق الاستبيان</Label>
+            <Select
+              value={branchId ?? "org"}
+              onValueChange={(v) => setBranchId(v === "org" ? null : v)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="للمؤسسة ككل أو لفرع محدد" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="org">للمؤسسة ككل (جميع مشرفي الخطوط)</SelectItem>
+                {branches.map((b) => (
+                  <SelectItem key={b._id} value={b._id}>
+                    لفرع: {b.nameAr || b.name || b._id}
                   </SelectItem>
                 ))}
               </SelectContent>

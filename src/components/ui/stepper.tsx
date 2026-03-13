@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 
 import { Check } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -15,8 +15,8 @@ interface StepperProps {
 
 export function Stepper({ steps, currentStep, progress = 0, className }: StepperProps) {
   return (
-    <div className={cn("w-full", className)}>
-      <div className="flex items-center gap-8">
+    <div className={cn("w-full", className)} dir="rtl">
+      <div className="flex items-center gap-4 md:gap-6">
         {steps.map((step, index) => {
           const stepNumber = index + 1
           const isActive = stepNumber === currentStep
@@ -28,8 +28,8 @@ export function Stepper({ steps, currentStep, progress = 0, className }: Stepper
           const greenIntensity = isStep1 && currentStep === 1 ? Math.min(progress / 100, 1) : 0
 
           return (
-            <div key={index} className="flex items-center flex-1">
-              <div className="flex flex-col items-center flex-1 min-w-0">
+            <div key={index} className="flex items-center flex-1 min-w-[3.5rem]">
+              <div className="flex flex-col items-center flex-1 min-w-0 w-full">
                 {/* Step Circle */}
                 <div className="relative flex items-center justify-center">
                   <div
@@ -71,11 +71,11 @@ export function Stepper({ steps, currentStep, progress = 0, className }: Stepper
                     </div>
                   </div>
                 </div>
-                {/* Step Title */}
-                <div className="mt-2 text-center w-full">
+                {/* Step Title - line-clamp-2 to avoid truncation, RTL-friendly */}
+                <div className="mt-2 text-center w-full min-w-0">
                   <p
                     className={cn(
-                      "text-sm font-medium transition-colors truncate",
+                      "text-sm font-medium transition-colors line-clamp-2 break-words",
                       isActive && !isStep1 && "text-whatsapp",
                       isActive && isStep1 && greenIntensity > 0.5 && "text-[hsl(var(--success))]",
                       isActive && isStep1 && greenIntensity <= 0.5 && "text-whatsapp",
@@ -86,15 +86,15 @@ export function Stepper({ steps, currentStep, progress = 0, className }: Stepper
                     {step.title}
                   </p>
                   {step.description && (
-                    <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                    <p className="text-xs text-muted-foreground mt-1 line-clamp-2 break-words">
                       {step.description}
                     </p>
                   )}
                 </div>
               </div>
-              {/* Connector Line with Progress */}
+              {/* Connector Line with Progress (RTL: line sits between steps) */}
               {index < steps.length - 1 && (
-                <div className="relative flex-1 h-1.5 mx-4 bg-muted overflow-hidden rounded-full">
+                <div className="relative flex-1 min-w-[1rem] h-1.5 mx-2 md:mx-3 bg-muted overflow-hidden rounded-full shrink-0">
                   {index === 0 && currentStep === 1 && progress > 0 && (
                     <div
                       className="absolute right-0 top-0 h-full bg-[hsl(var(--success))] transition-all duration-300 ease-linear rounded-full"

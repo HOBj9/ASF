@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { NextResponse } from 'next/server';
 import connectDB from '@/lib/mongodb';
 import { requirePermission, handleApiError } from '@/lib/middleware/api-auth.middleware';
@@ -178,6 +180,9 @@ export async function GET(request: Request) {
       rows = agg.map((a) => ({
         pointId: String(a._id),
         pointName: pointMap[String(a._id)] ?? '-',
+        vehicleName: '',
+        plateNumber: null,
+        driverName: null,
         visitCount: a.visitCount,
         lastVisitTime: a.lastExitTime ? new Date(a.lastExitTime).toISOString() : '',
       }));

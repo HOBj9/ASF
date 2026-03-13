@@ -26,7 +26,7 @@ export class PermissionService {
   /**
    * Create a new permission
    */
-  async create(data: CreatePermissionData): Promise<IPermission> {
+  async create(data: CreatePermissionData): Promise<any> {
     await connectDB();
 
     // Check if permission already exists
@@ -51,7 +51,7 @@ export class PermissionService {
   /**
    * Get permission by ID
    */
-  async getById(id: string): Promise<IPermission | null> {
+  async getById(id: string): Promise<any | null> {
     await connectDB();
     return Permission.findById(id).lean().exec();
   }
@@ -59,7 +59,7 @@ export class PermissionService {
   /**
    * Get permission by name
    */
-  async getByName(name: string): Promise<IPermission | null> {
+  async getByName(name: string): Promise<any | null> {
     await connectDB();
     return Permission.findOne({ name }).lean().exec();
   }
@@ -67,7 +67,7 @@ export class PermissionService {
   /**
    * Get all permissions
    */
-  async getAll(): Promise<IPermission[]> {
+  async getAll(): Promise<any[]> {
     await connectDB();
     return Permission.find({}).lean().exec();
   }
@@ -75,7 +75,7 @@ export class PermissionService {
   /**
    * Get permissions by resource
    */
-  async getByResource(resource: string): Promise<IPermission[]> {
+  async getByResource(resource: string): Promise<any[]> {
     await connectDB();
     return Permission.find({ resource }).lean().exec();
   }
@@ -83,7 +83,7 @@ export class PermissionService {
   /**
    * Update permission
    */
-  async update(id: string, data: UpdatePermissionData): Promise<IPermission | null> {
+  async update(id: string, data: UpdatePermissionData): Promise<any | null> {
     await connectDB();
 
     const permission = await Permission.findById(id);

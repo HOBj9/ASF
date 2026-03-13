@@ -1,35 +1,37 @@
-import { NextResponse } from "next/server"
-import { requireAdmin, handleApiError } from "@/lib/middleware/api-auth.middleware"
-import { UserService } from "@/lib/services/user.service"
-import { successResponse } from "@/lib/utils/api.util"
+export const dynamic = "force-dynamic";
 
-const userService = new UserService()
+import { NextResponse } from "next/server";
+import { requireAdmin, handleApiError } from "@/lib/middleware/api-auth.middleware";
+import { UserService } from "@/lib/services/user.service";
+import { successResponse } from "@/lib/utils/api.util";
+
+const userService = new UserService();
 
 export async function GET() {
   try {
-    const authResult = await requireAdmin()
-    if (authResult instanceof NextResponse) return authResult
+    const authResult = await requireAdmin();
+    if (authResult instanceof NextResponse) return authResult;
 
-    const users = await userService.getAll()
-    return NextResponse.json({ users })
+    const users = await userService.getAll();
+    return NextResponse.json({ users });
   } catch (error: any) {
-    return handleApiError(error)
+    return handleApiError(error);
   }
 }
 
 export async function POST(request: Request) {
   try {
-    const authResult = await requireAdmin()
-    if (authResult instanceof NextResponse) return authResult
+    const authResult = await requireAdmin();
+    if (authResult instanceof NextResponse) return authResult;
 
-    const body = await request.json()
-    const { name, email, phone, password, role, isActive, branchId, organizationId } = body
+    const body = await request.json();
+    const { name, email, phone, password, role, isActive, branchId, organizationId } = body;
 
     if (!name || !email || !password || !role) {
       return NextResponse.json(
         { error: "جميع الحقول مطلوبة" },
-        { status: 400 }
-      )
+        { status: 400 },
+      );
     }
 
     const user = await userService.create({
@@ -41,11 +43,10 @@ export async function POST(request: Request) {
       organizationId: organizationId || undefined,
       branchId: branchId || undefined,
       isActive: isActive ?? true,
-    })
+    });
 
-    return successResponse({ user })
+    return successResponse({ user });
   } catch (error: any) {
-    return handleApiError(error)
+    return handleApiError(error);
   }
 }
-

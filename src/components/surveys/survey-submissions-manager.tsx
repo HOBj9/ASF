@@ -1,11 +1,18 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
+import dynamic from "next/dynamic"
 import { apiClient } from "@/lib/api/client"
 import { useLabels } from "@/hooks/use-labels"
 import toast from "react-hot-toast"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import {
   Select,
   SelectContent,
@@ -13,7 +20,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { MapPin, Loader2, Send } from "lucide-react"
+import { MapPin, Loader2, Send, Eye } from "lucide-react"
+
+const MapPicker = dynamic(
+  () => import("@/components/ui/map-picker").then((m) => ({ default: m.MapPicker })),
+  { ssr: false, loading: () => <div className="h-[200px] rounded-lg border bg-muted animate-pulse" /> }
+)
 
 type Submission = {
   _id: string
@@ -27,6 +39,10 @@ type Submission = {
 }
 
 type Survey = { _id: string; title: string; titleAr?: string }
+
+type SurveyWithQuestions = Survey & {
+  questions?: { questionText: string; questionTextAr?: string; type?: string }[]
+}
 
 interface SurveySubmissionsManagerProps {
   organizationId: string
@@ -59,6 +75,10 @@ export function SurveySubmissionsManager({
   const [loading, setLoading] = useState(false)
   const [convertingId, setConvertingId] = useState<string | null>(null)
   const [convertingToAtharId, setConvertingToAtharId] = useState<string | null>(null)
+  const [detailsOpen, setDetailsOpen] = useState(false)
+  const [detailsSubmission, setDetailsSubmission] = useState<Submission | null>(null)
+  const [detailsSurvey, setDetailsSurvey] = useState<SurveyWithQuestions | null>(null)
+  const [detailsLoading, setDetailsLoading] = useState(false)
 
   const loadSurveys = useCallback(async () => {
     if (!organizationId) return
@@ -131,6 +151,37 @@ export function SurveySubmissionsManager({
     }
   }
 
+  const openDetails = useCallback(
+    async (s: Submission) => {
+      const surveyId =
+        typeof s.surveyId === "object" && s.surveyId !== null
+          ? (s.surveyId as { _id: string })._id
+          : String(s.surveyId)
+      setDetailsSubmission(s)
+      setDetailsSurvey(null)
+      setDetailsOpen(true)
+      setDetailsLoading(true)
+      try {
+        const res: any = await apiClient.get(
+          `organizations/${organizationId}/surveys/${surveyId}`
+        )
+        setDetailsSurvey(res.survey || null)
+      } catch {
+        toast.error("فشل تحميل تفاصيل الاستبيان")
+        setDetailsSurvey(null)
+      } finally {
+        setDetailsLoading(false)
+      }
+    },
+    [organizationId]
+  )
+
+  const closeDetails = useCallback(() => {
+    setDetailsOpen(false)
+    setDetailsSubmission(null)
+    setDetailsSurvey(null)
+  }, [])
+
   const surveyTitle = (s: Submission) => {
     const survey = s.surveyId
     if (!survey) return "—"
@@ -190,13 +241,13 @@ export function SurveySubmissionsManager({
                   <th className="p-3 font-medium">التاريخ</th>
                   <th className="p-3 font-medium">الموقع</th>
                   <th className="p-3 font-medium max-w-[200px]">ملخص الإجابات</th>
-                  {!onlyMine && <th className="p-3 font-medium text-center">الإجراءات</th>}
+                  <th className="p-3 font-medium text-center">الإجراءات</th>
                 </tr>
               </thead>
               <tbody>
                 {submissions.length === 0 ? (
                   <tr>
-                    <td colSpan={onlyMine ? 4 : 6} className="p-6 text-center text-muted-foreground">
+                    <td colSpan={onlyMine ? 5 : 6} className="p-6 text-center text-muted-foreground">
                       {onlyMine
                         ? "لا توجد ردود منك بعد. يمكنك الإجابة على الاستبيانات من صفحة " + labels.surveyLabel + "."
                         : `لا توجد ردود. يمكنك عرض الإرسالات بعد إجابة المستخدمين على ${labels.surveyLabel}.`}
@@ -227,43 +278,54 @@ export function SurveySubmissionsManager({
                       <td className="p-3 max-w-[200px] truncate text-muted-foreground" title={answersSummary(s.answers)}>
                         {answersSummary(s.answers)}
                       </td>
-                      {!onlyMine && (
-                        <td className="p-3 text-center space-x-2 space-x-reverse">
-                          {!s.pointId ? (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              disabled={convertingId === s._id}
-                              onClick={() => handleConvertToPoint(s._id)}
-                            >
-                              {convertingId === s._id ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                              ) : (
-                                "تحويل إلى نقطة"
-                              )}
-                            </Button>
-                          ) : (
-                            <>
+                      <td className="p-3 text-center">
+                        <div className="flex flex-wrap items-center justify-center gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => openDetails(s)}
+                            className="gap-1"
+                          >
+                            <Eye className="h-4 w-4" />
+                            تفاصيل
+                          </Button>
+                          {!onlyMine && (
+                            !s.pointId ? (
                               <Button
                                 size="sm"
-                                variant="default"
-                                disabled={convertingToAtharId === s._id}
-                                onClick={() => handleConvertToPointAndAthar(s._id)}
+                                variant="outline"
+                                disabled={convertingId === s._id}
+                                onClick={() => handleConvertToPoint(s._id)}
                               >
-                                {convertingToAtharId === s._id ? (
+                                {convertingId === s._id ? (
                                   <Loader2 className="h-4 w-4 animate-spin" />
                                 ) : (
-                                  <>
-                                    <Send className="h-4 w-4 ml-2" />
-                                    تحويل إلى نقطة ثم إلى أثر
-                                  </>
+                                  "تحويل إلى نقطة"
                                 )}
                               </Button>
-                              <span className="text-xs text-muted-foreground">تم التحويل إلى نقطة</span>
-                            </>
+                            ) : (
+                              <>
+                                <Button
+                                  size="sm"
+                                  variant="default"
+                                  disabled={convertingToAtharId === s._id}
+                                  onClick={() => handleConvertToPointAndAthar(s._id)}
+                                >
+                                  {convertingToAtharId === s._id ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <>
+                                      <Send className="h-4 w-4 ml-2" />
+                                      تحويل إلى نقطة ثم إلى أثر
+                                    </>
+                                  )}
+                                </Button>
+                                <span className="text-xs text-muted-foreground">تم التحويل إلى نقطة</span>
+                              </>
+                            )
                           )}
-                        </td>
-                      )}
+                        </div>
+                      </td>
                     </tr>
                   ))
                 )}
@@ -271,6 +333,111 @@ export function SurveySubmissionsManager({
             </table>
           </div>
         )}
+
+        <Dialog open={detailsOpen} onOpenChange={(open) => !open && closeDetails()}>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto text-right">
+            <DialogHeader>
+              <DialogTitle>تفاصيل الرد</DialogTitle>
+            </DialogHeader>
+            {detailsSubmission && (
+              <div className="space-y-4">
+                {detailsLoading ? (
+                  <div className="flex items-center justify-center py-12">
+                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                  </div>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                      <div>
+                        <span className="text-muted-foreground">{labels.surveyLabel}: </span>
+                        {surveyTitle(detailsSubmission)}
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">التاريخ: </span>
+                        {detailsSubmission.createdAt
+                          ? new Date(detailsSubmission.createdAt).toLocaleDateString("ar-SY", {
+                              year: "numeric",
+                              month: "short",
+                              day: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })
+                          : "—"}
+                      </div>
+                      {!onlyMine && (
+                        <div className="sm:col-span-2">
+                          <span className="text-muted-foreground">المُجيب: </span>
+                          {respondentName(detailsSubmission)}
+                        </div>
+                      )}
+                    </div>
+
+                    {detailsSubmission.answers && typeof detailsSubmission.answers === "object" && (
+                      <div className="space-y-2">
+                        <h4 className="font-medium">بيانات النقطة</h4>
+                        <div className="rounded-lg border p-3 space-y-1.5 text-sm bg-muted/30">
+                          {(detailsSubmission.answers as Record<string, unknown>).pointName != null && (
+                            <div>
+                              <span className="text-muted-foreground">اسم النقطة: </span>
+                              {String((detailsSubmission.answers as Record<string, unknown>).pointName)}
+                            </div>
+                          )}
+                          {(detailsSubmission.answers as Record<string, unknown>).otherIdentifier != null && (
+                            <div>
+                              <span className="text-muted-foreground">الرقم التعريفي الآخر: </span>
+                              {String((detailsSubmission.answers as Record<string, unknown>).otherIdentifier)}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {detailsSurvey?.questions && detailsSurvey.questions.length > 0 && (
+                      <div className="space-y-2">
+                        <h4 className="font-medium">الأسئلة والإجابات</h4>
+                        <div className="rounded-lg border divide-y bg-muted/30">
+                          {detailsSurvey.questions.map((q, i) => {
+                            const key = `question_${i}`
+                            const val = (detailsSubmission!.answers as Record<string, unknown>)?.[key]
+                            const display =
+                              val != null && String(val).trim() !== "" ? String(val) : "—"
+                            return (
+                              <div key={i} className="p-3 flex flex-col gap-1">
+                                <span className="text-muted-foreground text-sm">
+                                  {q.questionTextAr || q.questionText}
+                                </span>
+                                <span className="font-medium">{display}</span>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {(detailsSubmission.mapLat !== 0 || detailsSubmission.mapLng !== 0) && (
+                      <div className="space-y-2">
+                        <h4 className="font-medium">الموقع على الخريطة</h4>
+                        <div className="rounded-lg overflow-hidden border">
+                          <MapPicker
+                            lat={detailsSubmission.mapLat}
+                            lng={detailsSubmission.mapLng}
+                            onSelect={() => {}}
+                            height="220px"
+                            showHint={false}
+                          />
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          {Number(detailsSubmission.mapLat).toFixed(5)}،{" "}
+                          {Number(detailsSubmission.mapLng).toFixed(5)}
+                        </p>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
       </CardContent>
     </Card>
   )

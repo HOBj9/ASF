@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { apiClient } from "@/lib/api/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -18,7 +18,7 @@ export function RoutePointsManager({ routeId }: { routeId: string }) {
   const [loading, setLoading] = useState(false)
   const { labels } = useLabels()
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true)
     try {
       let pointsRes: any
@@ -35,11 +35,11 @@ export function RoutePointsManager({ routeId }: { routeId: string }) {
     } finally {
       setLoading(false)
     }
-  }
+  }, [labels.routeLabel, routeId])
 
   useEffect(() => {
-    load()
-  }, [routeId])
+    void load()
+  }, [load])
 
   const togglePoint = (pointId: string) => {
     const exists = routePoints.find((p) => p.pointId === pointId)

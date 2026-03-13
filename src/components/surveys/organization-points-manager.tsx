@@ -1,7 +1,7 @@
 "use client"
 
 import { useSession } from "next-auth/react"
-import { useMemo, useEffect, useState } from "react"
+import { useMemo, useEffect, useState, useCallback } from "react"
 import { apiClient } from "@/lib/api/client"
 import { isAdmin, isOrganizationAdmin } from "@/lib/permissions"
 import { toast } from "react-hot-toast"
@@ -57,7 +57,7 @@ export function OrganizationPointsManager() {
     return ""
   }, [selectedOrgId, session?.user])
 
-  const loadOrganizations = async () => {
+  const loadOrganizations = useCallback(async () => {
     try {
       const res: any = await apiClient.get("/organizations").catch(() => ({ organizations: [] }))
       const list = res.organizations || res.data?.organizations || []
@@ -67,9 +67,9 @@ export function OrganizationPointsManager() {
     } catch {
       return []
     }
-  }
+  }, [selectedOrgId])
 
-  const loadPoints = async (organizationId: string) => {
+  const loadPoints = useCallback(async (organizationId: string) => {
     if (!organizationId) {
       setPoints([])
       setBranchPoints([])
@@ -85,9 +85,9 @@ export function OrganizationPointsManager() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
-  const loadBranchPoints = async (organizationId: string) => {
+  const loadBranchPoints = useCallback(async (organizationId: string) => {
     if (!organizationId) return
     setLoadingBranchPoints(true)
     try {
@@ -98,22 +98,22 @@ export function OrganizationPointsManager() {
     } finally {
       setLoadingBranchPoints(false)
     }
-  }
+  }, [])
 
   useEffect(() => {
     if (!session) return
-    loadOrganizations()
-  }, [session?.user])
+    void loadOrganizations()
+  }, [loadOrganizations, session])
 
   useEffect(() => {
     if (orgId) {
-      loadPoints(orgId)
-      if (canCreate) loadBranchPoints(orgId)
+      void loadPoints(orgId)
+      if (canCreate) void loadBranchPoints(orgId)
     } else {
       setPoints([])
       setBranchPoints([])
     }
-  }, [orgId, canCreate])
+  }, [canCreate, loadBranchPoints, loadPoints, orgId])
 
   const handlePushToBranches = async (pointId: string) => {
     if (!orgId) return

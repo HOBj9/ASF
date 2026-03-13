@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { NextResponse } from 'next/server';
 import { requirePermission, handleApiError } from '@/lib/middleware/api-auth.middleware';
 import { resolveBranchId } from '@/lib/utils/municipality.util';
@@ -44,9 +46,10 @@ export async function GET(request: Request) {
     });
 
     const excelBuffer = toXlsxBuffer(report.headers, report.rows);
+    const responseBody = new Uint8Array(excelBuffer);
     const filename = `point-report-${report.range.start.toISOString().slice(0, 10)}.xlsx`;
 
-    return new NextResponse(excelBuffer, {
+    return new NextResponse(responseBody, {
       status: 200,
       headers: {
         'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',

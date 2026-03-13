@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { NextResponse } from 'next/server';
 import { requireAdmin, handleApiError } from '@/lib/middleware/api-auth.middleware';
 import { BranchService } from '@/lib/services/branch.service';
@@ -27,6 +29,7 @@ export async function POST(request: Request) {
 
     const body = await request.json();
     const {
+      organizationId,
       name,
       nameAr,
       governorate,
@@ -42,9 +45,9 @@ export async function POST(request: Request) {
       adminUserPassword,
     } = body;
 
-    if (!name || !governorate || centerLat === undefined || centerLng === undefined) {
+    if (!organizationId || !name || !governorate || centerLat === undefined || centerLng === undefined) {
       return NextResponse.json(
-        { error: 'الحقول المطلوبة: الاسم، المحافظة، الاحداثيات' },
+        { error: 'الحقول المطلوبة: المؤسسة، الاسم، المحافظة، والإحداثيات' },
         { status: 400 }
       );
     }
@@ -57,6 +60,7 @@ export async function POST(request: Request) {
     }
 
     const branch = await branchService.create({
+      organizationId,
       name,
       nameAr,
       governorate,
@@ -82,6 +86,7 @@ export async function POST(request: Request) {
         email: adminUserEmail,
         password: adminUserPassword,
         role: defaultRole._id.toString(),
+        organizationId,
         branchId: branch._id.toString(),
         isActive: true,
       });

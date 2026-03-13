@@ -157,7 +157,7 @@ export function RoutesManager() {
 
   const pointMap = useMemo(() => new Map(points.map((p) => [p._id, p])), [points])
 
-  const loadOrganizations = async () => {
+  const loadOrganizations = useCallback(async () => {
     try {
       const res = await apiClient.get("/organizations").catch(() => ({ organizations: [] } as any))
       const list = res.organizations || res.data?.organizations || []
@@ -166,9 +166,9 @@ export function RoutesManager() {
     } catch {
       return []
     }
-  }
+  }, [])
 
-  const loadBranches = async (organizationId: string | null) => {
+  const loadBranches = useCallback(async (organizationId: string | null) => {
     if (!organizationId) {
       setBranches([])
       return
@@ -180,9 +180,9 @@ export function RoutesManager() {
     } catch {
       setBranches([])
     }
-  }
+  }, [])
 
-  const loadBranchesForOrgUser = async () => {
+  const loadBranchesForOrgUser = useCallback(async () => {
     try {
       const res = await apiClient.get("/branches")
       const list = res.branches || res.data?.branches || []
@@ -191,9 +191,9 @@ export function RoutesManager() {
     } catch {
       setBranches([])
     }
-  }
+  }, [selectedBranchId])
 
-  const load = async (branchId: string | null) => {
+  const load = useCallback(async (branchId: string | null) => {
     if (needsBranchSelector && !branchId) {
       setItems([])
       setVehicles([])
@@ -215,9 +215,9 @@ export function RoutesManager() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [labels.routeLabel, needsBranchSelector])
 
-  const loadRouteZones = async (branchId: string | null) => {
+  const loadRouteZones = useCallback(async (branchId: string | null) => {
     if (!branchId) { setRouteZones([]); return }
     try {
       const res: any = await apiClient.get(`/route-zones?branchId=${branchId}`)
@@ -225,9 +225,9 @@ export function RoutesManager() {
     } catch {
       setRouteZones([])
     }
-  }
+  }, [])
 
-  const loadWorkSchedules = async (branchId: string | null) => {
+  const loadWorkSchedules = useCallback(async (branchId: string | null) => {
     if (!branchId) { setWorkSchedules([]); return }
     try {
       const res: any = await apiClient.get(`/work-schedules?branchId=${branchId}`)
@@ -235,9 +235,9 @@ export function RoutesManager() {
     } catch {
       setWorkSchedules([])
     }
-  }
+  }, [])
 
-  const loadPoints = async (branchId: string | null) => {
+  const loadPoints = useCallback(async (branchId: string | null) => {
     if (needsBranchSelector && !branchId) {
       setPoints([])
       return
@@ -253,22 +253,22 @@ export function RoutesManager() {
     } finally {
       setPointsLoading(false)
     }
-  }
+  }, [labels.pointLabel, needsBranchSelector])
 
   useEffect(() => {
     if (session === undefined) return
     if (userIsAdmin) {
-      loadOrganizations().then((list) => {
+      void loadOrganizations().then((list) => {
         if (list.length === 1 && !selectedOrganizationId) setSelectedOrganizationId(list[0]._id)
       })
     } else if (userIsOrgAdmin && !sessionBranchId) {
-      loadBranchesForOrgUser()
+      void loadBranchesForOrgUser()
     } else if (userIsBranchAdmin) {
-      loadBranchesForOrgUser()
+      void loadBranchesForOrgUser()
     } else {
-      load(null)
+      void load(null)
     }
-  }, [session?.user])
+  }, [load, loadBranchesForOrgUser, loadOrganizations, selectedOrganizationId, session, sessionBranchId, userIsAdmin, userIsBranchAdmin, userIsOrgAdmin])
 
   useEffect(() => {
     if (branchIdFromUrl && needsBranchSelector) {
@@ -278,40 +278,36 @@ export function RoutesManager() {
 
   useEffect(() => {
     if (userIsAdmin && selectedOrganizationId) {
-      loadBranches(selectedOrganizationId)
+      void loadBranches(selectedOrganizationId)
       if (!branchIdFromUrl) setSelectedBranchId("")
     }
-  }, [userIsAdmin, selectedOrganizationId, branchIdFromUrl])
+  }, [branchIdFromUrl, loadBranches, selectedOrganizationId, userIsAdmin])
 
   useEffect(() => {
     if (!needsBranchSelector) return
-    if (resolvedBranchId) load(resolvedBranchId)
+    if (resolvedBranchId) {
+      void load(resolvedBranchId)
+    }
     else setItems([])
-  }, [needsBranchSelector, resolvedBranchId])
+  }, [load, needsBranchSelector, resolvedBranchId])
 
   const hasHandledEditFromUrl = useRef(false)
-  useEffect(() => {
-    if (!editRouteIdFromUrl || items.length === 0 || !resolvedBranchId || hasHandledEditFromUrl.current) return
-    const item = items.find((i) => i._id === editRouteIdFromUrl)
-    if (item) {
-      hasHandledEditFromUrl.current = true
-      openEdit(item)
-    }
-  }, [editRouteIdFromUrl, items, resolvedBranchId])
 
   useEffect(() => {
-    if (!needsBranchSelector && session?.user) load(resolvedBranchId)
-  }, [needsBranchSelector, session?.user, resolvedBranchId])
+    if (!needsBranchSelector && session?.user) {
+      void load(resolvedBranchId)
+    }
+  }, [load, needsBranchSelector, resolvedBranchId, session])
 
   useEffect(() => {
     if (resolvedBranchId) {
-      loadRouteZones(resolvedBranchId)
-      loadWorkSchedules(resolvedBranchId)
+      void loadRouteZones(resolvedBranchId)
+      void loadWorkSchedules(resolvedBranchId)
     } else {
       setRouteZones([])
       setWorkSchedules([])
     }
-  }, [resolvedBranchId])
+  }, [loadRouteZones, loadWorkSchedules, resolvedBranchId])
 
   const filteredItems = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -444,7 +440,7 @@ export function RoutesManager() {
     ])
   }
 
-  const openEdit = async (item: RouteItem) => {
+  const openEdit = useCallback(async (item: RouteItem) => {
     setEditing(item)
     setForm({
       ...item,
@@ -496,7 +492,16 @@ export function RoutesManager() {
         }
       })(),
     ])
-  }
+  }, [labels.pointLabel, loadPoints, loadRouteZones, loadWorkSchedules, resolvedBranchId, vehicles])
+
+  useEffect(() => {
+    if (!editRouteIdFromUrl || items.length === 0 || !resolvedBranchId || hasHandledEditFromUrl.current) return
+    const item = items.find((i) => i._id === editRouteIdFromUrl)
+    if (item) {
+      hasHandledEditFromUrl.current = true
+      void openEdit(item)
+    }
+  }, [editRouteIdFromUrl, items, openEdit, resolvedBranchId])
 
   const addPointToRoute = (pointId: string) => {
     if (routePoints.some((rp) => rp.pointId === pointId)) return

@@ -59,7 +59,7 @@ export interface UpdatePointData {
 }
 
 export class PointService {
-  async create(data: CreatePointData): Promise<IPoint> {
+  async create(data: CreatePointData): Promise<any> {
     await connectDB();
 
     const branch = await Branch.findById(data.branchId).lean();
@@ -96,17 +96,17 @@ export class PointService {
     return point;
   }
 
-  async getAll(branchId: string): Promise<IPoint[]> {
+  async getAll(branchId: string): Promise<any[]> {
     await connectDB();
     return Point.find({ branchId }).lean().exec();
   }
 
-  async getById(id: string, branchId: string): Promise<IPoint | null> {
+  async getById(id: string, branchId: string): Promise<any | null> {
     await connectDB();
     return Point.findOne({ _id: id, branchId }).lean().exec();
   }
 
-  async update(id: string, branchId: string, data: UpdatePointData): Promise<IPoint | null> {
+  async update(id: string, branchId: string, data: UpdatePointData): Promise<any | null> {
     await connectDB();
 
     const point = await Point.findOne({ _id: id, branchId });
@@ -141,7 +141,7 @@ export class PointService {
   }
 
   /** Organization-level point: create at organization (branchId null). */
-  async createAtOrganization(organizationId: string, data: CreateOrgPointData): Promise<IPoint> {
+  async createAtOrganization(organizationId: string, data: CreateOrgPointData): Promise<any> {
     await connectDB();
 
     const org = await Organization.findById(organizationId).lean();
@@ -181,13 +181,13 @@ export class PointService {
   }
 
   /** Get all organization-level points (branchId null). */
-  async getByOrganization(organizationId: string): Promise<IPoint[]> {
+  async getByOrganization(organizationId: string): Promise<any[]> {
     await connectDB();
     return Point.find({ organizationId, branchId: null }).lean().exec();
   }
 
   /** Get single org-level point by id. */
-  async getOrgPointById(id: string, organizationId: string): Promise<IPoint | null> {
+  async getOrgPointById(id: string, organizationId: string): Promise<any | null> {
     await connectDB();
     return Point.findOne({ _id: id, organizationId, branchId: null }).lean().exec();
   }
@@ -361,7 +361,7 @@ export class PointService {
   async syncFromAtharZones(
     branchId: string,
     zones: Array<Record<string, any>>
-  ): Promise<IPoint[]> {
+  ): Promise<any[]> {
     console.log('[Athar] syncFromAtharZones: branchId=', branchId, 'zones count=', zones.length);
     await connectDB();
 
@@ -370,7 +370,7 @@ export class PointService {
       throw new Error('الفرع غير موجود');
     }
 
-    const results: IPoint[] = [];
+    const results: any[] = [];
     for (const z of zones) {
       const zoneIdRaw = z.zone_id ?? z.id ?? z._id;
       if (zoneIdRaw == null || zoneIdRaw === '') continue;

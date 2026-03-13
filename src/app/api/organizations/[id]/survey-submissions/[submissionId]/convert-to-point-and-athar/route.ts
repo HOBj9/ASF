@@ -1,30 +1,25 @@
-import { NextResponse } from "next/server"
-import { requirePermission, handleApiError } from "@/lib/middleware/api-auth.middleware"
-import { permissionActions, permissionResources } from "@/constants/permissions"
-import { isAdmin, isLineSupervisor } from "@/lib/permissions"
-import connectDB from "@/lib/mongodb"
-import Branch from "@/models/Branch"
-import Point from "@/models/Point"
-import SurveySubmission from "@/models/SurveySubmission"
-import Vehicle from "@/models/Vehicle"
-import { PointService } from "@/lib/services/point.service"
-import { AtharService } from "@/lib/services/athar.service"
+export const dynamic = 'force-dynamic';
 
-const pointService = new PointService()
+import { NextResponse } from 'next/server';
+import { requirePermission, handleApiError } from '@/lib/middleware/api-auth.middleware';
+import { permissionResources, permissionActions } from '@/constants/permissions';
+import { SurveyService } from '@/lib/services/survey.service';
+import { PointService } from '@/lib/services/point.service';
+import { AtharService } from '@/lib/services/athar.service';
+import { resolveOrganizationId } from '@/lib/utils/organization.util';
+import connectDB from '@/lib/mongodb';
+import Point from '@/models/Point';
+import Branch from '@/models/Branch';
 
-async function ensureOrgAccess(session: any, organizationId: string): Promise<void> {
-  if (isAdmin(session?.user?.role)) return
-  const sessionOrg = session?.user?.organizationId?.toString?.()
-  if (sessionOrg === organizationId) return
-  const branchId = session?.user?.branchId?.toString?.()
-  if (branchId) {
-    await connectDB()
-    const branch = await Branch.findById(branchId).select("organizationId").lean()
-    if (branch && String(branch.organizationId) === organizationId) return
-  }
-  throw new Error("لا يمكنك الوصول إلى هذه المؤسسة")
-}
+const surveyService = new SurveyService();
+const pointService = new PointService();
 
+/**
+ * POST: تحويل رد الاستبيان إلى نقطة في النظام ثم إنشاء المناطق في أثر.
+ * 1) حفظ النقطة عندنا (على مستوى المؤسسة وربطها بالرد).
+ * 2) نسخ النقطة إلى جميع الفروع.
+ * 3) لكل فرع له مفتاح أثر: إنشاء منطقة في أثر وربطها بنقطة الفرع.
+ */
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string; submissionId: string }> }
@@ -33,135 +28,73 @@ export async function POST(
     const authResult = await requirePermission(
       permissionResources.POINTS,
       permissionActions.TRANSFER_TO_ATHAR
-    )
-    if (authResult instanceof NextResponse) return authResult
+    );
+    if (authResult instanceof NextResponse) return authResult;
 
-    const { session } = authResult
-    if (isLineSupervisor(session?.user?.role as any)) {
-      return NextResponse.json(
-        { error: "غير مصرح لمشرف الخط بتحويل الرد إلى نقطة ثم إلى أثر" },
-        { status: 403 }
-      )
-    }
-    const userId = session?.user?.id ?? undefined
-    const { id: organizationId, submissionId } = await params
-    await ensureOrgAccess(session, organizationId)
+    const { session } = authResult;
+    const { id: organizationIdParam, submissionId } = await params;
+    const organizationId = await resolveOrganizationId(session, organizationIdParam);
 
-    await connectDB()
-    let submission = await SurveySubmission.findOne({
-      _id: submissionId,
+    const { point } = await surveyService.ensurePointFromSubmission(
+      submissionId,
+      organizationId
+    );
+    const pointId = point._id?.toString?.() ?? String(point._id);
+
+    const pushed = await pointService.pushPointToAllBranches(organizationId, pointId);
+    const orgPointName = point.name || point.nameAr || 'نقطة';
+
+    await connectDB();
+    const branchesWithAthar = await Branch.find({
       organizationId,
-    }).lean()
-    if (!submission) {
-      return NextResponse.json({ error: "الإرسالة غير موجودة" }, { status: 404 })
-    }
+      isActive: true,
+      atharKey: { $exists: true, $type: 'string', $ne: '' },
+    })
+      .select('_id')
+      .lean()
+      .exec();
 
-    let pointId = submission.pointId?.toString?.()
-    if (!pointId) {
-      const answers = submission.answers && typeof submission.answers === "object"
-        ? (submission.answers as Record<string, unknown>)
-        : {}
-      const nameFromAnswers = String(
-        answers.pointName ?? answers.name ?? answers.question_0 ?? ""
-      ).trim()
-      const pointName =
-        nameFromAnswers ||
-        `نقطة من مسح – ${new Date().toLocaleDateString("ar-SY")}`
+    const radiusMeters = 500;
+    let zonesCreated = 0;
+    const errors: string[] = [];
 
-      const point = await pointService.createAtOrganization(organizationId, {
-        name: pointName,
-        lat: submission.mapLat,
-        lng: submission.mapLng,
-        type: "container",
-        radiusMeters: 500,
-        isActive: true,
-        createdByUserId: userId ?? null,
-        primaryClassificationId: answers.primaryClassificationId || null,
-        secondaryClassificationId: answers.secondaryClassificationId || null,
-        otherIdentifier: answers.otherIdentifier || null,
+    for (const branch of branchesWithAthar) {
+      const branchId = branch._id.toString();
+      const branchPoint = await Point.findOne({
+        branchId,
+        name: orgPointName,
       })
-      pointId = point._id.toString()
+        .lean()
+        .exec();
 
-      await SurveySubmission.updateOne(
-        { _id: submissionId, organizationId },
-        { $set: { pointId: point._id } }
-      )
-    }
+      if (!branchPoint) continue;
+      if (branchPoint.zoneId) {
+        continue;
+      }
 
-    const orgPoint = await Point.findOne({
-      _id: pointId,
-      organizationId,
-      branchId: null,
-    }).lean()
-    if (!orgPoint) {
-      return NextResponse.json({ error: "النقطة غير موجودة" }, { status: 404 })
-    }
-
-    const pushed = await pointService.pushPointToAllBranches(organizationId, pointId)
-
-    const branches = await Branch.find({ organizationId, isActive: true }).lean().exec()
-    const branchesWithAthar = branches.filter((b) => b.atharKey && String(b.atharKey).trim())
-    const branchIds = branchesWithAthar.map((b) => b._id.toString())
-    const webhookUrl = `${process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || "http://localhost:3000"}/api/athar/webhook`
-
-    const branchPoints = await Point.find({
-      branchId: { $in: branchIds },
-      name: orgPoint.name,
-      $or: [{ zoneId: null }, { zoneId: "" }],
-    }).lean().exec()
-
-    let zonesCreated = 0
-    const errors: string[] = []
-
-    for (const bp of branchPoints) {
-      const bid = bp.branchId?.toString?.()
-      if (!bid) continue
       try {
-        const atharService = await AtharService.forBranch(bid)
-        const pointName = bp.nameAr || bp.nameEn || bp.name || "نقطة"
-        const radius = bp.radiusMeters ?? 500
-        const zoneId = await atharService.ensureZone(
-          pointName,
-          { lat: Number(bp.lat), lng: Number(bp.lng) },
-          radius
-        )
-        await pointService.update(String(bp._id), bid, { zoneId })
-
-        const vehicles = await Vehicle.find({
-          branchId: bid,
-          imei: { $ne: null },
-          isActive: true,
-        })
-          .select("imei name")
-          .lean()
-
-        for (const vehicle of vehicles) {
-          if (!vehicle.imei) continue
-          try {
-            await atharService.createZoneEvent(pointName, zoneId, vehicle.imei, "zone_in", webhookUrl)
-            await atharService.createZoneEvent(pointName, zoneId, vehicle.imei, "zone_out", webhookUrl)
-          } catch (e) {
-            console.warn("[convert-to-point-and-athar] zone event failed", e)
-          }
+        const atharService = await AtharService.forBranch(branchId);
+        const zoneId = await atharService.createZone(
+          orgPointName,
+          { lat: branchPoint.lat, lng: branchPoint.lng },
+          radiusMeters
+        );
+        if (zoneId) {
+          await Point.findByIdAndUpdate(branchPoint._id, { zoneId });
+          zonesCreated++;
         }
-        zonesCreated++
       } catch (err: any) {
-        errors.push(`فرع ${bid}: ${err?.message || "فشل"}`)
+        errors.push(`الفرع ${branchId}: ${err?.message || 'فشل إنشاء المنطقة في أثر'}`);
       }
     }
 
-    const updatedSubmission = await SurveySubmission.findById(submissionId)
-      .populate("userId", "name email")
-      .lean()
-
     return NextResponse.json({
-      pointId,
+      point,
       pushed,
       zonesCreated,
-      errors: errors.length > 0 ? errors : undefined,
-      submission: updatedSubmission,
-    })
+      errors: errors.length ? errors : undefined,
+    });
   } catch (error: any) {
-    return handleApiError(error)
+    return handleApiError(error);
   }
 }

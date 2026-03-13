@@ -1,4 +1,6 @@
-﻿import { NextResponse } from "next/server"
+export const dynamic = 'force-dynamic';
+
+import { NextResponse } from "next/server"
 import { appConfig } from "@/lib/config/app.config"
 import { messages } from "@/constants/messages"
 import { AuthService } from "@/lib/services/auth.service"

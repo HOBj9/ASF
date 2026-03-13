@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import Image from "next/image"
 import { usePathname } from "next/navigation"
 import { useSession } from "next-auth/react"
 import {
@@ -38,7 +39,7 @@ import { apiClient } from "@/lib/api/client"
 import { cn } from "@/lib/utils"
 import { useSidebarStore } from "@/store/sidebar-store"
 import { useEffect, useState, useMemo } from "react"
-import { hasAnyPermission, hasPermission, isAdmin, isOrganizationAdmin, isBranchAdmin } from "@/lib/permissions"
+import { hasAnyPermission, hasPermission, isAdmin, isOrganizationAdmin, isBranchAdmin, isLineSupervisor } from "@/lib/permissions"
 import { permissionActions, permissionResources } from "@/constants/permissions"
 import { useLabels } from "@/hooks/use-labels"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -309,10 +310,12 @@ export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarP
     },
   ]), [labels.branchLabel, labels.driverLabel, labels.pointLabel, labels.routeLabel, labels.vehicleLabel, labels.lineSupervisorLabel, labels.surveyLabel, labels.eventsReportLabel])
 
+  const userIsLineSupervisor = useMemo(() => isLineSupervisor(session?.user?.role as any), [session?.user?.role])
+
   const filteredMenuItems = menuItems.filter(
     (item) => {
       if (item.href === "/dashboard") {
-        return true
+        return !userIsLineSupervisor
       }
       if ((item as any).organizationAdminOrSuperAdmin) {
         return userIsOrgAdmin || userIsAdmin
@@ -376,13 +379,24 @@ export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarP
   }
 
   const groupedItems = useMemo(() => {
+    const localGroupLabels = {
+      general: "عام",
+      organizations: "إدارة المؤسسات",
+      branchOps: "الفرع والعمليات",
+      geography: "الإدارة الجغرافية",
+      surveys: "الاستبيانات",
+      reports: "التقارير",
+      userManagement: "إدارة المستخدمين",
+      system: "النظام",
+      materials: "المواد",
+    }
     const map = new Map<string, typeof filteredMenuItems>()
     for (const item of filteredMenuItems) {
       const list = map.get(item.group) ?? []
       list.push(item)
       map.set(item.group, list)
     }
-    const order: (keyof typeof groupLabels)[] = [
+    const order: (keyof typeof localGroupLabels)[] = [
       "general",
       "organizations",
       "branchOps",
@@ -395,7 +409,7 @@ export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarP
     ]
     return order
       .filter((key) => map.has(key) && map.get(key)!.length > 0)
-      .map((key) => ({ groupKey: key, label: groupLabels[key], items: map.get(key)! }))
+      .map((key) => ({ groupKey: key, label: localGroupLabels[key], items: map.get(key)! }))
   }, [filteredMenuItems])
   const sidebarLoading = sessionStatus === "loading" || labelsLoading || roleLoading
 
@@ -490,9 +504,12 @@ export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarP
               >
                 <div className="relative">
                   {currentUser.avatar ? (
-                    <img
+                    <Image
                       src={currentUser.avatar}
                       alt={currentUser.name}
+                      width={isCollapsed ? 40 : 48}
+                      height={isCollapsed ? 40 : 48}
+                      unoptimized
                       className={cn(
                         "rounded-full object-cover border-2 border-[hsl(var(--primary))]/30 dark:border-[hsl(var(--primary))]/40 group-hover:border-[hsl(var(--primary))]/50 transition-all",
                         isCollapsed ? "h-10 w-10" : "h-12 w-12"

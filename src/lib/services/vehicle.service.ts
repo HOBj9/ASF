@@ -79,7 +79,7 @@ export class VehicleService {
     }
   }
 
-  async create(data: CreateVehicleData): Promise<IVehicle> {
+  async create(data: CreateVehicleData): Promise<any> {
     await connectDB();
 
     const branch = await Branch.findById(data.branchId).lean();
@@ -116,7 +116,7 @@ export class VehicleService {
     return vehicle;
   }
 
-  async getAll(branchId: string): Promise<IVehicle[]> {
+  async getAll(branchId: string): Promise<any[]> {
     await connectDB();
     return Vehicle.find({ branchId }).lean().exec();
   }
@@ -169,12 +169,12 @@ export class VehicleService {
     return { imported, skipped };
   }
 
-  async getById(id: string, branchId: string): Promise<IVehicle | null> {
+  async getById(id: string, branchId: string): Promise<any | null> {
     await connectDB();
     return Vehicle.findOne({ _id: id, branchId }).lean().exec();
   }
 
-  async update(id: string, branchId: string, data: UpdateVehicleData): Promise<IVehicle | null> {
+  async update(id: string, branchId: string, data: UpdateVehicleData): Promise<any | null> {
     await connectDB();
 
     const vehicle = await Vehicle.findOne({ _id: id, branchId });
@@ -201,7 +201,7 @@ export class VehicleService {
     if (data.driverId !== undefined && (data.driverId === '' || data.driverId == null)) updateData.driverId = null;
     if (data.routeId !== undefined && (data.routeId === '' || data.routeId == null)) updateData.routeId = null;
     if (data.fuelPricePerKm !== undefined) {
-      updateData.fuelPricePerKm = (data.fuelPricePerKm === '' || data.fuelPricePerKm == null)
+      updateData.fuelPricePerKm = data.fuelPricePerKm == null
         ? null
         : Number(data.fuelPricePerKm);
     }

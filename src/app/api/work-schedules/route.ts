@@ -1,12 +1,14 @@
-import { NextResponse } from 'next/server';
-import { requirePermission, handleApiError } from '@/lib/middleware/api-auth.middleware';
-import { WorkScheduleService } from '@/lib/services/work-schedule.service';
-import { permissionActions, permissionResources } from '@/constants/permissions';
-import { resolveBranchId } from '@/lib/utils/municipality.util';
-import { resolveOrganizationId } from '@/lib/utils/organization.util';
-import { isAdmin, isOrganizationAdmin } from '@/lib/permissions';
-import connectDB from '@/lib/mongodb';
-import Branch from '@/models/Branch';
+export const dynamic = "force-dynamic";
+
+import { NextResponse } from "next/server";
+import { requirePermission, handleApiError } from "@/lib/middleware/api-auth.middleware";
+import { WorkScheduleService } from "@/lib/services/work-schedule.service";
+import { permissionActions, permissionResources } from "@/constants/permissions";
+import { resolveBranchId } from "@/lib/utils/municipality.util";
+import { resolveOrganizationId } from "@/lib/utils/organization.util";
+import { isAdmin, isOrganizationAdmin } from "@/lib/permissions";
+import connectDB from "@/lib/mongodb";
+import Branch from "@/models/Branch";
 
 const service = new WorkScheduleService();
 
@@ -17,31 +19,31 @@ async function ensureOrgAccess(session: any, organizationId: string): Promise<vo
   const branchId = session?.user?.branchId?.toString?.();
   if (branchId) {
     await connectDB();
-    const branch = await Branch.findById(branchId).select('organizationId').lean();
+    const branch = await Branch.findById(branchId).select("organizationId").lean();
     if (branch && String(branch.organizationId) === organizationId) return;
   }
-  throw new Error('لا يمكنك الوصول إلى هذه المؤسسة');
+  throw new Error("لا يمكنك الوصول إلى هذه المؤسسة");
 }
 
 async function ensureBranchAccess(session: any, branchId: string): Promise<void> {
   if (isAdmin(session?.user?.role) || isOrganizationAdmin(session?.user?.role)) return;
   const sessionBranchId = session?.user?.branchId?.toString?.();
   if (sessionBranchId === branchId) return;
-  throw new Error('لا يمكنك الوصول إلى هذا الفرع');
+  throw new Error("لا يمكنك الوصول إلى هذا الفرع");
 }
 
 export async function GET(request: Request) {
   try {
     const authResult = await requirePermission(
       permissionResources.WORK_SCHEDULES,
-      permissionActions.READ
+      permissionActions.READ,
     );
     if (authResult instanceof NextResponse) return authResult;
 
     const { session } = authResult;
     const { searchParams } = new URL(request.url);
-    const organizationIdParam = searchParams.get('organizationId');
-    const branchIdParam = searchParams.get('branchId');
+    const organizationIdParam = searchParams.get("organizationId");
+    const branchIdParam = searchParams.get("branchId");
 
     if (branchIdParam) {
       const branchId = resolveBranchId(session, branchIdParam);
@@ -58,8 +60,8 @@ export async function GET(request: Request) {
     }
 
     return NextResponse.json(
-      { error: 'يرجى تحديد organizationId أو branchId' },
-      { status: 400 }
+      { error: "يرجى تحديد organizationId أو branchId" },
+      { status: 400 },
     );
   } catch (error: any) {
     return handleApiError(error);
@@ -70,7 +72,7 @@ export async function POST(request: Request) {
   try {
     const authResult = await requirePermission(
       permissionResources.WORK_SCHEDULES,
-      permissionActions.CREATE
+      permissionActions.CREATE,
     );
     if (authResult instanceof NextResponse) return authResult;
 
@@ -86,8 +88,8 @@ export async function POST(request: Request) {
       days,
     } = body;
 
-    if (!name || typeof name !== 'string' || !name.trim()) {
-      return NextResponse.json({ error: 'الاسم مطلوب' }, { status: 400 });
+    if (!name || typeof name !== "string" || !name.trim()) {
+      return NextResponse.json({ error: "الاسم مطلوب" }, { status: 400 });
     }
 
     const organizationId = await resolveOrganizationId(session, bodyOrgId);

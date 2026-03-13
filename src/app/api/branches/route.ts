@@ -1,10 +1,12 @@
-import { NextResponse } from 'next/server';
-import { requirePermission, handleApiError } from '@/lib/middleware/api-auth.middleware';
-import { BranchService } from '@/lib/services/branch.service';
-import { permissionActions, permissionResources } from '@/constants/permissions';
-import { resolveOrganizationId } from '@/lib/utils/organization.util';
-import { cloneOrganizationMaterialTreeToBranch } from '@/lib/services/material-tree.service';
-import { PointService } from '@/lib/services/point.service';
+export const dynamic = "force-dynamic";
+
+import { NextResponse } from "next/server";
+import { requirePermission, handleApiError } from "@/lib/middleware/api-auth.middleware";
+import { BranchService } from "@/lib/services/branch.service";
+import { permissionActions, permissionResources } from "@/constants/permissions";
+import { resolveOrganizationId } from "@/lib/utils/organization.util";
+import { cloneOrganizationMaterialTreeToBranch } from "@/lib/services/material-tree.service";
+import { PointService } from "@/lib/services/point.service";
 
 const branchService = new BranchService();
 const pointService = new PointService();
@@ -16,7 +18,7 @@ export async function GET(request: Request) {
 
     const { session } = authResult;
     const { searchParams } = new URL(request.url);
-    const organizationId = await resolveOrganizationId(session, searchParams.get('organizationId'));
+    const organizationId = await resolveOrganizationId(session, searchParams.get("organizationId"));
 
     const branches = await branchService.getAll(organizationId);
     return NextResponse.json({ branches });
@@ -57,8 +59,8 @@ export async function POST(request: Request) {
 
     if (!name || centerLat === undefined || centerLng === undefined) {
       return NextResponse.json(
-        { error: 'الاسم والإحداثيات مطلوبة' },
-        { status: 400 }
+        { error: "الاسم والإحداثيات مطلوبة" },
+        { status: 400 },
       );
     }
 
@@ -76,7 +78,7 @@ export async function POST(request: Request) {
       atharKey,
       fuelPricePerKmGasoline: fuelPricePerKmGasoline != null ? Number(fuelPricePerKmGasoline) : undefined,
       fuelPricePerKmDiesel: fuelPricePerKmDiesel != null ? Number(fuelPricePerKmDiesel) : undefined,
-      labels: labels && typeof labels === 'object' ? labels : undefined,
+      labels: labels && typeof labels === "object" ? labels : undefined,
       isActive: isActive ?? true,
     });
 
@@ -87,14 +89,15 @@ export async function POST(request: Request) {
       }
 
       if (adminUserName && adminUserEmail && adminUserPassword) {
-        const { UserService } = await import('@/lib/services/user.service');
-        const { RoleService } = await import('@/lib/services/role.service');
+        const { UserService } = await import("@/lib/services/user.service");
+        const { RoleService } = await import("@/lib/services/role.service");
         const userService = new UserService();
         const roleService = new RoleService();
         const defaultRole =
-          (await roleService.getByName('branch_admin')) || (await roleService.getByName('branch_user'));
+          (await roleService.getByName("branch_admin")) || (await roleService.getByName("branch_user"));
+
         if (!defaultRole) {
-          throw new Error('لم يتم العثور على دور الفرع');
+          throw new Error("لم يتم العثور على دور الفرع");
         }
 
         await userService.create({
@@ -117,4 +120,3 @@ export async function POST(request: Request) {
     return handleApiError(error);
   }
 }
-

@@ -1,9 +1,11 @@
-import { NextResponse } from 'next/server';
-import { requireAuth, handleApiError } from '@/lib/middleware/api-auth.middleware';
-import { resolveOrganizationId } from '@/lib/utils/organization.util';
-import { defaultLabels, sanitizeLabels } from '@/lib/utils/labels.util';
-import Organization from '@/models/Organization';
-import Branch from '@/models/Branch';
+export const dynamic = "force-dynamic";
+
+import { NextResponse } from "next/server";
+import { requireAuth, handleApiError } from "@/lib/middleware/api-auth.middleware";
+import { resolveOrganizationId } from "@/lib/utils/organization.util";
+import { defaultLabels, sanitizeLabels } from "@/lib/utils/labels.util";
+import Organization from "@/models/Organization";
+import Branch from "@/models/Branch";
 
 export async function GET() {
   try {
@@ -12,29 +14,29 @@ export async function GET() {
 
     const { session } = authResult;
     const organizationId = await resolveOrganizationId(session);
-    const organization = await Organization.findById(organizationId).select('labels name').lean();
+    const organization = await Organization.findById(organizationId).select("labels name").lean();
 
     if (!organization) {
-      return NextResponse.json({ error: 'المؤسسة غير موجودة' }, { status: 404 });
+      return NextResponse.json({ error: "المؤسسة غير موجودة" }, { status: 404 });
     }
 
     let merged = { ...defaultLabels, ...(organization.labels || {}) };
     const branchId = (session?.user as any)?.branchId;
     if (branchId) {
-      const branch = await Branch.findById(branchId).select('labels').lean();
-      if (branch?.labels && typeof branch.labels === 'object') {
+      const branch = await Branch.findById(branchId).select("labels").lean();
+      if (branch?.labels && typeof branch.labels === "object") {
         merged = { ...merged, ...branch.labels };
       }
     }
 
     const labels = sanitizeLabels(merged);
-    const organizationName = organization.name && !/^[\s?]+$/.test(String(organization.name).trim())
-      ? organization.name
-      : 'المؤسسة';
+    const organizationName =
+      organization.name && !/^[\s?]+$/.test(String(organization.name).trim())
+        ? organization.name
+        : "المؤسسة";
 
     return NextResponse.json({ labels, organizationName });
   } catch (error: any) {
     return handleApiError(error);
   }
 }
-

@@ -1,20 +1,10 @@
+export const dynamic = 'force-dynamic';
+
 import { NextResponse } from 'next/server';
 import { requirePermission, handleApiError } from '@/lib/middleware/api-auth.middleware';
 import { resolveBranchId } from '@/lib/utils/municipality.util';
-import Branch from '@/models/Branch';
-import PointVisit from '@/models/PointVisit';
-import PointCompletion from '@/models/PointCompletion';
-import Point from '@/models/Point';
-import { getZonedDateString, getZonedDayRange } from '@/lib/utils/timezone.util';
 import { permissionActions, permissionResources } from '@/constants/permissions';
-import { AtharService } from '@/lib/services/athar.service';
-
-function isAtharObjectActive(obj: Record<string, unknown>): boolean {
-  return (
-    String(obj.active ?? '').toLowerCase() === 'true' ||
-    String(obj.loc_valid ?? '') === '1'
-  );
-}
+import { getDashboardStats } from '@/lib/queries/dashboard/dashboard-stats.query';
 
 export async function GET(request: Request) {
   try {
@@ -25,58 +15,9 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const branchId = resolveBranchId(session, searchParams.get('branchId'));
 
-    const branch = await Branch.findById(branchId).select('timezone').lean();
-    if (!branch) {
-      return NextResponse.json({ error: 'الفرع غير موجود' }, { status: 404 });
-    }
-    const timezone = branch.timezone || 'Asia/Damascus';
-
-    const { start, end } = getZonedDayRange(timezone);
-
-    const activeVehicleIds = await PointVisit.distinct('vehicleId', {
-      branchId,
-      status: 'open',
-    });
-    const activePointIds = await PointVisit.distinct('pointId', {
-      branchId,
-      status: 'open',
-    });
-
-    const completionDateToday = getZonedDateString(timezone, new Date());
-    const visitedPointsToday = await PointCompletion.countDocuments({
-      branchId,
-      completionDate: completionDateToday,
-    });
-
-    const totalPoints = await Point.countDocuments({ branchId, isActive: true });
-    const dailyCompletionPercent =
-      totalPoints === 0
-        ? 0
-        : Math.round((visitedPointsToday / totalPoints) * 100);
-
-    let activeVehicles = activeVehicleIds.length;
-    let activePoints = activePointIds.length;
-
-    try {
-      const atharService = await AtharService.forBranch(branchId);
-      const objectsRaw = await atharService.getObjects();
-      const activeCount = (objectsRaw as Record<string, unknown>[]).filter(isAtharObjectActive).length;
-      activeVehicles = activeCount;
-      activePoints = activeCount;
-    } catch {
-      // لا مفتاح أثر أو فشل استدعاء أثر: نبقى على القيم من DB
-    }
-
-    return NextResponse.json({
-      activeVehicles,
-      activePoints,
-      dailyCompletionPercent,
-      totalPoints,
-      visitedPointsToday,
-    });
+    const stats = await getDashboardStats(branchId);
+    return NextResponse.json(stats);
   } catch (error: any) {
     return handleApiError(error);
   }
 }
-
-

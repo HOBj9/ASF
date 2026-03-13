@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { NextResponse } from 'next/server';
 import connectDB from '@/lib/mongodb';
 import { requirePermission, handleApiError } from '@/lib/middleware/api-auth.middleware';

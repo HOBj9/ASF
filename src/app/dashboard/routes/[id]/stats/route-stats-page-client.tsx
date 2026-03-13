@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { apiClient } from "@/lib/api/client";
@@ -86,26 +86,27 @@ export function RouteStatsPageClient({
       setLoadingRoute(false);
       return;
     }
+
     setLoadingRoute(true);
     setError("");
     try {
-      const res: any = await apiClient.get(
-        `/routes/${routeId}?branchId=${encodeURIComponent(resolvedBranchId)}`
-      );
-      const r = res.route || res.data?.route;
-      if (!r) {
+      const res: any = await apiClient.get(`/routes/${routeId}?branchId=${encodeURIComponent(resolvedBranchId)}`);
+      const currentRoute = res.route || res.data?.route;
+
+      if (!currentRoute) {
         setRoute(null);
         setError("المسار غير موجود");
         return;
       }
-      setRoute(r);
+
+      setRoute(currentRoute);
     } catch (err: any) {
       setRoute(null);
       setError(err.message || "فشل تحميل المسار");
     } finally {
       setLoadingRoute(false);
     }
-  }, [routeId, resolvedBranchId]);
+  }, [resolvedBranchId, routeId]);
 
   useEffect(() => {
     if (branchIdFromUrl) {
@@ -115,22 +116,22 @@ export function RouteStatsPageClient({
 
   useEffect(() => {
     if (userIsAdmin) {
-      loadOrganizations();
+      void loadOrganizations();
     } else if (userIsOrgAdmin && !sessionBranchId) {
-      loadBranchesForOrgUser();
+      void loadBranchesForOrgUser();
     } else if (sessionBranchId && !branchIdFromUrl) {
       setSelectedBranchId(sessionBranchId);
     }
-  }, [userIsAdmin, userIsOrgAdmin, sessionBranchId, branchIdFromUrl]);
+  }, [branchIdFromUrl, loadBranchesForOrgUser, loadOrganizations, sessionBranchId, userIsAdmin, userIsOrgAdmin]);
 
   useEffect(() => {
     if (userIsAdmin && selectedOrganizationId) {
-      loadBranches(selectedOrganizationId);
+      void loadBranches(selectedOrganizationId);
     }
-  }, [userIsAdmin, selectedOrganizationId, loadBranches]);
+  }, [loadBranches, selectedOrganizationId, userIsAdmin]);
 
   useEffect(() => {
-    loadRoute();
+    void loadRoute();
   }, [loadRoute]);
 
   const handleLinkWorkSchedule = () => {
@@ -143,18 +144,18 @@ export function RouteStatsPageClient({
   if (!resolvedBranchId && needsBranchSelector) {
     return (
       <div className="space-y-4">
-        <div className="flex flex-wrap gap-4 items-end">
+        <div className="flex flex-wrap items-end gap-4">
           {userIsAdmin && (
             <div>
               <Label>المؤسسة</Label>
               <Select value={selectedOrganizationId} onValueChange={setSelectedOrganizationId}>
-                <SelectTrigger className="w-[200px] mt-1">
+                <SelectTrigger className="mt-1 w-[200px]">
                   <SelectValue placeholder="اختر المؤسسة" />
                 </SelectTrigger>
                 <SelectContent>
-                  {organizations.map((o) => (
-                    <SelectItem key={o._id} value={o._id}>
-                      {o.name}
+                  {organizations.map((organization) => (
+                    <SelectItem key={organization._id} value={organization._id}>
+                      {organization.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -164,13 +165,13 @@ export function RouteStatsPageClient({
           <div>
             <Label>الفرع</Label>
             <Select value={selectedBranchId} onValueChange={setSelectedBranchId}>
-              <SelectTrigger className="w-[200px] mt-1">
+              <SelectTrigger className="mt-1 w-[200px]">
                 <SelectValue placeholder="اختر الفرع" />
               </SelectTrigger>
               <SelectContent>
-                {branches.map((b) => (
-                  <SelectItem key={b._id} value={b._id}>
-                    {b.nameAr || b.name}
+                {branches.map((branchItem) => (
+                  <SelectItem key={branchItem._id} value={branchItem._id}>
+                    {branchItem.nameAr || branchItem.name}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -194,7 +195,7 @@ export function RouteStatsPageClient({
     return (
       <div className="space-y-4">
         <Button variant="ghost" onClick={() => router.push("/dashboard/routes")}>
-          <ArrowLeft className="h-4 w-4 ml-2" />
+          <ArrowLeft className="ml-2 h-4 w-4" />
           العودة لـ {labels.routeLabel}
         </Button>
         <p className="text-destructive">{error || "المسار غير موجود"}</p>
@@ -206,7 +207,7 @@ export function RouteStatsPageClient({
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <Button variant="ghost" onClick={() => router.push("/dashboard/routes")}>
-          <ArrowLeft className="h-4 w-4 ml-2" />
+          <ArrowLeft className="ml-2 h-4 w-4" />
           العودة لـ {labels.routeLabel}
         </Button>
       </div>

@@ -43,7 +43,7 @@ export interface UpdateOrganizationData {
 }
 
 export class OrganizationService {
-  async create(data: CreateOrganizationData): Promise<IOrganization> {
+  async create(data: CreateOrganizationData): Promise<any> {
     await connectDB();
     const organization = await Organization.create({
       name: data.name,
@@ -62,17 +62,17 @@ export class OrganizationService {
     return organization;
   }
 
-  async getAll(): Promise<IOrganization[]> {
+  async getAll(): Promise<any[]> {
     await connectDB();
     return Organization.find({}).lean().exec();
   }
 
-  async getById(id: string): Promise<IOrganization | null> {
+  async getById(id: string): Promise<any | null> {
     await connectDB();
     return Organization.findById(id).lean().exec();
   }
 
-  async update(id: string, data: UpdateOrganizationData): Promise<IOrganization | null> {
+  async update(id: string, data: UpdateOrganizationData): Promise<any | null> {
     await connectDB();
     const updateData: any = { ...data };
 

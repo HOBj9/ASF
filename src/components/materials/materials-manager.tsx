@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { useSession } from "next-auth/react"
 import toast from "react-hot-toast"
 import { apiClient } from "@/lib/api/client"
@@ -164,7 +164,7 @@ export function MaterialsManager() {
   const activeBranchId = !isOrgScope ? (canManageOrg ? selectedBranchId : sessionBranchId) : ""
   const activePointId = isPointScope ? selectedPointId : ""
 
-  const loadBranches = async () => {
+  const loadBranches = useCallback(async () => {
     try {
       const res = await apiClient.get("/branches")
       const list = res.branches || res.data?.branches || []
@@ -176,9 +176,9 @@ export function MaterialsManager() {
     } catch (error: any) {
       toast.error(error.message || "\u062d\u062f\u062b \u062e\u0637\u0623")
     }
-  }
+  }, [selectedBranchId, sessionBranchId])
 
-  const loadPoints = async (branchId: string) => {
+  const loadPoints = useCallback(async (branchId: string) => {
     if (!branchId) return
     try {
       const res = await apiClient.get(`/points?branchId=${branchId}`)
@@ -190,9 +190,9 @@ export function MaterialsManager() {
     } catch (error: any) {
       toast.error(error.message || "\u062d\u062f\u062b \u062e\u0637\u0623")
     }
-  }
+  }, [selectedPointId])
 
-  const loadCategories = async () => {
+  const loadCategories = useCallback(async () => {
     const url = isOrgScope
       ? "/material-categories?scope=org"
       : isPointScope
@@ -206,9 +206,9 @@ export function MaterialsManager() {
     const res = await apiClient.get(url)
     const list = res.categories || res.data?.categories || []
     setCategories(list)
-  }
+  }, [activeBranchId, activePointId, isOrgScope, isPointScope])
 
-  const loadUnits = async () => {
+  const loadUnits = useCallback(async () => {
     const url = isOrgScope
       ? "/units?scope=org"
       : isPointScope
@@ -222,9 +222,9 @@ export function MaterialsManager() {
     const res = await apiClient.get(url)
     const list = res.units || res.data?.units || []
     setUnits(list)
-  }
+  }, [activeBranchId, activePointId, isOrgScope, isPointScope])
 
-  const loadMaterials = async (categoryId?: string | null) => {
+  const loadMaterials = useCallback(async (categoryId?: string | null) => {
     const url = isOrgScope
       ? `/materials?scope=org${categoryId ? `&categoryId=${categoryId}` : ""}`
       : isPointScope
@@ -238,9 +238,9 @@ export function MaterialsManager() {
     const res = await apiClient.get(url)
     const list = res.materials || res.data?.materials || []
     setMaterials(list)
-  }
+  }, [activeBranchId, activePointId, isOrgScope, isPointScope])
 
-  const loadCategoryAttributes = async (categoryId?: string | null) => {
+  const loadCategoryAttributes = useCallback(async (categoryId?: string | null) => {
     if (!categoryId) {
       setAttributes([])
       return
@@ -248,7 +248,7 @@ export function MaterialsManager() {
     const res = await apiClient.get(`/material-attributes?categoryId=${categoryId}`)
     const list = res.attributes || res.data?.attributes || []
     setAttributes(list)
-  }
+  }, [])
 
   const loadMaterialAttributes = async (categoryIds: string[]) => {
     if (!categoryIds.length) {
@@ -264,21 +264,21 @@ export function MaterialsManager() {
 
   useEffect(() => {
     if (canManageOrg) {
-      loadBranches()
+      void loadBranches()
     } else if (sessionBranchId) {
       setSelectedBranchId(sessionBranchId)
     }
-  }, [canManageOrg, sessionBranchId])
+  }, [canManageOrg, loadBranches, sessionBranchId])
 
   useEffect(() => {
     if (!activeBranchId) return
     if (isPointScope) {
-      loadPoints(activeBranchId)
+      void loadPoints(activeBranchId)
     } else {
       setPoints([])
       setSelectedPointId("")
     }
-  }, [activeBranchId, isPointScope])
+  }, [activeBranchId, isPointScope, loadPoints])
 
   useEffect(() => {
     if (canManageOrg && !sessionBranchId && (scope === "branch" || scope === "point")) {
@@ -291,12 +291,12 @@ export function MaterialsManager() {
     Promise.all([loadCategories(), loadUnits(), loadMaterials(null)])
       .catch((error: any) => toast.error(error.message || "\u062d\u062f\u062b \u062e\u0637\u0623"))
       .finally(() => setLoading(false))
-  }, [activeBranchId, activePointId, isOrgScope, isPointScope])
+  }, [loadCategories, loadMaterials, loadUnits])
 
   useEffect(() => {
-    loadMaterials(selectedCategoryId)
-    loadCategoryAttributes(selectedCategoryId)
-  }, [isOrgScope, isPointScope, activeBranchId, activePointId, selectedCategoryId])
+    void loadMaterials(selectedCategoryId)
+    void loadCategoryAttributes(selectedCategoryId)
+  }, [loadCategoryAttributes, loadMaterials, selectedCategoryId])
 
   const ensureScopeReady = () => {
     if (!isOrgScope && !activeBranchId) {

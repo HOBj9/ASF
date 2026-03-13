@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { NextResponse } from "next/server"
 import connectDB from "@/lib/mongodb"
 // Import models to ensure they are registered
@@ -110,7 +112,7 @@ export async function POST() {
     })
 
     return NextResponse.json({
-      message: messages.success.success,
+      message: messages.common.success,
       users: {
         superAdmin: {
           email: appConfig.defaultAdmin.email,

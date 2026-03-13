@@ -17,7 +17,7 @@ function applyLeafletPatch() {
     if (typeof origOff === "function") {
       L.Evented.prototype.off = function (this: any, ...args: any[]) {
         if (this == null || this._leaflet_events === undefined) return this;
-        return origOff.apply(this, args);
+        return (origOff as any).apply(this, args);
       };
     }
   }
@@ -27,9 +27,10 @@ function applyLeafletPatch() {
     const origOnRemove = L.Marker.prototype.onRemove;
     L.Marker.prototype.onRemove = function (this: any, map: import("leaflet").Map) {
       try {
-        origOnRemove.call(this, map);
+        return (origOnRemove as any).call(this, map);
       } catch {
         // ignore _leaflet_events / removeOne errors during teardown
+        return this;
       }
     };
   }
@@ -39,9 +40,10 @@ function applyLeafletPatch() {
     const origControlOnRemove = L.Control.prototype.onRemove;
     L.Control.prototype.onRemove = function (this: any, map: import("leaflet").Map) {
       try {
-        origControlOnRemove.call(this, map);
+        return (origControlOnRemove as any).call(this, map);
       } catch {
         // ignore errors when map is already null during teardown
+        return this;
       }
     };
   }
@@ -51,9 +53,10 @@ function applyLeafletPatch() {
     const origRemoveLayer = L.Map.prototype.removeLayer;
     L.Map.prototype.removeLayer = function (this: any, layer: any) {
       try {
-        origRemoveLayer.call(this, layer);
+        return (origRemoveLayer as any).call(this, layer);
       } catch {
         // ignore _zoom null or other teardown errors when map is already destroyed
+        return this;
       }
     };
   }

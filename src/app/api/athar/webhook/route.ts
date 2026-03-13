@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { handleAtharWebhookRequest } from '@/lib/services/athar-webhook.service';
 
 export async function GET(request: Request) {

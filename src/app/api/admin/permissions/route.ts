@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { NextResponse } from "next/server"
 import { requireAdmin, handleApiError } from "@/lib/middleware/api-auth.middleware"
 import { PermissionService } from "@/lib/services/permission.service"

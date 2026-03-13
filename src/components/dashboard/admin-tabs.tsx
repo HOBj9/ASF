@@ -26,11 +26,12 @@ interface User {
   createdAt: string
 }
 
-interface Role {
+interface AdminRole {
   _id: string
   name: string
   nameAr: string
   permissions: any[]
+  createdAt: string
 }
 
 interface Permission {
@@ -43,7 +44,7 @@ interface Permission {
 
 interface AdminTabsProps {
   initialUsers?: User[]
-  roles?: Role[]
+  roles?: AdminRole[]
   permissions?: Permission[]
 }
 

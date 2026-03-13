@@ -1,8 +1,11 @@
+export const dynamic = 'force-dynamic';
+
 import { NextResponse } from 'next/server';
 import { requirePermission, handleApiError } from '@/lib/middleware/api-auth.middleware';
 import { resolveBranchId } from '@/lib/utils/municipality.util';
 import { permissionActions, permissionResources } from '@/constants/permissions';
 import { getBranchTimezone, getRecentBranchEvents } from '@/lib/services/zone-event-feed.service';
+import { getCachedEventSnapshot } from '@/lib/live/branch-live-snapshot-cache';
 
 export async function GET(request: Request) {
   try {
@@ -20,7 +23,9 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'الفرع غير موجود' }, { status: 404 });
     }
 
-    const events = await getRecentBranchEvents(branchId, limit, timezone, skip);
+    const events = await getCachedEventSnapshot(branchId, limit, skip, () =>
+      getRecentBranchEvents(branchId, limit, timezone, skip),
+    );
     const hasMore = events.length >= limit;
     return NextResponse.json({ events, hasMore });
   } catch (error: any) {

@@ -24,6 +24,7 @@ interface ActionButtonProps extends Omit<ButtonProps, 'children'> {
   loading?: boolean
   count?: number
   customLabel?: string
+  icon?: React.ComponentType<{ className?: string }>
   iconPosition?: 'left' | 'right'
   showIcon?: boolean
 }
@@ -90,6 +91,7 @@ export const ActionButton = React.forwardRef<HTMLButtonElement, ActionButtonProp
     loading = false, 
     count, 
     customLabel,
+    icon: CustomIcon,
     iconPosition = 'right',
     showIcon = true,
     variant,
@@ -97,7 +99,7 @@ export const ActionButton = React.forwardRef<HTMLButtonElement, ActionButtonProp
     disabled,
     ...props 
   }, ref) => {
-    const Icon = actionIcons[action]
+    const Icon = CustomIcon || actionIcons[action]
     const defaultVariant = actionVariants[action]
     const messageKey = `buttons.${action}`
     const label = customLabel || getMessage(messageKey, count ? { count } : undefined)

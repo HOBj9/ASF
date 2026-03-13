@@ -3,6 +3,7 @@ import { requirePermission } from '@/lib/middleware/api-auth.middleware';
 import { resolveBranchId } from '@/lib/utils/municipality.util';
 import { LiveTrackingService } from '@/lib/services/live-tracking.service';
 import { permissionActions, permissionResources } from '@/constants/permissions';
+import { getCachedVehicleSnapshot } from '@/lib/live/branch-live-snapshot-cache';
 
 const liveTrackingService = new LiveTrackingService();
 export const dynamic = 'force-dynamic';
@@ -25,7 +26,9 @@ export async function GET(request: Request) {
       const send = async () => {
         if (isClosed) return;
         try {
-          const locations = await liveTrackingService.getBranchVehicleLocations(branchId);
+          const locations = await getCachedVehicleSnapshot(branchId, () =>
+            liveTrackingService.getBranchVehicleLocations(branchId),
+          );
           const payload = {
             type: 'bus_locations',
             data: locations,

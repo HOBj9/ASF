@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { useSession } from "next-auth/react"
 import { apiClient } from "@/lib/api/client"
 import { Button } from "@/components/ui/button"
@@ -122,7 +122,7 @@ export function MunicipalitiesTable() {
     return org?.labels?.branchLabel || labels.branchLabel || "الفرع"
   }, [form.organizationId, organizations, labels.branchLabel])
 
-  const loadOrganizations = async () => {
+  const loadOrganizations = useCallback(async () => {
     try {
       const orgRes = await apiClient.get("/organizations").catch(() => ({ organizations: [] as Organization[] } as any))
       const orgList = orgRes.organizations || orgRes.data?.organizations || []
@@ -131,9 +131,9 @@ export function MunicipalitiesTable() {
     } catch {
       return []
     }
-  }
+  }, [])
 
-  const loadBranches = async (organizationId?: string | null) => {
+  const loadBranches = useCallback(async (organizationId?: string | null) => {
     setLoading(true)
     try {
       if (userIsAdmin && !organizationId) {
@@ -151,7 +151,7 @@ export function MunicipalitiesTable() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [labels.branchLabel, userIsAdmin])
 
   useEffect(() => {
     if (session === undefined) return
@@ -168,18 +168,18 @@ export function MunicipalitiesTable() {
         await loadBranches(null)
       }
     }
-    run()
+    void run()
     return () => { cancelled = true }
-  }, [session?.user])
+  }, [loadBranches, loadOrganizations, selectedOrganizationId, session, userIsAdmin])
 
   useEffect(() => {
     if (!userIsAdmin) return
     if (selectedOrganizationId) {
-      loadBranches(selectedOrganizationId)
+      void loadBranches(selectedOrganizationId)
     } else {
       setItems([])
     }
-  }, [userIsAdmin, selectedOrganizationId])
+  }, [loadBranches, selectedOrganizationId, userIsAdmin])
 
   const openCreate = () => {
     const defaultOrgId = userIsAdmin

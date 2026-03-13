@@ -12,6 +12,8 @@ export interface ISurveyQuestion {
 
 export interface ISurvey extends Document {
   organizationId: mongoose.Types.ObjectId;
+  /** If null/undefined: org-wide (visible to all line supervisors). If set: branch-specific. */
+  branchId?: mongoose.Types.ObjectId | null;
   title: string;
   titleAr?: string;
   description?: string;
@@ -45,6 +47,12 @@ const SurveySchema: Schema = new Schema(
       required: true,
       index: true,
     },
+    branchId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Branch',
+      default: null,
+      index: true,
+    },
     title: { type: String, required: true, trim: true },
     titleAr: { type: String, trim: true, default: null },
     description: { type: String, trim: true, default: null },
@@ -59,6 +67,7 @@ const SurveySchema: Schema = new Schema(
 );
 
 SurveySchema.index({ organizationId: 1, isActive: 1 });
+SurveySchema.index({ organizationId: 1, branchId: 1, isActive: 1 });
 
 let Survey: Model<ISurvey>;
 

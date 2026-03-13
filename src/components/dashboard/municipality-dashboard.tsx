@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { MunicipalityMap, type MapTab } from "./municipality-map";
 import { cn } from "@/lib/utils";
@@ -35,6 +35,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import type { DashboardOverviewData } from "@/lib/contracts/dashboard";
+import type { DashboardEventItem } from "@/lib/types/dashboard-event";
 
 type BranchInfo = {
   _id: string;
@@ -127,18 +129,7 @@ type Analytics = {
   eventsByType?: Record<string, number>;
 };
 
-type EventItem = {
-  _id: string;
-  type: string;
-  name?: string;
-  imei?: string;
-  eventTimestamp?: string;
-  pointName?: string;
-  vehicleName?: string;
-  driverName?: string;
-  displayText?: string;
-  pointId?: string;
-};
+type EventItem = DashboardEventItem;
 
 function mergeUniqueEvents(primary: EventItem[], secondary: EventItem[], limit: number): EventItem[] {
   const seen = new Set<string>();
@@ -183,6 +174,7 @@ type MunicipalityDashboardProps = {
   isLineSupervisor?: boolean;
   organizationId?: string | null;
   sessionBranchId?: string | null;
+  initialOverview?: DashboardOverviewData | null;
 };
 
 export function MunicipalityDashboard({
@@ -190,28 +182,31 @@ export function MunicipalityDashboard({
   isLineSupervisor = false,
   organizationId: _organizationId,
   sessionBranchId,
+  initialOverview,
 }: MunicipalityDashboardProps = {}) {
-  const [branch, setBranch] = useState<BranchInfo | null>(null);
-  const [orgBranches, setOrgBranches] = useState<Array<{ _id: string; name?: string; nameAr?: string }>>([]);
-  const [selectedBranchId, setSelectedBranchId] = useState("");
+  const [branch, setBranch] = useState<BranchInfo | null>(initialOverview?.branch ?? null);
+  const [orgBranches, setOrgBranches] = useState<Array<{ _id: string; name?: string; nameAr?: string }>>(
+    initialOverview?.orgBranches ?? [],
+  );
+  const [selectedBranchId, setSelectedBranchId] = useState(initialOverview?.selectedBranchId ?? "");
   const isLineSupervisorNoBranch = isLineSupervisor && !sessionBranchId && !isOrganizationAdmin;
   const [liveVehicles, setLiveVehicles] = useState<LiveVehicle[]>([]);
   const [atharObjects, setAtharObjects] = useState<AtharObject[]>([]);
   const [zones, setZones] = useState<AtharZone[]>([]);
   const [points, setPoints] = useState<Point[]>([]);
-  const [routes, setRoutes] = useState<Route[]>([]);
+  const [routes, setRoutes] = useState<Route[]>(initialOverview?.routes ?? []);
   const [vehicles, setVehicles] = useState<VehicleSummary[]>([]);
-  const [stats, setStats] = useState<Stats | null>(null);
-  const [analytics, setAnalytics] = useState<Analytics | null>(null);
-  const [events, setEvents] = useState<EventItem[]>([]);
-  const [eventsHasMore, setEventsHasMore] = useState(true);
+  const [stats, setStats] = useState<Stats | null>(initialOverview?.stats ?? null);
+  const [analytics, setAnalytics] = useState<Analytics | null>(initialOverview?.analytics ?? null);
+  const [events, setEvents] = useState<EventItem[]>(initialOverview?.events ?? []);
+  const [eventsHasMore, setEventsHasMore] = useState(initialOverview?.eventsHasMore ?? true);
   const [eventsLoadingMore, setEventsLoadingMore] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!initialOverview);
   const [activeMapTab, setActiveMapTab] = useState<MapTab>("live");
   const [mapPointsOnly, setMapPointsOnly] = useState(true);
   const [showEvents, setShowEvents] = useState(false);
-  const [dailyDays, setDailyDays] = useState<7 | 14 | 30>(14);
-  const [monthlyMonths, setMonthlyMonths] = useState<6 | 12>(12);
+  const [dailyDays, setDailyDays] = useState<7 | 14 | 30>((initialOverview?.dailyDays as 7 | 14 | 30) ?? 14);
+  const [monthlyMonths, setMonthlyMonths] = useState<6 | 12>((initialOverview?.monthlyMonths as 6 | 12) ?? 12);
   const [pointsLoaded, setPointsLoaded] = useState(false);
   const [atharMarkers, setAtharMarkers] = useState<
     Array<{ id: string; lat: number; lng: number; name?: string; icon?: string }>
@@ -232,13 +227,27 @@ export function MunicipalityDashboard({
   const eventsLoadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
   const eventsLengthRef = useRef(0);
   const eventsLoadMoreInProgressRef = useRef(false);
-  const { labels } = useLabels();
+  const hasUsedInitialOverviewRef = useRef(Boolean(initialOverview));
+  const overviewFetchInFlightRef = useRef(false);
+  const mapDataFetchInFlightRef = useRef(false);
+  const liveVehiclesFetchInFlightRef = useRef(false);
+  const { labels } = useLabels(
+    initialOverview
+      ? {
+          labels: initialOverview.labels,
+          organizationName: initialOverview.organizationName,
+        }
+      : undefined,
+  );
 
   eventsLengthRef.current = events.length;
 
   const branchQuery =
     isOrganizationAdmin && selectedBranchId ? `?branchId=${encodeURIComponent(selectedBranchId)}` : "";
   const canLoadBranchData = !isLineSupervisorNoBranch && (!isOrganizationAdmin || !!selectedBranchId);
+  const overviewUrl = `/api/dashboard/overview?dailyDays=${dailyDays}&monthlyMonths=${monthlyMonths}${branchQuery ? `&${branchQuery.slice(1)}` : ""}`;
+  const mapDataUrl = `/api/dashboard/map-data${branchQuery}`;
+  const liveVehiclesUrl = `/api/vehicles/locations${branchQuery}`;
 
   const chartPalette = ["#22c55e", "#0ea5e9", "#f97316", "#a855f7", "#facc15", "#14b8a6"];
   const mapTabLoading: Partial<Record<MapTab, boolean>> = {
@@ -248,13 +257,19 @@ export function MunicipalityDashboard({
     objects: activeMapTab === "objects" && !objectsLoaded,
   };
 
-  function rememberEvents(eventList: EventItem[]) {
+  const rememberEvents = useCallback((eventList: EventItem[]) => {
     for (const event of eventList) {
       if (event?._id) seenEventIdsRef.current.add(event._id);
     }
-  }
+  }, []);
 
-  function markEventAsNew(eventId: string) {
+  useEffect(() => {
+    if (initialOverview?.events?.length) {
+      rememberEvents(initialOverview.events);
+    }
+  }, [initialOverview, rememberEvents]);
+
+  const markEventAsNew = useCallback((eventId: string) => {
     setNewEventIds((prev) => ({ ...prev, [eventId]: true }));
 
     const timer = eventHighlightTimersRef.current[eventId];
@@ -268,24 +283,116 @@ export function MunicipalityDashboard({
       });
       delete eventHighlightTimersRef.current[eventId];
     }, 5000);
-  }
+  }, []);
+
+  const loadOrganizationBranches = useCallback(async () => {
+    try {
+      const response = await fetch("/api/branches");
+      const data = response.ok ? await response.json() : null;
+      const list = data?.branches ?? [];
+      setOrgBranches(
+        list.map((b: any) => ({
+          _id: String(b._id),
+          name: b.name,
+          nameAr: b.nameAr,
+        })),
+      );
+    } catch {
+      setOrgBranches([]);
+    }
+  }, []);
+
+  const loadOverview = useCallback(
+    async ({ background = false }: { background?: boolean } = {}) => {
+      if (!canLoadBranchData || overviewFetchInFlightRef.current) {
+        if (!canLoadBranchData && !background) {
+          setLoading(false);
+        }
+        return;
+      }
+
+      overviewFetchInFlightRef.current = true;
+      try {
+        if (!background) setLoading(true);
+
+        const response = await fetch(overviewUrl);
+        if (!response.ok) return;
+
+        const data = await response.json();
+        setBranch(data.branch || null);
+        setRoutes(data.routes || []);
+        setStats(data.stats || null);
+        setAnalytics(data.analytics || null);
+        setOrgBranches(data.orgBranches || []);
+
+        if (!background || !eventsStreamConnectedRef.current) {
+          const nextEvents = Array.isArray(data.events) ? data.events : [];
+          rememberEvents(nextEvents);
+          setEvents(nextEvents);
+          setEventsHasMore(data.eventsHasMore !== false && nextEvents.length >= 10);
+        }
+      } finally {
+        overviewFetchInFlightRef.current = false;
+        if (!background) setLoading(false);
+      }
+    },
+    [canLoadBranchData, overviewUrl, rememberEvents],
+  );
+
+  const loadLiveVehicles = useCallback(async () => {
+    if (!canLoadBranchData || liveVehiclesFetchInFlightRef.current) return;
+
+    liveVehiclesFetchInFlightRef.current = true;
+    try {
+      const response = await fetch(liveVehiclesUrl);
+      const data = response.ok ? await response.json() : null;
+      setLiveVehicles(data?.data || []);
+    } finally {
+      liveVehiclesFetchInFlightRef.current = false;
+      setLiveLoaded(true);
+    }
+  }, [canLoadBranchData, liveVehiclesUrl]);
+
+  const loadMapData = useCallback(async () => {
+    if (
+      !canLoadBranchData ||
+      mapDataFetchInFlightRef.current ||
+      (pointsLoaded && markersLoaded && zonesLoaded && objectsLoaded && vehiclesLoaded)
+    ) {
+      return;
+    }
+
+    mapDataFetchInFlightRef.current = true;
+    try {
+      const response = await fetch(mapDataUrl);
+      const data = response.ok ? await response.json() : null;
+      setPoints(data?.points || []);
+      setAtharMarkers(data?.markers || []);
+      setZones(data?.zones || []);
+      setAtharObjects(data?.objects || []);
+      setVehicles(data?.vehicles || []);
+    } finally {
+      mapDataFetchInFlightRef.current = false;
+      setPointsLoaded(true);
+      setMarkersLoaded(true);
+      setZonesLoaded(true);
+      setObjectsLoaded(true);
+      setVehiclesLoaded(true);
+    }
+  }, [
+    canLoadBranchData,
+    mapDataUrl,
+    pointsLoaded,
+    markersLoaded,
+    zonesLoaded,
+    objectsLoaded,
+    vehiclesLoaded,
+  ]);
 
   useEffect(() => {
-    if (!isOrganizationAdmin) return;
-    fetch("/api/branches")
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        const list = data?.branches ?? [];
-        setOrgBranches(
-          list.map((b: any) => ({
-            _id: String(b._id),
-            name: b.name,
-            nameAr: b.nameAr,
-          }))
-        );
-      })
-      .catch(() => setOrgBranches([]));
-  }, [isOrganizationAdmin]);
+    if (!isOrganizationAdmin || orgBranches.length > 0) return;
+    void loadOrganizationBranches();
+  }, [isOrganizationAdmin, orgBranches.length, loadOrganizationBranches]);
 
   useEffect(() => {
     if (isOrganizationAdmin && selectedBranchId) {
@@ -299,82 +406,37 @@ export function MunicipalityDashboard({
   }, [isOrganizationAdmin, selectedBranchId]);
 
   useEffect(() => {
-    let active = true;
+    const matchesInitialOverview =
+      hasUsedInitialOverviewRef.current &&
+      initialOverview &&
+      (initialOverview.selectedBranchId ?? "") === selectedBranchId &&
+      initialOverview.dailyDays === dailyDays &&
+      initialOverview.monthlyMonths === monthlyMonths;
 
-    async function loadInitial() {
-      if (isOrganizationAdmin && !selectedBranchId) {
-        if (active) setLoading(false);
-        return;
-      }
-      try {
-        const [branchRes, routesRes, statsRes, eventsRes, analyticsRes] =
-          await Promise.all([
-            fetch(`/api/municipality${branchQuery}`),
-            fetch(`/api/routes${branchQuery}`),
-            fetch(`/api/dashboard/stats${branchQuery}`),
-            fetch(`/api/events?limit=10${branchQuery ? "&" + branchQuery.slice(1) : ""}`),
-            fetch(`/api/dashboard/analytics?dailyDays=${dailyDays}&monthlyMonths=${monthlyMonths}${branchQuery ? "&" + branchQuery.slice(1) : ""}`),
-          ]);
-
-        if (!active) return;
-
-        if (branchRes.ok) {
-          const data = await branchRes.json();
-          setBranch(data.branch || data.municipality || null);
-        }
-        if (routesRes.ok) {
-          const data = await routesRes.json();
-          setRoutes(data.routes || []);
-        }
-        if (statsRes.ok) {
-          const data = await statsRes.json();
-          setStats(data);
-        }
-        if (eventsRes.ok) {
-          const data = await eventsRes.json();
-          const initialEvents = Array.isArray(data.events) ? data.events : [];
-          rememberEvents(initialEvents);
-          setEvents(initialEvents);
-          setEventsHasMore(data.hasMore !== false && initialEvents.length >= 10);
-        }
-        if (analyticsRes.ok) {
-          const data = await analyticsRes.json();
-          setAnalytics(data);
-        }
-      } finally {
-        if (active) setLoading(false);
-      }
+    if (matchesInitialOverview) {
+      hasUsedInitialOverviewRef.current = false;
+      setLoading(false);
+    } else if (isOrganizationAdmin && !selectedBranchId) {
+      setLoading(false);
+    } else {
+      void loadOverview();
     }
 
-    loadInitial();
     if (!canLoadBranchData) return;
     const interval = setInterval(() => {
-      fetch(`/api/dashboard/stats${branchQuery}`)
-        .then((res) => res.json())
-        .then((data) => setStats(data))
-        .catch(() => null);
-      if (!eventsStreamConnectedRef.current) {
-        fetch(`/api/events?limit=10${branchQuery ? "&" + branchQuery.slice(1) : ""}`)
-          .then((res) => res.json())
-          .then((data) => {
-            const nextEvents = Array.isArray(data.events) ? data.events : [];
-            rememberEvents(nextEvents);
-            setEvents(nextEvents);
-            setEventsHasMore(data.hasMore !== false && nextEvents.length >= 10);
-          })
-          .catch(() => null);
-      }
-      fetch(`/api/dashboard/analytics?dailyDays=${dailyDays}&monthlyMonths=${monthlyMonths}${branchQuery ? "&" + branchQuery.slice(1) : ""}`)
-        .then((res) => res.json())
-        .then((data) => setAnalytics(data))
-        .catch(() => null);
-    }, 3000);
+      void loadOverview({ background: true });
+    }, 15000);
 
-    return () => {
-      active = false;
-      clearInterval(interval);
-    };
-  }, [dailyDays, monthlyMonths, isOrganizationAdmin, selectedBranchId, branchQuery, canLoadBranchData]);
+    return () => clearInterval(interval);
+  }, [
+    canLoadBranchData,
+    dailyDays,
+    initialOverview,
+    isOrganizationAdmin,
+    loadOverview,
+    monthlyMonths,
+    selectedBranchId,
+  ]);
 
   useEffect(() => {
     seenEventIdsRef.current = new Set();
@@ -411,7 +473,7 @@ export function MunicipalityDashboard({
     );
     observer.observe(sentinel);
     return () => observer.disconnect();
-  }, [canLoadBranchData, eventsHasMore, eventsLoadingMore, branchQuery]);
+  }, [branchQuery, canLoadBranchData, eventsHasMore, eventsLoadingMore, rememberEvents]);
 
   useEffect(() => {
     return () => {
@@ -503,7 +565,7 @@ export function MunicipalityDashboard({
           if (incomingEvent.type === "zone_in") {
             toast.success(toastContent, toastOptions);
           } else {
-            toast.warning(toastContent, toastOptions);
+            toast(toastContent, toastOptions);
           }
         }
       } catch {
@@ -520,74 +582,21 @@ export function MunicipalityDashboard({
       eventsStreamConnectedRef.current = false;
       source.close();
     };
-  }, [canLoadBranchData, branchQuery, labels.vehicleLabel, labels.pointLabel, labels.driverLabel]);
-
-  // Fetch live vehicle locations as soon as branch is known (so map + live tab show on first load)
-  useEffect(() => {
-    if (!canLoadBranchData || liveLoaded) return;
-    fetch(`/api/vehicles/locations${branchQuery}`)
-      .then((res) => res.json())
-      .then((data) => {
-        setLiveVehicles(data.data || []);
-        setLiveLoaded(true);
-      })
-      .catch(() => setLiveLoaded(true));
-  }, [canLoadBranchData, liveLoaded, branchQuery]);
+  }, [
+    branchQuery,
+    canLoadBranchData,
+    labels.driverLabel,
+    labels.pointLabel,
+    labels.vehicleLabel,
+    markEventAsNew,
+    rememberEvents,
+  ]);
 
   // Preload map data in background after initial page load (non-blocking)
   useEffect(() => {
     if (!canLoadBranchData || loading) return;
-    const zonesSuffix = branchQuery ? "&" + branchQuery.slice(1) : "";
-    if (!pointsLoaded) {
-      fetch(`/api/points${branchQuery}`)
-        .then((res) => res.json())
-        .then((data) => {
-          setPoints(data.points || []);
-          setPointsLoaded(true);
-        })
-        .catch(() => setPointsLoaded(true));
-    }
-    if (!markersLoaded) {
-      fetch(`/api/athar/markers${branchQuery}`)
-        .then((res) => res.json())
-        .then((data) => {
-          setAtharMarkers(data.markers || []);
-          setMarkersLoaded(true);
-        })
-        .catch(() => setMarkersLoaded(true));
-    }
-    if (!zonesLoaded) {
-      fetch(`/api/athar/zones?sync=false${zonesSuffix}`)
-        .then((res) => res.json())
-        .then((data) => {
-          setZones(data.zones || []);
-          if (Array.isArray(data.points) && data.points.length && !pointsLoaded) {
-            setPoints(data.points);
-            setPointsLoaded(true);
-          }
-          setZonesLoaded(true);
-        })
-        .catch(() => setZonesLoaded(true));
-    }
-    if (!objectsLoaded) {
-      fetch(`/api/athar/objects${branchQuery}`)
-        .then((res) => res.json())
-        .then((data) => {
-          setAtharObjects(data.objects || []);
-          setObjectsLoaded(true);
-        })
-        .catch(() => setObjectsLoaded(true));
-    }
-    if (!vehiclesLoaded) {
-      fetch(`/api/vehicles${branchQuery}`)
-        .then((res) => res.json())
-        .then((data) => {
-          setVehicles(data.vehicles || []);
-          setVehiclesLoaded(true);
-        })
-        .catch(() => setVehiclesLoaded(true));
-    }
-  }, [canLoadBranchData, loading, branchQuery, pointsLoaded, markersLoaded, zonesLoaded, objectsLoaded, vehiclesLoaded]);
+    void loadMapData();
+  }, [canLoadBranchData, loading, loadMapData]);
 
   function exportChartAsPng(containerId: string, filename: string) {
     const container = document.getElementById(containerId);
@@ -644,83 +653,29 @@ export function MunicipalityDashboard({
 
   useEffect(() => {
     if (!canLoadBranchData) return;
-    const zonesSuffix = branchQuery ? "&" + branchQuery.slice(1) : "";
     if (activeMapTab === "live" && !liveLoaded) {
-      fetch(`/api/vehicles/locations${branchQuery}`)
-        .then((res) => res.json())
-        .then((data) => {
-          setLiveVehicles(data.data || []);
-          setLiveLoaded(true);
-        })
-        .catch(() => {
-          setLiveLoaded(true);
-        });
+      void loadLiveVehicles();
       return;
     }
 
-    if (activeMapTab === "points" && (!pointsLoaded || !markersLoaded)) {
-      if (!pointsLoaded) {
-        fetch(`/api/points${branchQuery}`)
-          .then((res) => res.json())
-          .then((data) => {
-            setPoints(data.points || []);
-            setPointsLoaded(true);
-          })
-          .catch(() => setPointsLoaded(true));
-      }
-      if (!markersLoaded) {
-        fetch(`/api/athar/markers${branchQuery}`)
-          .then((res) => res.json())
-          .then((data) => {
-            setAtharMarkers(data.markers || []);
-            setMarkersLoaded(true);
-          })
-          .catch(() => setMarkersLoaded(true));
-      }
-      return;
+    if (
+      (activeMapTab === "points" && (!pointsLoaded || !markersLoaded)) ||
+      (activeMapTab === "zones" && !zonesLoaded) ||
+      (activeMapTab === "objects" && !objectsLoaded)
+    ) {
+      void loadMapData();
     }
-
-    if (activeMapTab === "zones" && !zonesLoaded) {
-      fetch(`/api/athar/zones?sync=false${zonesSuffix}`)
-        .then((res) => res.json())
-        .then((data) => {
-          setZones(data.zones || []);
-          if (Array.isArray(data.points) && data.points.length && !pointsLoaded) {
-            setPoints(data.points);
-            setPointsLoaded(true);
-          }
-          setZonesLoaded(true);
-        })
-        .catch(() => {
-          setZonesLoaded(true);
-        });
-      return;
-    }
-
-    if (activeMapTab === "objects" && !objectsLoaded) {
-      fetch(`/api/athar/objects${branchQuery}`)
-        .then((res) => res.json())
-        .then((data) => {
-          setAtharObjects(data.objects || []);
-          setObjectsLoaded(true);
-        })
-        .catch(() => {
-          setObjectsLoaded(true);
-        });
-    }
-
-    if (activeMapTab === "objects" && !vehiclesLoaded) {
-      fetch(`/api/vehicles${branchQuery}`)
-        .then((res) => res.json())
-        .then((data) => {
-          setVehicles(data.vehicles || []);
-          setVehiclesLoaded(true);
-        })
-        .catch(() => {
-          setVehiclesLoaded(true);
-        });
-    }
-  }, [activeMapTab, canLoadBranchData, branchQuery, liveLoaded, pointsLoaded, markersLoaded, zonesLoaded, objectsLoaded, vehiclesLoaded]);
+  }, [
+    activeMapTab,
+    canLoadBranchData,
+    liveLoaded,
+    loadLiveVehicles,
+    loadMapData,
+    markersLoaded,
+    objectsLoaded,
+    pointsLoaded,
+    zonesLoaded,
+  ]);
 
   const pointTypeData = analytics?.pointTypes || [];
   const vehicleStatusData = [
@@ -858,7 +813,7 @@ export function MunicipalityDashboard({
             onEventClick={(event) => {
               if (event.pointId) {
                 setMapFocusPointId(event.pointId);
-                setMapFocusEvent(event);
+                setMapFocusEvent(event as EventItem);
                 mapSectionRef.current?.scrollIntoView({ behavior: "smooth" });
               }
             }}

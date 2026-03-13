@@ -1,11 +1,11 @@
 "use client"
 
 import { useSession } from "next-auth/react"
-import { useMemo, useEffect, useState } from "react"
+import { useMemo, useEffect, useState, useCallback } from "react"
 import Link from "next/link"
 import { apiClient } from "@/lib/api/client"
 import { useLabels } from "@/hooks/use-labels"
-import { hasPermission, isAdmin, isOrganizationAdmin } from "@/lib/permissions"
+import { hasPermission, isAdmin, isOrganizationAdmin, isBranchAdmin } from "@/lib/permissions"
 import { permissionResources, permissionActions } from "@/constants/permissions"
 import { toast } from "react-hot-toast"
 import { Button } from "@/components/ui/button"
@@ -25,6 +25,7 @@ type Survey = {
   titleAr?: string
   description?: string
   isActive: boolean
+  branchId?: string | null
   questions: { type: string; questionText: string; options?: string[] }[]
 }
 
@@ -43,13 +44,15 @@ export function SurveysListManager() {
   const canManage = useMemo(
     () =>
       userIsAdmin ||
-      (userIsOrgAdmin && hasPermission(session?.user?.role as any, permissionResources.FORMS, permissionActions.CREATE)),
+      (userIsOrgAdmin && hasPermission(session?.user?.role as any, permissionResources.FORMS, permissionActions.CREATE)) ||
+      (isBranchAdmin(session?.user?.role as any) && hasPermission(session?.user?.role as any, permissionResources.FORMS, permissionActions.CREATE)),
     [userIsAdmin, userIsOrgAdmin, session?.user?.role]
   )
   const canReadSubmissions = useMemo(
     () =>
       userIsAdmin ||
       userIsOrgAdmin ||
+      isBranchAdmin(session?.user?.role as any) ||
       hasPermission(session?.user?.role as any, permissionResources.FORM_SUBMISSIONS, permissionActions.READ),
     [userIsAdmin, userIsOrgAdmin, session?.user?.role]
   )
@@ -58,7 +61,7 @@ export function SurveysListManager() {
     return (session?.user as any)?.organizationId || ""
   }, [selectedOrgId, session?.user])
 
-  const loadOrganizations = async () => {
+  const loadOrganizations = useCallback(async () => {
     try {
       const res: any = await apiClient.get("/organizations").catch(() => ({ organizations: [] }))
       const list = res.organizations || res.data?.organizations || []
@@ -68,9 +71,9 @@ export function SurveysListManager() {
     } catch {
       return []
     }
-  }
+  }, [selectedOrgId])
 
-  const loadSurveys = async (organizationId: string, activeOnly = false) => {
+  const loadSurveys = useCallback(async (organizationId: string, activeOnly = false) => {
     if (!organizationId) {
       setSurveys([])
       return
@@ -86,17 +89,22 @@ export function SurveysListManager() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [labels.surveyLabel])
 
   useEffect(() => {
     if (!session) return
-    if (userIsAdmin) loadOrganizations()
-    else if (orgId) loadSurveys(orgId, !canManage)
-  }, [session?.user, userIsAdmin, orgId, canManage])
+    if (userIsAdmin) {
+      void loadOrganizations()
+    } else if (orgId) {
+      void loadSurveys(orgId, !canManage)
+    }
+  }, [canManage, loadOrganizations, loadSurveys, orgId, session, userIsAdmin])
 
   useEffect(() => {
-    if (orgId && userIsAdmin) loadSurveys(orgId, !canManage)
-  }, [orgId, userIsAdmin, canManage])
+    if (orgId && userIsAdmin) {
+      void loadSurveys(orgId, !canManage)
+    }
+  }, [canManage, loadSurveys, orgId, userIsAdmin])
 
   return (
     <div className="space-y-6">
@@ -159,6 +167,7 @@ export function SurveysListManager() {
                       )}
                       <p className="text-xs text-muted-foreground mt-1">
                         {s.questions?.length ?? 0} سؤال • {s.isActive ? "نشط" : "غير نشط"}
+                        {s.branchId ? " • لفرع محدد" : " • للمؤسسة ككل"}
                       </p>
                     </div>
                     <div className="flex gap-2">

@@ -1,7 +1,7 @@
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { redirect } from "next/navigation"
-import { hasPermission, isAdmin, isOrganizationAdmin } from "@/lib/permissions"
+import { hasPermission, isAdmin, isOrganizationAdmin, isBranchAdmin } from "@/lib/permissions"
 import { permissionResources, permissionActions } from "@/constants/permissions"
 import { SurveyBuilder } from "@/components/surveys/survey-builder"
 
@@ -12,7 +12,8 @@ export default async function NewSurveyPage() {
   const role = session.user?.role as any
   const canCreate =
     isAdmin(role) ||
-    (isOrganizationAdmin(role) && hasPermission(role, permissionResources.FORMS, permissionActions.CREATE))
+    (isOrganizationAdmin(role) && hasPermission(role, permissionResources.FORMS, permissionActions.CREATE)) ||
+    (isBranchAdmin(role) && hasPermission(role, permissionResources.FORMS, permissionActions.CREATE))
   if (!canCreate) redirect("/unauthorized")
 
   return (

@@ -4,6 +4,7 @@ import { resolveBranchId } from '@/lib/utils/municipality.util';
 import { permissionActions, permissionResources } from '@/constants/permissions';
 import { subscribeToZoneEventUpdates } from '@/lib/services/zone-event-stream-bus.service';
 import { getBranchTimezone, getRecentBranchEvents } from '@/lib/services/zone-event-feed.service';
+import { getCachedEventSnapshot } from '@/lib/live/branch-live-snapshot-cache';
 
 export const dynamic = 'force-dynamic';
 
@@ -42,7 +43,9 @@ export async function GET(request: Request) {
 
       const sendSnapshot = async () => {
         try {
-          const events = await getRecentBranchEvents(branchId, limit, timezone);
+          const events = await getCachedEventSnapshot(branchId, limit, 0, () =>
+            getRecentBranchEvents(branchId, limit, timezone, 0),
+          );
           sendPayload({
             type: 'events_snapshot',
             data: events,

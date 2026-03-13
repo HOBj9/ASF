@@ -39,9 +39,11 @@ export interface CompletionStatsResult {
   route: {
     _id: string;
     name: string;
+    color?: string;
     workScheduleId: string | null;
     pointsCount: number;
     path?: { type: 'LineString'; coordinates: number[][] } | null;
+    points?: Array<{ pointId: string; order: number; name?: string; nameAr?: string; lat: number; lng: number }>;
   };
 }
 
@@ -156,19 +158,12 @@ export class RouteStatsService {
       timezone
     );
 
-    const vehicleIds = await Vehicle.find({ routeId, branchId })
-      .select('_id')
-      .lean()
-      .exec();
-    const vehicleIdSet = new Set(vehicleIds.map((v: any) => String(v._id)));
+    const vehicleIds = await Vehicle.find({ routeId, branchId }).select('_id').lean().exec();
+    const routeVehicleIds = vehicleIds.map((v: any) => String(v._id));
+    let filteredVehicleIds: string[] | undefined = routeVehicleIds;
 
     if (options?.vehicleId) {
-      if (!vehicleIdSet.has(options.vehicleId)) {
-        vehicleIdSet.clear();
-      } else {
-        vehicleIdSet.clear();
-        vehicleIdSet.add(options.vehicleId);
-      }
+      filteredVehicleIds = routeVehicleIds.includes(options.vehicleId) ? [options.vehicleId] : [];
     }
 
     const page = options?.page ?? 1;
@@ -177,14 +172,41 @@ export class RouteStatsService {
     const paginatedWorkDays = workDays.slice(startIdx, startIdx + pageSize);
 
     const workDayStats: WorkDayStats[] = [];
+    const visitsByDay = new Map<string, Set<string>>();
+
+    if (paginatedWorkDays.length > 0 && filteredVehicleIds && filteredVehicleIds.length > 0) {
+      const overallStart = paginatedWorkDays[0].start;
+      const overallEnd = paginatedWorkDays[paginatedWorkDays.length - 1].end;
+      const visits = await PointVisit.find({
+        branchId: new mongoose.Types.ObjectId(branchId),
+        vehicleId: {
+          $in: filteredVehicleIds.map((id) => new mongoose.Types.ObjectId(id)),
+        },
+        entryTime: { $gte: overallStart, $lte: overallEnd },
+      })
+        .select('pointId entryTime')
+        .sort({ entryTime: 1 })
+        .lean()
+        .exec();
+
+      for (const wd of paginatedWorkDays) {
+        visitsByDay.set(wd.dateStr, new Set<string>());
+      }
+
+      for (const visit of visits as any[]) {
+        const matchingDay = paginatedWorkDays.find(
+          (wd) => visit.entryTime >= wd.start && visit.entryTime <= wd.end,
+        );
+        if (!matchingDay) continue;
+        const bucket = visitsByDay.get(matchingDay.dateStr);
+        if (bucket) {
+          bucket.add(String(visit.pointId));
+        }
+      }
+    }
 
     for (const wd of paginatedWorkDays) {
-      const { visitedPointIds } = await this.getVisitedPointsForDay(
-        routeId,
-        branchId,
-        { start: wd.start, end: wd.end },
-        vehicleIdSet.size > 0 ? Array.from(vehicleIdSet) : undefined
-      );
+      const visitedPointIds = visitsByDay.get(wd.dateStr) || new Set<string>();
       const visitedCount = Array.from(visitedPointIds).filter((id) => pointIds.has(id)).length;
       workDayStats.push({
         date: wd.date.toISOString(),
@@ -311,7 +333,7 @@ export class RouteStatsService {
   /**
    * Get route with points for map/stats display
    */
-  async getRouteWithPoints(routeId: string, branchId: string) {
+  async getRouteWithPoints(routeId: string, branchId: string): Promise<any> {
     await connectDB();
     const route = await Route.findOne({ _id: routeId, branchId }).lean().exec();
     if (!route) return null;
@@ -336,7 +358,7 @@ export class RouteStatsService {
         lat: (p as any).lat,
         lng: (p as any).lng,
       };
-    }).filter(Boolean);
+    }).filter(Boolean) as any[];
 
     return {
       route: {

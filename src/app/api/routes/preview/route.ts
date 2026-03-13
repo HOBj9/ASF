@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { NextResponse } from 'next/server';
 import { requirePermission, handleApiError } from '@/lib/middleware/api-auth.middleware';
 import { permissionActions, permissionResources } from '@/constants/permissions';
@@ -34,7 +36,7 @@ export async function POST(request: Request) {
       .filter(Boolean);
 
     if (orderedPoints.length !== pointIds.length) {
-      return NextResponse.json({ error: 'يوجد نقاط غير تابعة للفرع' }, { status: 400 });
+      return NextResponse.json({ error: 'توجد نقاط غير تابعة للفرع' }, { status: 400 });
     }
 
     const coords = orderedPoints.map((p: any) => [Number(p.lng), Number(p.lat)]);
@@ -66,24 +68,26 @@ export async function POST(request: Request) {
         }
       }
     } catch {
-      // fall back to straight line preview
+      // Fall back to straight line preview when OSRM is unavailable.
     }
 
     if (distanceKm == null && coords.length >= 2) {
-      let d = 0;
+      let distanceMeters = 0;
       for (let i = 0; i < coords.length - 1; i++) {
         const [lng1, lat1] = coords[i];
         const [lng2, lat2] = coords[i + 1];
-        const R = 6371e3;
-        const φ1 = (lat1 * Math.PI) / 180;
-        const φ2 = (lat2 * Math.PI) / 180;
-        const Δφ = ((lat2 - lat1) * Math.PI) / 180;
-        const Δλ = ((lng2 - lng1) * Math.PI) / 180;
-        const a = Math.sin(Δφ / 2) ** 2 + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) ** 2;
+        const earthRadius = 6371e3;
+        const latRad1 = (lat1 * Math.PI) / 180;
+        const latRad2 = (lat2 * Math.PI) / 180;
+        const deltaLat = ((lat2 - lat1) * Math.PI) / 180;
+        const deltaLng = ((lng2 - lng1) * Math.PI) / 180;
+        const a =
+          Math.sin(deltaLat / 2) ** 2 +
+          Math.cos(latRad1) * Math.cos(latRad2) * Math.sin(deltaLng / 2) ** 2;
         const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-        d += R * c;
+        distanceMeters += earthRadius * c;
       }
-      distanceKm = d / 1000;
+      distanceKm = distanceMeters / 1000;
     }
 
     return NextResponse.json({
@@ -102,4 +106,3 @@ export async function POST(request: Request) {
     return handleApiError(error);
   }
 }
-

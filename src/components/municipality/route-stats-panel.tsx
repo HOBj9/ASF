@@ -124,9 +124,8 @@ export function RouteStatsPanel({
       params.set("pageSize", String(PAGE_SIZE));
       if (vehicleId && vehicleId !== "all") params.set("vehicleId", vehicleId);
 
-      const res: StatsResponse = await apiClient.get(`/routes/${routeId}/stats?${params}`);
-
-      setStats(res);
+      const res = await apiClient.get<StatsResponse>(`/routes/${routeId}/stats?${params}`);
+      setStats((res.data ?? res) as StatsResponse);
     } catch (err) {
       setStats(null);
     } finally {
@@ -149,8 +148,8 @@ export function RouteStatsPanel({
         params.set("date", dateStr);
         if (vehicleId && vehicleId !== "all") params.set("vehicleId", vehicleId);
 
-        const res: DayDetailResponse = await apiClient.get(`/routes/${routeId}/stats/day?${params}`);
-        setDayDetail(res);
+        const res = await apiClient.get<DayDetailResponse>(`/routes/${routeId}/stats/day?${params}`);
+        setDayDetail((res.data ?? res) as DayDetailResponse);
       } catch {
         setDayDetail(null);
       } finally {

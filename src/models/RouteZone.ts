@@ -51,7 +51,6 @@ const RouteZoneSchema: Schema = new Schema(
 
 RouteZoneSchema.index({ cityId: 1, branchId: 1, name: 1 });
 RouteZoneSchema.index({ branchId: 1, order: 1 });
-RouteZoneSchema.index({ organizationId: 1 });
 
 let RouteZone: Model<IRouteZone>;
 

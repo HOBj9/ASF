@@ -265,15 +265,32 @@ export function SurveyAnswerForm({ surveyId }: { surveyId: string }) {
   }
 
   const questions = survey.questions ?? []
+  const QUESTIONS_PER_STEP = 3
+  const questionGroupCount = Math.ceil(questions.length / QUESTIONS_PER_STEP)
+  const questionGroupSteps = Array.from({ length: questionGroupCount }, (_, g) => {
+    const start = g * QUESTIONS_PER_STEP
+    const end = Math.min(start + QUESTIONS_PER_STEP, questions.length)
+    const titles = questions.slice(start, end).map((q) => q.questionTextAr || q.questionText)
+    return { title: `الأسئلة ${start + 1}-${end}`, description: titles.join(" · ") }
+  })
   const steps = [
-    { title: "بيانات النقطة", description: "اسم النقطة، الفئات الأساسية والفرعية، الرقم التعريفي" },
-    ...questions.map((q) => ({ title: q.questionTextAr || q.questionText })),
-    { title: "موقع النقطة على الخريطة", description: "حدد الموقع على الخريطة أو استخدم موقع الجهاز" },
+    { title: "بيانات النقطة", description: "اسم النقطة، الفئات، الرقم التعريفي" },
+    ...questionGroupSteps,
+    { title: "الموقع على الخريطة", description: "حدد الموقع على الخريطة أو استخدم موقع الجهاز" },
   ]
   const totalSteps = steps.length
   const isPointDataStep = currentStep === 0
-  const isMapStep = currentStep === questions.length + 1
+  const mapStepIndex = 1 + questionGroupCount
+  const isMapStep = currentStep === mapStepIndex
   const isLastStep = currentStep === totalSteps - 1
+  const isQuestionGroupStep = currentStep >= 1 && currentStep < mapStepIndex
+  const currentQuestionGroupIndex = isQuestionGroupStep ? currentStep - 1 : 0
+  const currentQuestionIndices = isQuestionGroupStep
+    ? Array.from(
+        { length: Math.min(QUESTIONS_PER_STEP, questions.length - currentQuestionGroupIndex * QUESTIONS_PER_STEP) },
+        (_, i) => currentQuestionGroupIndex * QUESTIONS_PER_STEP + i
+      )
+    : []
 
   const isCurrentStepValid = (): boolean => {
     if (currentStep === 0) {
@@ -284,12 +301,18 @@ export function SurveyAnswerForm({ surveyId }: { surveyId: string }) {
         otherIdentifier.trim() !== ""
       )
     }
-    if (currentStep >= questions.length + 1) return mapLat !== 0 && mapLng !== 0
-    const q = questions[currentStep - 1]
-    if (q.type === "current_location") return true
-    if (q.required) {
-      const val = answers[`question_${currentStep - 1}`]
-      return val !== undefined && val !== "" && val !== null
+    if (currentStep === mapStepIndex) return mapLat !== 0 && mapLng !== 0
+    if (isQuestionGroupStep) {
+      for (const index of currentQuestionIndices) {
+        const q = questions[index]
+        if (!q) continue
+        if (q.type === "current_location") continue
+        if (q.required) {
+          const val = answers[`question_${index}`]
+          if (val === undefined || val === "" || val === null) return false
+        }
+      }
+      return true
     }
     return true
   }
@@ -365,67 +388,71 @@ export function SurveyAnswerForm({ surveyId }: { surveyId: string }) {
           </div>
         )}
 
-        {!isMapStep && !isPointDataStep && questions[currentStep - 1] && (() => {
-          const q = questions[currentStep - 1]
-          const index = currentStep - 1
-          return (
-            <div className="space-y-4 min-h-[200px]">
-              <Label className="text-base">
-                {q.questionTextAr || q.questionText}
-                {q.required && <span className="text-destructive mr-1">*</span>}
-              </Label>
-              {q.type === "text" && (
-                <Input
-                  value={(answers[`question_${index}`] as string) ?? ""}
-                  onChange={(e) => setAnswer(`question_${index}`, e.target.value)}
-                  placeholder="أدخل النص"
-                  className="text-right"
-                />
-              )}
-              {q.type === "choice" && (
-                <RadioGroup
-                  value={(answers[`question_${index}`] as string) ?? ""}
-                  onValueChange={(v) => setAnswer(`question_${index}`, v)}
-                  className="flex flex-col gap-2"
-                >
-                  {(q.options || []).map((opt, i) => (
-                    <div key={i} className="flex items-center space-x-2 space-x-reverse">
-                      <RadioGroupItem value={opt} id={`q${index}-${i}`} />
-                      <Label htmlFor={`q${index}-${i}`} className="font-normal cursor-pointer">
-                        {opt}
-                      </Label>
-                    </div>
-                  ))}
-                </RadioGroup>
-              )}
-              {q.type === "current_location" && (
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <Button
-                      type="button"
-                      size="sm"
-                      onClick={() => confirmCurrentLocationForQuestion(index)}
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white border-0"
+        {!isMapStep && !isPointDataStep && isQuestionGroupStep && (
+          <div className="space-y-6 min-h-[200px]">
+            {currentQuestionIndices.map((index) => {
+              const q = questions[index]
+              if (!q) return null
+              return (
+                <div key={index} className="space-y-2">
+                  <Label className="text-base">
+                    {q.questionTextAr || q.questionText}
+                    {q.required && <span className="text-destructive mr-1">*</span>}
+                  </Label>
+                  {q.type === "text" && (
+                    <Input
+                      value={(answers[`question_${index}`] as string) ?? ""}
+                      onChange={(e) => setAnswer(`question_${index}`, e.target.value)}
+                      placeholder="أدخل النص"
+                      className="text-right"
+                    />
+                  )}
+                  {q.type === "choice" && (
+                    <RadioGroup
+                      value={(answers[`question_${index}`] as string) ?? ""}
+                      onValueChange={(v) => setAnswer(`question_${index}`, v)}
+                      className="flex flex-col gap-2"
                     >
-                      <MapPin className="h-4 w-4 ml-2" />
-                      أخذ الموقع الحالي
-                    </Button>
-                    {deviceLat != null && deviceLng != null && (
-                      <span className="text-sm text-muted-foreground">
-                        {deviceLat.toFixed(5)}, {deviceLng.toFixed(5)}
-                      </span>
-                    )}
-                  </div>
-                  {currentLocationConfirmed[index] && (
-                    <div className="rounded-lg border p-2 bg-muted/50 text-sm">
-                      تم استخدام الموقع الحالي وعرضه على الخريطة. في الخطوة التالية حدد/عدّل الموقع على الخريطة.
+                      {(q.options || []).map((opt, i) => (
+                        <div key={i} className="flex items-center space-x-2 space-x-reverse">
+                          <RadioGroupItem value={opt} id={`q${index}-${i}`} />
+                          <Label htmlFor={`q${index}-${i}`} className="font-normal cursor-pointer">
+                            {opt}
+                          </Label>
+                        </div>
+                      ))}
+                    </RadioGroup>
+                  )}
+                  {q.type === "current_location" && (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={() => confirmCurrentLocationForQuestion(index)}
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white border-0"
+                        >
+                          <MapPin className="h-4 w-4 ml-2" />
+                          أخذ الموقع الحالي
+                        </Button>
+                        {deviceLat != null && deviceLng != null && (
+                          <span className="text-sm text-muted-foreground">
+                            {deviceLat.toFixed(5)}, {deviceLng.toFixed(5)}
+                          </span>
+                        )}
+                      </div>
+                      {currentLocationConfirmed[index] && (
+                        <div className="rounded-lg border p-2 bg-muted/50 text-sm">
+                          تم استخدام الموقع الحالي وعرضه على الخريطة. في الخطوة التالية حدد/عدّل الموقع على الخريطة.
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
-              )}
-            </div>
-          )
-        })()}
+              )
+            })}
+          </div>
+        )}
 
         {isMapStep && (
           <div className="space-y-4 min-h-[320px]">

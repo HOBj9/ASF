@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { useSession } from "next-auth/react"
 import toast from "react-hot-toast"
 import { apiClient } from "@/lib/api/client"
@@ -89,7 +89,7 @@ export function VehiclesManager() {
   const [assignOpen, setAssignOpen] = useState(false)
   const [assigning, setAssigning] = useState<Vehicle | null>(null)
   const [assignRouteId, setAssignRouteId] = useState("")
-  const [assignPreviewData, setAssignPreviewData] = useState<{ points: Array<{ _id: string; name?: string; nameAr?: string; lat: number; lng: number }>; geometry: { type: string; coordinates: number[][] }; distanceKm?: number } | null>(null)
+  const [assignPreviewData, setAssignPreviewData] = useState<{ points: Array<{ _id: string; name?: string; nameAr?: string; lat: number; lng: number }>; geometry: { type: "LineString"; coordinates: number[][] }; distanceKm?: number } | null>(null)
   const [assignPreviewLoading, setAssignPreviewLoading] = useState(false)
 
   const [loading, setLoading] = useState(false)
@@ -107,7 +107,7 @@ export function VehiclesManager() {
   const needsBranchSelector = userIsAdmin || (userIsOrgAdmin && !sessionBranchId)
   const resolvedBranchId = selectedBranchId || sessionBranchId
 
-  const loadOrganizations = async () => {
+  const loadOrganizations = useCallback(async () => {
     try {
       const res = await apiClient.get("/organizations").catch(() => ({ organizations: [] } as any))
       const list = res.organizations || res.data?.organizations || []
@@ -116,9 +116,9 @@ export function VehiclesManager() {
     } catch {
       return []
     }
-  }
+  }, [])
 
-  const loadBranches = async (organizationId: string | null) => {
+  const loadBranches = useCallback(async (organizationId: string | null) => {
     if (!organizationId) {
       setBranches([])
       return
@@ -130,9 +130,9 @@ export function VehiclesManager() {
     } catch {
       setBranches([])
     }
-  }
+  }, [])
 
-  const loadBranchesForOrgUser = async () => {
+  const loadBranchesForOrgUser = useCallback(async () => {
     try {
       const res = await apiClient.get("/branches")
       const list = res.branches || res.data?.branches || []
@@ -141,9 +141,9 @@ export function VehiclesManager() {
     } catch {
       setBranches([])
     }
-  }
+  }, [selectedBranchId])
 
-  const load = async (branchId: string | null) => {
+  const load = useCallback(async (branchId: string | null) => {
     if (needsBranchSelector && !branchId) {
       setItems([])
       setDrivers([])
@@ -169,41 +169,45 @@ export function VehiclesManager() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [labels.vehicleLabel, needsBranchSelector])
 
   useEffect(() => {
     if (session === undefined) return
     if (userIsAdmin) {
-      loadOrganizations().then((list) => {
+      void loadOrganizations().then((list) => {
         if (list.length === 1 && !selectedOrganizationId) setSelectedOrganizationId(list[0]._id)
       })
     } else if (userIsOrgAdmin && !sessionBranchId) {
-      loadBranchesForOrgUser()
+      void loadBranchesForOrgUser()
     } else {
-      load(null)
+      void load(null)
     }
-  }, [session?.user])
+  }, [load, loadBranchesForOrgUser, loadOrganizations, selectedOrganizationId, session, sessionBranchId, userIsAdmin, userIsOrgAdmin])
 
   useEffect(() => {
     if (userIsAdmin && selectedOrganizationId) {
-      loadBranches(selectedOrganizationId)
+      void loadBranches(selectedOrganizationId)
       setSelectedBranchId("")
     }
-  }, [userIsAdmin, selectedOrganizationId])
+  }, [loadBranches, selectedOrganizationId, userIsAdmin])
 
   useEffect(() => {
     if (!needsBranchSelector) return
-    if (resolvedBranchId) load(resolvedBranchId)
+    if (resolvedBranchId) {
+      void load(resolvedBranchId)
+    }
     else {
       setItems([])
       setDrivers([])
       setRoutes([])
     }
-  }, [needsBranchSelector, resolvedBranchId])
+  }, [load, needsBranchSelector, resolvedBranchId])
 
   useEffect(() => {
-    if (!needsBranchSelector && session?.user) load(null)
-  }, [needsBranchSelector, session?.user])
+    if (!needsBranchSelector && session?.user) {
+      void load(null)
+    }
+  }, [load, needsBranchSelector, session])
 
   const loadAtharObjects = async () => {
     if (!resolvedBranchId) return
@@ -332,7 +336,7 @@ export function VehiclesManager() {
       fuelType: form.fuelType === "diesel" ? "diesel" : "gasoline",
       driverId: form.driverId === "none" ? "" : form.driverId,
       routeId: form.routeId === "none" ? "" : form.routeId,
-      fuelPricePerKm: form.fuelPricePerKm != null && form.fuelPricePerKm !== "" ? Number(form.fuelPricePerKm) : null,
+      fuelPricePerKm: form.fuelPricePerKm != null ? Number(form.fuelPricePerKm) : undefined,
     }
 
     if (!payload.name || !payload.imei) {

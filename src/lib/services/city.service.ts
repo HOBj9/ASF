@@ -24,7 +24,7 @@ export interface UpdateCityData {
 }
 
 export class CityService {
-  async list(organizationId: string, governorateId?: string | null): Promise<ICity[]> {
+  async list(organizationId: string, governorateId?: string | null): Promise<any[]> {
     await connectDB();
     const org = await Organization.findById(organizationId).lean();
     if (!org) throw new Error('المؤسسة غير موجودة');
@@ -33,7 +33,7 @@ export class CityService {
     return City.find(filter).sort({ order: 1, name: 1 }).lean().exec();
   }
 
-  async create(organizationId: string, data: CreateCityData): Promise<ICity> {
+  async create(organizationId: string, data: CreateCityData): Promise<any> {
     await connectDB();
     const org = await Organization.findById(organizationId).lean();
     if (!org) throw new Error('المؤسسة غير موجودة');
@@ -48,7 +48,7 @@ export class CityService {
     });
   }
 
-  async update(id: string, organizationId: string, data: UpdateCityData): Promise<ICity | null> {
+  async update(id: string, organizationId: string, data: UpdateCityData): Promise<any | null> {
     await connectDB();
     const city = await City.findOne({ _id: id, organizationId });
     if (!city) return null;
@@ -78,7 +78,7 @@ export class CityService {
     return !!deleted;
   }
 
-  async getById(id: string, organizationId: string): Promise<ICity | null> {
+  async getById(id: string, organizationId: string): Promise<any | null> {
     await connectDB();
     return City.findOne({ _id: id, organizationId }).lean().exec();
   }

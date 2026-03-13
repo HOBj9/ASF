@@ -25,7 +25,7 @@ export class RoleService {
   /**
    * Create a new role
    */
-  async create(data: CreateRoleData): Promise<IRole> {
+  async create(data: CreateRoleData): Promise<any> {
     await connectDB();
 
     // Check if role already exists
@@ -56,7 +56,7 @@ export class RoleService {
   /**
    * Get role by ID
    */
-  async getById(id: string): Promise<IRole | null> {
+  async getById(id: string): Promise<any | null> {
     await connectDB();
     return Role.findById(id).populate('permissions').lean().exec();
   }
@@ -64,7 +64,7 @@ export class RoleService {
   /**
    * Get role by name
    */
-  async getByName(name: string): Promise<IRole | null> {
+  async getByName(name: string): Promise<any | null> {
     await connectDB();
     return Role.findOne({ name }).populate('permissions').lean().exec();
   }
@@ -72,7 +72,7 @@ export class RoleService {
   /**
    * Get all roles
    */
-  async getAll(): Promise<IRole[]> {
+  async getAll(): Promise<any[]> {
     await connectDB();
     return Role.find({}).populate('permissions').lean().exec();
   }
@@ -80,7 +80,7 @@ export class RoleService {
   /**
    * Update role
    */
-  async update(id: string, data: UpdateRoleData): Promise<IRole | null> {
+  async update(id: string, data: UpdateRoleData): Promise<any | null> {
     await connectDB();
 
     const role = await Role.findById(id);

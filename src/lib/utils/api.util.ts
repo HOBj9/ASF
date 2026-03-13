@@ -25,7 +25,7 @@ export function successResponse<T>(
     {
       success: true,
       data,
-      message: message || messages.success.success,
+      message: message || messages.common.success,
     },
     { status }
   );

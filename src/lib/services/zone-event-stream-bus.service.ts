@@ -1,5 +1,6 @@
 import { EventEmitter } from 'events';
 import type { DashboardEventItem } from '@/lib/types/dashboard-event';
+import { invalidateEventSnapshots } from '@/lib/live/branch-live-snapshot-cache';
 
 type ZoneEventListener = (event: DashboardEventItem) => void;
 
@@ -37,6 +38,7 @@ function getBus(): ZoneEventStreamBus {
 }
 
 export function publishZoneEventUpdate(branchId: string, event: DashboardEventItem): void {
+  invalidateEventSnapshots(branchId);
   getBus().emit(branchId, event);
 }
 

@@ -17,6 +17,11 @@ export function SessionManager({
       <p className="text-muted-foreground">
         {initialSessions.length} جلسة متاحة. واجهة إدارة الجلسات قيد التطوير.
       </p>
+      {isAdmin ? (
+        <p className="mt-2 text-sm text-muted-foreground">
+          وضع المدير مفعل، وستظهر أدوات الإدارة الكاملة هنا عند اكتمال الواجهة.
+        </p>
+      ) : null}
     </div>
   );
 }

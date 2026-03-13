@@ -102,7 +102,7 @@ export function ApiKeyManager({ onApiKeyChange }: ApiKeyManagerProps) {
 
   const handleRegenerate = () => {
     if (showRegenerateWarning) {
-      regenerateMutation.mutate()
+      regenerateMutation.mutate(undefined)
     } else {
       setShowRegenerateWarning(true)
     }
@@ -141,7 +141,7 @@ export function ApiKeyManager({ onApiKeyChange }: ApiKeyManagerProps) {
                 لا يوجد API key. قم بإنشاء واحد للبدء.
               </p>
               <Button
-                onClick={() => createMutation.mutate()}
+                onClick={() => createMutation.mutate(undefined)}
                 disabled={createMutation.isPending}
                 className="w-full sm:w-auto"
               >
@@ -271,7 +271,7 @@ export function ApiKeyManager({ onApiKeyChange }: ApiKeyManagerProps) {
                     </Button>
                     <Button
                       variant="destructive"
-                      onClick={() => deleteMutation.mutate()}
+                      onClick={() => deleteMutation.mutate(undefined)}
                       disabled={regenerateMutation.isPending || deleteMutation.isPending}
                       className="flex-1"
                     >

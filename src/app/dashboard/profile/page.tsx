@@ -30,8 +30,8 @@ export default async function ProfilePage() {
           id: session.user.id,
           name: user?.name || session.user.name || "",
           email: user?.email || session.user.email || "",
-          avatar: user?.avatar || null,
-          businessName: (user as any)?.businessName || null,
+          avatar: user?.avatar || undefined,
+          businessName: (user as any)?.businessName || undefined,
         }} 
       />
     </div>

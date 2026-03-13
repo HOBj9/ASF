@@ -39,7 +39,7 @@ export interface RoutePointInput {
 const workScheduleService = new WorkScheduleService();
 
 export class RouteService {
-  async create(data: CreateRouteData): Promise<IRoute> {
+  async create(data: CreateRouteData): Promise<any> {
     await connectDB();
 
     const branch = await Branch.findById(data.branchId).lean();
@@ -79,7 +79,7 @@ export class RouteService {
     return route;
   }
 
-  async getAll(branchId: string): Promise<IRoute[]> {
+  async getAll(branchId: string): Promise<any[]> {
     await connectDB();
     return Route.find({ branchId })
       .populate({ path: 'zoneIds', model: 'RouteZone', select: 'name nameAr', strictPopulate: false })
@@ -88,7 +88,7 @@ export class RouteService {
       .exec();
   }
 
-  async getById(id: string, branchId: string): Promise<IRoute | null> {
+  async getById(id: string, branchId: string): Promise<any | null> {
     await connectDB();
     return Route.findOne({ _id: id, branchId })
       .populate({ path: 'zoneIds', model: 'RouteZone', select: 'name nameAr', strictPopulate: false })
@@ -97,7 +97,7 @@ export class RouteService {
       .exec();
   }
 
-  async update(id: string, branchId: string, data: UpdateRouteData): Promise<IRoute | null> {
+  async update(id: string, branchId: string, data: UpdateRouteData): Promise<any | null> {
     await connectDB();
     const route = await Route.findOne({ _id: id, branchId });
     if (!route) {
@@ -153,7 +153,7 @@ export class RouteService {
     return !!deleted;
   }
 
-  async getRoutePoints(routeId: string, branchId: string): Promise<IRoutePoint[]> {
+  async getRoutePoints(routeId: string, branchId: string): Promise<any[]> {
     await connectDB();
     const route = await Route.findOne({ _id: routeId, branchId }).lean();
     if (!route) {
@@ -222,7 +222,7 @@ export class RouteService {
     routeId: string,
     branchId: string,
     points: RoutePointInput[]
-  ): Promise<IRoutePoint[]> {
+  ): Promise<any[]> {
     await connectDB();
     const route = await Route.findOne({ _id: routeId, branchId }).lean();
     if (!route) {

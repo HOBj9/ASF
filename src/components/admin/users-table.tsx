@@ -50,7 +50,7 @@ export function UsersTable({ users: initialUsers }: { users: User[] }) {
     if (userList.length === 0 || userList.length !== initialUsers.length) {
       setUserList(initialUsers)
     }
-  }, [initialUsers.length])
+  }, [initialUsers, userList.length])
 
   const handleToggleActiveClick = useCallback((user: User) => {
     // Prevent admin from disabling themselves
@@ -184,7 +184,7 @@ export function UsersTable({ users: initialUsers }: { users: User[] }) {
     } finally {
       setLoading(null)
     }
-  }, [router, update, selectedUser])
+  }, [selectedUser, update])
 
   const handleUserCreated = useCallback(() => {
     // Refresh the page to get updated user list

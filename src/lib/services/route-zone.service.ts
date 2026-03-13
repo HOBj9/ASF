@@ -25,7 +25,7 @@ export interface UpdateRouteZoneData {
 }
 
 export class RouteZoneService {
-  async list(branchId: string, cityId?: string | null): Promise<IRouteZone[]> {
+  async list(branchId: string, cityId?: string | null): Promise<any[]> {
     await connectDB();
     const branch = await Branch.findById(branchId).lean();
     if (!branch) throw new Error('الفرع غير موجود');
@@ -34,7 +34,7 @@ export class RouteZoneService {
     return RouteZone.find(filter).sort({ order: 1, name: 1 }).lean().exec();
   }
 
-  async create(branchId: string, data: CreateRouteZoneData): Promise<IRouteZone> {
+  async create(branchId: string, data: CreateRouteZoneData): Promise<any> {
     await connectDB();
     const branch = await Branch.findById(branchId).lean();
     if (!branch) throw new Error('الفرع غير موجود');
@@ -53,7 +53,7 @@ export class RouteZoneService {
     });
   }
 
-  async update(id: string, branchId: string, data: UpdateRouteZoneData): Promise<IRouteZone | null> {
+  async update(id: string, branchId: string, data: UpdateRouteZoneData): Promise<any | null> {
     await connectDB();
     const zone = await RouteZone.findOne({ _id: id, branchId });
     if (!zone) return null;
@@ -80,7 +80,7 @@ export class RouteZoneService {
     return !!deleted;
   }
 
-  async getById(id: string, branchId: string): Promise<IRouteZone | null> {
+  async getById(id: string, branchId: string): Promise<any | null> {
     await connectDB();
     return RouteZone.findOne({ _id: id, branchId }).lean().exec();
   }

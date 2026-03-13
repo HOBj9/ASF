@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { NextResponse } from 'next/server';
 import { requirePermission, handleApiError } from '@/lib/middleware/api-auth.middleware';
 import { PointService } from '@/lib/services/point.service';
@@ -29,18 +31,17 @@ function parseZoneVertices(zoneVertices?: string): Array<{ lat: number; lng: num
 }
 
 function normalizeZones(rawZones: Array<Record<string, any>>): NormalizedZone[] {
-  return rawZones
-    .map((z) => {
+  return rawZones.reduce<NormalizedZone[]>((acc, z) => {
       const idRaw = z.zone_id ?? z.id ?? z._id;
-      if (idRaw == null || idRaw === '') return null;
+      if (idRaw == null || idRaw === '') return acc;
       const id = String(idRaw);
       const name = String(z.name ?? z.title ?? `Zone ${id}`);
       const color = typeof z.color === 'string' && z.color.trim() ? z.color.trim() : undefined;
       const center = PointService.zoneToCenter(z);
       const vertices = parseZoneVertices(z.zone_vertices ?? z.zoneVertices ?? z.vertices);
-      return { id, name, color, center, vertices };
-    })
-    .filter((zone): zone is NormalizedZone => zone != null);
+      acc.push({ id, name, color, center, vertices });
+      return acc;
+    }, []);
 }
 
 /**

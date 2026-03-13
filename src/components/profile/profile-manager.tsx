@@ -1,5 +1,6 @@
 "use client"
 
+import Image from "next/image"
 import { useState, useEffect } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -211,9 +212,12 @@ export function ProfileManager({ initialUser }: ProfileManagerProps) {
           <div className="flex items-center gap-6">
             <div className="relative">
               {avatarPreview ? (
-                <img
+                <Image
                   src={avatarPreview}
                   alt="Profile"
+                  width={96}
+                  height={96}
+                  unoptimized
                   className="h-24 w-24 rounded-full object-cover border-4 border-purple-500/20 dark:border-purple-400/30"
                 />
               ) : (

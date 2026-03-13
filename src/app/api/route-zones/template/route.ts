@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { NextResponse } from 'next/server';
 import { requirePermission } from '@/lib/middleware/api-auth.middleware';
 import { permissionActions, permissionResources } from '@/constants/permissions';
@@ -13,17 +15,25 @@ export async function GET() {
 
     const headers = ['name', 'الاسم', 'nameAr', 'الاسم العربي', 'order', 'الترتيب'];
     const rows = [
-      { name: 'منطقة 1', 'الاسم': '', nameAr: 'منطقة 1', 'الاسم العربي': '', order: 1, 'الترتيب': '' },
+      {
+        name: 'zone-1',
+        الاسم: '',
+        nameAr: 'منطقة 1',
+        'الاسم العربي': '',
+        order: 1,
+        الترتيب: '',
+      },
     ];
     const buffer = toXlsxBuffer(headers, rows, { sheetName: 'المناطق' });
+    const responseBody = new Uint8Array(buffer);
 
-    return new NextResponse(buffer, {
+    return new NextResponse(responseBody, {
       headers: {
         'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         'Content-Disposition': 'attachment; filename="route-zones-template.xlsx"',
       },
     });
   } catch (error: any) {
-    return NextResponse.json({ error: error?.message || 'خطأ' }, { status: 500 });
+    return NextResponse.json({ error: error?.message || 'حدث خطأ' }, { status: 500 });
   }
 }

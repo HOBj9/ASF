@@ -1,17 +1,12 @@
+export const dynamic = 'force-dynamic';
+
 import { NextResponse } from 'next/server';
 import { requirePermission, handleApiError } from '@/lib/middleware/api-auth.middleware';
-import { SurveyService } from '@/lib/services/survey.service';
-import { permissionResources, permissionActions } from '@/constants/permissions';
-import { isAdmin } from '@/lib/permissions';
 import connectDB from '@/lib/mongodb';
-import Branch from '@/models/Branch';
 import Survey from '@/models/Survey';
+import { permissionResources, permissionActions } from '@/constants/permissions';
+import { isBranchAdmin } from '@/lib/permissions';
 
-const surveyService = new SurveyService();
-
-/**
- * GET survey by id. User must belong to the survey's organization (session.organizationId or branch's org).
- */
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ surveyId: string }> }
@@ -29,25 +24,24 @@ export async function GET(
       return NextResponse.json({ error: 'الاستبيان غير موجود' }, { status: 404 });
     }
 
-    const orgId = (survey as any).organizationId?.toString?.();
-    if (!orgId) {
-      return NextResponse.json({ error: 'الاستبيان غير مرتبط بمؤسسة' }, { status: 400 });
-    }
-
-    const sessionOrg = (session?.user as any)?.organizationId?.toString?.();
-    if (sessionOrg === orgId) {
-      return NextResponse.json({ survey });
-    }
-
-    const branchId = (session?.user as any)?.branchId?.toString?.();
-    if (branchId) {
-      const branch = await Branch.findById(branchId).select('organizationId').lean();
-      if (branch && String(branch.organizationId) === orgId) {
-        return NextResponse.json({ survey });
+    const sessionOrgId = (session?.user as any)?.organizationId?.toString?.();
+    const sessionBranchId = (session?.user as any)?.branchId?.toString?.();
+    const surveyOrgId = (survey as any).organizationId?.toString?.();
+    if (surveyOrgId !== sessionOrgId) {
+      const branch = await (await import('@/models/Branch')).default.findById(sessionBranchId).select('organizationId').lean();
+      if (!sessionBranchId || !branch || String((branch as any).organizationId) !== surveyOrgId) {
+        return NextResponse.json({ error: 'غير مصرح بعرض هذا الاستبيان' }, { status: 403 });
       }
     }
 
-    return NextResponse.json({ error: 'لا يمكنك الوصول إلى هذا الاستبيان' }, { status: 403 });
+    if (sessionBranchId && (isBranchAdmin((session?.user as any)?.role) || (session?.user as any)?.role?.name === 'line_supervisor')) {
+      const surveyBranchId = (survey as any).branchId ? String((survey as any).branchId) : null;
+      if (surveyBranchId !== null && surveyBranchId !== sessionBranchId) {
+        return NextResponse.json({ error: 'غير مصرح بعرض هذا الاستبيان' }, { status: 403 });
+      }
+    }
+
+    return NextResponse.json({ survey });
   } catch (error: any) {
     return handleApiError(error);
   }

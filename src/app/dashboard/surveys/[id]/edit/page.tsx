@@ -1,7 +1,7 @@
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { redirect } from "next/navigation"
-import { hasPermission, isAdmin, isOrganizationAdmin } from "@/lib/permissions"
+import { hasPermission, isAdmin, isOrganizationAdmin, isBranchAdmin } from "@/lib/permissions"
 import { permissionResources, permissionActions } from "@/constants/permissions"
 import { SurveyBuilder } from "@/components/surveys/survey-builder"
 
@@ -16,7 +16,8 @@ export default async function EditSurveyPage({
   const role = session.user?.role as any
   const canUpdate =
     isAdmin(role) ||
-    (isOrganizationAdmin(role) && hasPermission(role, permissionResources.FORMS, permissionActions.UPDATE))
+    (isOrganizationAdmin(role) && hasPermission(role, permissionResources.FORMS, permissionActions.UPDATE)) ||
+    (isBranchAdmin(role) && hasPermission(role, permissionResources.FORMS, permissionActions.UPDATE))
   if (!canUpdate) redirect("/unauthorized")
 
   const surveyId = params.id

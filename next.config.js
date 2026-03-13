@@ -2,13 +2,11 @@
 const nextConfig = {
   reactStrictMode: true,
   output: process.env.NODE_ENV === 'production' ? 'standalone' : undefined,
-  // Ignore ESLint errors during build (warnings won't block, but this ensures smooth builds)
   eslint: {
-    ignoreDuringBuilds: true,
+    ignoreDuringBuilds: false,
   },
-  // Ignore TypeScript errors during build
   typescript: {
-    ignoreBuildErrors: true,
+    ignoreBuildErrors: false,
   },
   // Keep dev pages in buffer longer to reduce ChunkLoadError when Docker compiles slowly
   onDemandEntries: {

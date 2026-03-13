@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { useSession } from "next-auth/react"
 import toast from "react-hot-toast"
 import { apiClient } from "@/lib/api/client"
@@ -111,39 +111,39 @@ export function PointMaterialsManager() {
   const materialMap = useMemo(() => new Map(materials.map((m) => [m._id, m])), [materials])
   const unitMap = useMemo(() => new Map(units.map((u) => [u._id, u])), [units])
 
-  const loadPoints = async (branchId: string) => {
+  const loadPoints = useCallback(async (branchId: string) => {
     const res = await apiClient.get(`/points?branchId=${branchId}`)
     setPoints(res.points || res.data?.points || [])
-  }
+  }, [])
 
-  const loadMaterials = async (branchId: string, pointId: string) => {
+  const loadMaterials = useCallback(async (branchId: string, pointId: string) => {
     if (!pointId) return
     const res = await apiClient.get(`/materials?branchId=${branchId}&pointId=${pointId}&scope=point`)
     setMaterials(res.materials || res.data?.materials || [])
-  }
+  }, [])
 
-  const loadUnits = async (branchId: string, pointId: string) => {
+  const loadUnits = useCallback(async (branchId: string, pointId: string) => {
     if (!pointId) return
     const res = await apiClient.get(`/units?branchId=${branchId}&pointId=${pointId}&scope=point`)
     setUnits(res.units || res.data?.units || [])
-  }
+  }, [])
 
-  const loadStocks = async (branchId: string, pointId: string) => {
+  const loadStocks = useCallback(async (branchId: string, pointId: string) => {
     if (!pointId) return
     const res = await apiClient.get(`/material-stocks?branchId=${branchId}&pointId=${pointId}`)
     setStocks(res.stocks || res.data?.stocks || [])
-  }
+  }, [])
 
-  const loadTransactions = async (branchId: string, pointId: string) => {
+  const loadTransactions = useCallback(async (branchId: string, pointId: string) => {
     if (!pointId) return
     const res = await apiClient.get(`/material-transactions?branchId=${branchId}&pointId=${pointId}&limit=50`)
     setTransactions(res.transactions || res.data?.transactions || [])
-  }
+  }, [])
 
-  const refreshPointData = async (branchId: string, pointId: string) => {
+  const refreshPointData = useCallback(async (branchId: string, pointId: string) => {
     if (!pointId) return
     await Promise.all([loadStocks(branchId, pointId), loadTransactions(branchId, pointId)])
-  }
+  }, [loadStocks, loadTransactions])
 
   useEffect(() => {
     if (canSelectBranch) {
@@ -161,7 +161,7 @@ export function PointMaterialsManager() {
     } else if (sessionBranchId) {
       setSelectedBranchId(sessionBranchId)
     }
-  }, [canSelectBranch, sessionBranchId])
+  }, [canSelectBranch, selectedBranchId, sessionBranchId])
 
   useEffect(() => {
     if (!activeBranchId) return
@@ -169,7 +169,7 @@ export function PointMaterialsManager() {
     Promise.all([loadPoints(activeBranchId)])
       .catch((error: any) => toast.error(error.message || "حدث خطأ"))
       .finally(() => setLoading(false))
-  }, [activeBranchId])
+  }, [activeBranchId, loadPoints])
 
   useEffect(() => {
     if (!selectedPointId && points.length > 0) {
@@ -185,7 +185,7 @@ export function PointMaterialsManager() {
       .catch((error: any) => {
         toast.error(error.message || "حدث خطأ")
       })
-  }, [activeBranchId, selectedPointId])
+  }, [activeBranchId, loadMaterials, loadUnits, refreshPointData, selectedPointId])
 
   const submitTransaction = async () => {
     if (!activeBranchId) {

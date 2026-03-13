@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { useSession } from "next-auth/react"
 import toast from "react-hot-toast"
 import { apiClient } from "@/lib/api/client"
@@ -93,7 +93,7 @@ export function WorkSchedulesManager() {
     return "branch"
   }, [needsBranchSelector, resolvedBranchId, resolvedOrganizationId, userIsBranchAdmin, userIsOrgAdmin])
 
-  const loadOrganizations = async () => {
+  const loadOrganizations = useCallback(async () => {
     try {
       const res = await apiClient.get("/organizations").catch(() => ({ organizations: [] } as any))
       const list = res.organizations || res.data?.organizations || []
@@ -102,9 +102,9 @@ export function WorkSchedulesManager() {
     } catch {
       return []
     }
-  }
+  }, [])
 
-  const loadBranches = async (organizationId: string | null) => {
+  const loadBranches = useCallback(async (organizationId: string | null) => {
     if (!organizationId) { setBranches([]); return }
     try {
       const res = await apiClient.get(`/branches?organizationId=${organizationId}`)
@@ -112,9 +112,9 @@ export function WorkSchedulesManager() {
     } catch {
       setBranches([])
     }
-  }
+  }, [])
 
-  const loadBranchesForOrgUser = async () => {
+  const loadBranchesForOrgUser = useCallback(async () => {
     try {
       const res = await apiClient.get("/branches")
       const list = res.branches || res.data?.branches || []
@@ -123,9 +123,9 @@ export function WorkSchedulesManager() {
     } catch {
       setBranches([])
     }
-  }
+  }, [selectedBranchId])
 
-  const load = async () => {
+  const load = useCallback(async () => {
     if (viewMode === "org" && resolvedOrganizationId) {
       setLoading(true)
       try {
@@ -149,31 +149,31 @@ export function WorkSchedulesManager() {
     } else {
       setItems([])
     }
-  }
+  }, [resolvedBranchId, resolvedOrganizationId, viewMode])
 
   useEffect(() => {
     if (session === undefined) return
     if (userIsAdmin) {
-      loadOrganizations().then((list) => {
+      void loadOrganizations().then((list) => {
         if (list.length === 1 && !selectedOrganizationId) setSelectedOrganizationId(list[0]._id)
       })
     } else if (userIsOrgAdmin && !sessionBranchId) {
-      loadBranchesForOrgUser()
+      void loadBranchesForOrgUser()
     } else if (userIsBranchAdmin) {
-      loadBranchesForOrgUser()
+      void loadBranchesForOrgUser()
     }
-  }, [session?.user])
+  }, [loadBranchesForOrgUser, loadOrganizations, selectedOrganizationId, session, sessionBranchId, userIsAdmin, userIsBranchAdmin, userIsOrgAdmin])
 
   useEffect(() => {
     if (userIsAdmin && selectedOrganizationId) {
-      loadBranches(selectedOrganizationId)
+      void loadBranches(selectedOrganizationId)
       setSelectedBranchId("")
     }
-  }, [userIsAdmin, selectedOrganizationId])
+  }, [loadBranches, selectedOrganizationId, userIsAdmin])
 
   useEffect(() => {
-    load()
-  }, [viewMode, resolvedOrganizationId, resolvedBranchId])
+    void load()
+  }, [load])
 
   const openCreate = () => {
     setEditing(null)

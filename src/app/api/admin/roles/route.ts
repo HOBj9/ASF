@@ -1,4 +1,6 @@
-﻿import { NextResponse } from "next/server"
+export const dynamic = 'force-dynamic';
+
+import { NextResponse } from "next/server"
 import { requireAdmin, handleApiError } from "@/lib/middleware/api-auth.middleware"
 import { RoleService } from "@/lib/services/role.service"
 import { messages } from "@/constants/messages"

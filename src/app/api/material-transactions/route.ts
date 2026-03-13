@@ -1,4 +1,6 @@
-﻿import { NextResponse } from 'next/server';
+export const dynamic = 'force-dynamic';
+
+import { NextResponse } from 'next/server';
 import connectDB from '@/lib/mongodb';
 import { requirePermission, handleApiError } from '@/lib/middleware/api-auth.middleware';
 import { permissionActions, permissionResources } from '@/constants/permissions';
@@ -14,6 +16,12 @@ import Unit from '@/models/Unit';
 type UnitDoc = {
   _id: string;
   baseUnitId?: string | null;
+  factor?: number;
+};
+
+type UnitLookupResult = {
+  _id: unknown;
+  baseUnitId?: unknown;
   factor?: number;
 };
 
@@ -35,12 +43,12 @@ async function resolveUnitFactorToRoot(
 
     let unit = cache.get(currentId);
     if (!unit) {
-      const found = await Unit.findOne({
+      const found = (await Unit.findOne({
         _id: currentId,
         organizationId,
       })
         .select('_id baseUnitId factor')
-        .lean();
+        .lean()) as UnitLookupResult | null;
       if (!found) {
         throw new Error('الوحدة غير موجودة');
       }

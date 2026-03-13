@@ -117,7 +117,7 @@ export function EventReportsPanel({
 
     setBranches(mapped);
     setSelectedBranchId((current) => {
-      if (current && mapped.some((branch) => branch._id === current)) return current;
+      if (current && mapped.some((branch: OptionItem) => branch._id === current)) return current;
       if (mapped.length === 1) return mapped[0]._id;
       return '';
     });
@@ -138,7 +138,7 @@ export function EventReportsPanel({
 
     setBranches(mapped);
     setSelectedBranchId((current) => {
-      if (current && mapped.some((branch) => branch._id === current)) return current;
+      if (current && mapped.some((branch: OptionItem) => branch._id === current)) return current;
       if (mapped.length === 1) return mapped[0]._id;
       return '';
     });
@@ -166,7 +166,7 @@ export function EventReportsPanel({
           if (!active) return;
           setOrganizations(mapped);
           setSelectedOrganizationId((current) => {
-            if (current && mapped.some((org) => org._id === current)) return current;
+            if (current && mapped.some((org: OptionItem) => org._id === current)) return current;
             if (mapped.length === 1) return mapped[0]._id;
             return '';
           });

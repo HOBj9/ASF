@@ -31,13 +31,15 @@ export default async function LineSupervisorsPage() {
   await connectDB()
   const labels = await getLabelsForSession(session)
   const lineSupervisorRole = await Role.findOne({ name: "line_supervisor" }).select("_id").lean()
+  const Branch = (await import("@/models/Branch")).default
+  const branches = await Branch.find({ organizationId }).select("name nameAr _id").sort({ name: 1 }).lean()
   const initialUsers = lineSupervisorRole
     ? await User.find({
         organizationId,
-        branchId: null,
         role: (lineSupervisorRole as any)._id,
       })
         .populate("role", "name nameAr")
+        .populate("branchId", "name nameAr")
         .sort({ createdAt: -1 })
         .lean()
     : []
@@ -46,11 +48,12 @@ export default async function LineSupervisorsPage() {
     <div className="text-right">
       <div className="mb-6 lg:mb-8">
         <h1 className="text-2xl lg:text-3xl font-bold">{labels.lineSupervisorLabel}</h1>
-        <p className="text-muted-foreground mt-2">عرض وإضافة {labels.lineSupervisorLabel} المرتبطين بمؤسستك</p>
+        <p className="text-muted-foreground mt-2">عرض وإضافة {labels.lineSupervisorLabel} المرتبطين بفرع محدد من مؤسستك</p>
       </div>
       <LineSupervisorsManager
         organizationId={organizationId}
         initialUsers={JSON.parse(JSON.stringify(initialUsers))}
+        branches={JSON.parse(JSON.stringify(branches))}
       />
     </div>
   )

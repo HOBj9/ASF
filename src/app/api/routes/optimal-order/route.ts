@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { NextResponse } from 'next/server';
 import { requirePermission, handleApiError } from '@/lib/middleware/api-auth.middleware';
 import { permissionActions, permissionResources } from '@/constants/permissions';
@@ -40,7 +42,7 @@ export async function POST(request: Request) {
     const pointMap = new Map(pointDocs.map((p: any) => [String(p._id), p]));
     const orderedById = pointIds.map((id) => pointMap.get(String(id))).filter(Boolean);
     if (orderedById.length !== pointIds.length) {
-      return NextResponse.json({ error: 'يوجد نقاط غير تابعة للفرع' }, { status: 400 });
+      return NextResponse.json({ error: 'توجد نقاط غير تابعة للفرع' }, { status: 400 });
     }
 
     if (!startPointId || !pointMap.has(String(startPointId))) startPointId = pointIds[0];
@@ -54,15 +56,15 @@ export async function POST(request: Request) {
     const endIdx = idsInOrder.indexOf(endPointId);
     if (startIdx >= 0) idsInOrder.splice(startIdx, 1);
     if (endIdx >= 0 && endPointId !== startPointId) {
-      const ei = idsInOrder.indexOf(endPointId);
-      if (ei >= 0) idsInOrder.splice(ei, 1);
+      const effectiveEndIdx = idsInOrder.indexOf(endPointId);
+      if (effectiveEndIdx >= 0) idsInOrder.splice(effectiveEndIdx, 1);
     }
     const middleIds = idsInOrder.filter((id) => id !== startPointId && id !== endPointId);
 
     const allIds = [startPointId, ...middleIds, endPointId];
     const coords = allIds.map((id) => {
-      const p = pointMap.get(String(id)) as any;
-      return [Number(p.lng), Number(p.lat)] as [number, number];
+      const point = pointMap.get(String(id)) as any;
+      return [Number(point.lng), Number(point.lat)] as [number, number];
     });
 
     if (middleIds.length > 0) {
@@ -76,23 +78,25 @@ export async function POST(request: Request) {
           const tableData = await tableRes.json();
           const distances = tableData.distances as number[][] | undefined;
           if (distances && distances.length === coords.length) {
-            const n = coords.length;
+            const totalPoints = coords.length;
             const start = 0;
-            const end = n - 1;
-            const middleIndices = Array.from({ length: n - 2 }, (_, i) => i + 1);
+            const end = totalPoints - 1;
+            const middleIndices = Array.from({ length: totalPoints - 2 }, (_, i) => i + 1);
             let bestOrder: number[] = [start, ...middleIndices, end];
             let bestDist = Infinity;
+
             const sumOrder = (order: number[]) => {
-              let d = 0;
+              let distance = 0;
               for (let i = 0; i < order.length - 1; i++) {
-                const a = order[i];
-                const b = order[i + 1];
-                const v = distances[a]?.[b];
-                if (v != null && Number.isFinite(v)) d += v;
-                else d += 1e9;
+                const from = order[i];
+                const to = order[i + 1];
+                const value = distances[from]?.[to];
+                if (value != null && Number.isFinite(value)) distance += value;
+                else distance += 1e9;
               }
-              return d;
+              return distance;
             };
+
             bestDist = sumOrder(bestOrder);
 
             const permute = (arr: number[], from: number, cb: (order: number[]) => void) => {
@@ -109,9 +113,9 @@ export async function POST(request: Request) {
 
             if (middleIndices.length <= 8) {
               permute(middleIndices, 0, (order) => {
-                const d = sumOrder(order);
-                if (d < bestDist) {
-                  bestDist = d;
+                const distance = sumOrder(order);
+                if (distance < bestDist) {
+                  bestDist = distance;
                   bestOrder = order;
                 }
               });
@@ -119,14 +123,15 @@ export async function POST(request: Request) {
               const used = new Set<number>([start]);
               const order = [start];
               let current = start;
-              while (order.length < n - 1) {
+
+              while (order.length < totalPoints - 1) {
                 let next = -1;
-                let minD = Infinity;
-                for (let j = 0; j < n; j++) {
+                let minDistance = Infinity;
+                for (let j = 0; j < totalPoints; j++) {
                   if (used.has(j) || j === end) continue;
-                  const v = distances[current]?.[j];
-                  if (v != null && v < minD) {
-                    minD = v;
+                  const value = distances[current]?.[j];
+                  if (value != null && value < minDistance) {
+                    minDistance = value;
                     next = j;
                   }
                 }
@@ -134,11 +139,14 @@ export async function POST(request: Request) {
                   order.push(next);
                   used.add(next);
                   current = next;
-                } else break;
+                } else {
+                  break;
+                }
               }
+
               order.push(end);
-              const d = sumOrder(order);
-              if (d < bestDist) bestOrder = order;
+              const distance = sumOrder(order);
+              if (distance < bestDist) bestOrder = order;
             }
 
             const newOrder = bestOrder.map((i) => allIds[i]);
@@ -147,7 +155,7 @@ export async function POST(request: Request) {
           }
         }
       } catch {
-        // keep initial order on table failure
+        // Keep initial order when the matrix service is unavailable.
       }
     }
 
@@ -177,24 +185,26 @@ export async function POST(request: Request) {
         }
       }
     } catch {
-      // use straight line
+      // Use the straight-line geometry if OSRM routing fails.
     }
 
     if (distanceKm == null && finalCoords.length >= 2) {
-      let d = 0;
+      let distanceMeters = 0;
       for (let i = 0; i < finalCoords.length - 1; i++) {
         const [lng1, lat1] = finalCoords[i];
         const [lng2, lat2] = finalCoords[i + 1];
-        const R = 6371e3;
-        const φ1 = (lat1 * Math.PI) / 180;
-        const φ2 = (lat2 * Math.PI) / 180;
-        const Δφ = ((lat2 - lat1) * Math.PI) / 180;
-        const Δλ = ((lng2 - lng1) * Math.PI) / 180;
-        const a = Math.sin(Δφ / 2) ** 2 + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) ** 2;
+        const earthRadius = 6371e3;
+        const latRad1 = (lat1 * Math.PI) / 180;
+        const latRad2 = (lat2 * Math.PI) / 180;
+        const deltaLat = ((lat2 - lat1) * Math.PI) / 180;
+        const deltaLng = ((lng2 - lng1) * Math.PI) / 180;
+        const a =
+          Math.sin(deltaLat / 2) ** 2 +
+          Math.cos(latRad1) * Math.cos(latRad2) * Math.sin(deltaLng / 2) ** 2;
         const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-        d += R * c;
+        distanceMeters += earthRadius * c;
       }
-      distanceKm = d / 1000;
+      distanceKm = distanceMeters / 1000;
     }
 
     return NextResponse.json({

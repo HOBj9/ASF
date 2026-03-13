@@ -4,6 +4,7 @@ import { redirect } from "next/navigation"
 import { isAdmin, isOrganizationAdmin, isLineSupervisor } from "@/lib/permissions"
 import { AdminOverview } from "@/components/dashboard/admin-overview"
 import { UserDashboard } from "@/components/dashboard/user-dashboard"
+import { getDashboardOverview } from "@/lib/queries/dashboard/dashboard-overview.query"
 import connectDB from "@/lib/mongodb"
 import "@/models"
 import User from "@/models/User"
@@ -17,6 +18,17 @@ export default async function DashboardPage() {
 
   const role = session.user.role as any
   const userIsAdmin = isAdmin(role)
+  if (isLineSupervisor(role)) {
+    redirect("/dashboard/surveys")
+  }
+  const initialOverview = userIsAdmin
+    ? null
+    : await getDashboardOverview(session, {
+        branchId: (session.user as any)?.branchId ?? null,
+        dailyDays: 14,
+        monthlyMonths: 12,
+        eventsLimit: 10,
+      })
 
   // Show dashboard for everyone: admin sees AdminOverview; others see UserDashboard (map/branch data or line-supervisor message)
   let users: any[] = []
@@ -42,6 +54,7 @@ export default async function DashboardPage() {
           isLineSupervisor={isLineSupervisor(role)}
           organizationId={(session.user as any)?.organizationId ?? null}
           sessionBranchId={(session.user as any)?.branchId ?? null}
+          initialOverview={initialOverview}
         />
       )}
     </div>

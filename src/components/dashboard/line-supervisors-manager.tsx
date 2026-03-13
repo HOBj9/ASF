@@ -16,15 +16,25 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { ActionButton } from "@/components/ui/action-button"
 import { apiClient } from "@/lib/api/client"
 import toast from "react-hot-toast"
+
+type Branch = { _id: string; name?: string; nameAr?: string }
 
 type LineSupervisorUser = {
   _id: string
   name: string
   email: string
   role?: { name: string; nameAr?: string }
+  branchId?: string | { _id: string; name?: string; nameAr?: string } | null
   isActive?: boolean
   createdAt?: string
 }
@@ -32,9 +42,10 @@ type LineSupervisorUser = {
 interface LineSupervisorsManagerProps {
   organizationId: string
   initialUsers: LineSupervisorUser[]
+  branches: Branch[]
 }
 
-export function LineSupervisorsManager({ organizationId, initialUsers }: LineSupervisorsManagerProps) {
+export function LineSupervisorsManager({ organizationId, initialUsers, branches }: LineSupervisorsManagerProps) {
   const router = useRouter()
   const { labels } = useLabels()
   const [users, setUsers] = useState<LineSupervisorUser[]>(initialUsers)
@@ -44,6 +55,7 @@ export function LineSupervisorsManager({ organizationId, initialUsers }: LineSup
     name: "",
     email: "",
     password: "",
+    branchId: "",
     isActive: true,
   })
 
@@ -51,6 +63,10 @@ export function LineSupervisorsManager({ organizationId, initialUsers }: LineSup
     e.preventDefault()
     if (!form.name.trim() || !form.email.trim() || !form.password) {
       toast.error("الاسم والبريد الإلكتروني وكلمة المرور مطلوبة")
+      return
+    }
+    if (!form.branchId) {
+      toast.error("الفرع مطلوب. مشرف الخط يجب أن يكون مرتبطاً بفرع واحد.")
       return
     }
     if (form.password.length < 6) {
@@ -63,13 +79,15 @@ export function LineSupervisorsManager({ organizationId, initialUsers }: LineSup
         name: form.name.trim(),
         email: form.email.trim(),
         password: form.password,
+        branchId: form.branchId,
         isActive: form.isActive,
       })
       const newUser = res?.data?.user || res?.user
       if (newUser) {
-        setUsers((prev) => [newUser, ...prev])
+        const branch = branches.find((b) => String(b._id) === String(newUser.branchId))
+        setUsers((prev) => [{ ...newUser, branchId: branch ? { _id: branch._id, name: branch.name, nameAr: branch.nameAr } : null }, ...prev])
         toast.success(`تم إضافة ${labels.lineSupervisorLabel} بنجاح`)
-        setForm({ name: "", email: "", password: "", isActive: true })
+        setForm({ name: "", email: "", password: "", branchId: "", isActive: true })
         setFormOpen(false)
       } else {
         throw new Error(res?.error || "حدث خطأ")
@@ -79,7 +97,7 @@ export function LineSupervisorsManager({ organizationId, initialUsers }: LineSup
     } finally {
       setSubmitting(false)
     }
-  }, [organizationId, form, labels.lineSupervisorLabel])
+  }, [organizationId, form, labels.lineSupervisorLabel, branches])
 
   return (
     <>
@@ -101,6 +119,7 @@ export function LineSupervisorsManager({ organizationId, initialUsers }: LineSup
                 <tr>
                   <th className="p-3 font-medium">الاسم</th>
                   <th className="p-3 font-medium">البريد الإلكتروني</th>
+                  <th className="p-3 font-medium">{labels.branchLabel || "الفرع"}</th>
                   <th className="p-3 font-medium text-center">الحالة</th>
                   <th className="p-3 font-medium">تاريخ الإضافة</th>
                 </tr>
@@ -108,7 +127,7 @@ export function LineSupervisorsManager({ organizationId, initialUsers }: LineSup
               <tbody>
                 {users.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="p-6 text-center text-muted-foreground">
+                    <td colSpan={5} className="p-6 text-center text-muted-foreground">
                       لا يوجد {labels.lineSupervisorLabel} بعد. اضغط &quot;إضافة {labels.lineSupervisorLabel}&quot; لبدء الإضافة.
                     </td>
                   </tr>
@@ -117,6 +136,13 @@ export function LineSupervisorsManager({ organizationId, initialUsers }: LineSup
                     <tr key={u._id} className="border-b last:border-0 hover:bg-muted/30">
                       <td className="p-3">{u.name}</td>
                       <td className="p-3">{u.email}</td>
+                      <td className="p-3">
+                        {u.branchId && typeof u.branchId === "object" && "nameAr" in u.branchId
+                          ? (u.branchId as any).nameAr || (u.branchId as any).name || "—"
+                          : u.branchId && typeof u.branchId === "object" && "name" in u.branchId
+                          ? (u.branchId as any).name || "—"
+                          : "—"}
+                      </td>
                       <td className="p-3 text-center">
                         <span
                           className={`inline-flex rounded-full px-2 py-0.5 text-xs ${
@@ -150,7 +176,7 @@ export function LineSupervisorsManager({ organizationId, initialUsers }: LineSup
         <DialogContent className="sm:max-w-[500px] text-right">
           <DialogHeader>
             <DialogTitle>إضافة {labels.lineSupervisorLabel}</DialogTitle>
-            <DialogDescription>أدخل بيانات {labels.lineSupervisorLabel} الجديد. سيكون مرتبطاً بمؤسستك فقط.</DialogDescription>
+            <DialogDescription>أدخل بيانات {labels.lineSupervisorLabel} الجديد. يجب ربطه بفرع واحد من مؤسستك.</DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
@@ -173,6 +199,25 @@ export function LineSupervisorsManager({ organizationId, initialUsers }: LineSup
                 placeholder="email@example.com"
                 disabled={submitting}
               />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="ls-branch">{labels.branchLabel || "الفرع"} *</Label>
+              <Select
+                value={form.branchId}
+                onValueChange={(v) => setForm((p) => ({ ...p, branchId: v }))}
+                disabled={submitting}
+              >
+                <SelectTrigger id="ls-branch" className="text-right">
+                  <SelectValue placeholder={`اختر ${labels.branchLabel || "الفرع"}`} />
+                </SelectTrigger>
+                <SelectContent>
+                  {branches.map((b) => (
+                    <SelectItem key={b._id} value={b._id}>
+                      {b.nameAr || b.name || b._id}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
               <Label htmlFor="ls-password">كلمة المرور</Label>

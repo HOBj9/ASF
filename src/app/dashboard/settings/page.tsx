@@ -3,6 +3,7 @@ import { authOptions } from "@/lib/auth"
 import { redirect } from "next/navigation"
 import connectDB from "@/lib/mongodb"
 import User from "@/models/User"
+import { isLineSupervisor } from "@/lib/permissions"
 import { ProfileManager } from "@/components/profile/profile-manager"
 import { OrganizationLabelsSettings } from "@/components/settings/organization-labels-settings"
 import { NotificationSettings } from "@/components/settings/notification-settings"
@@ -19,11 +20,16 @@ export default async function SettingsPage() {
     .select("name email avatar businessName")
     .lean()
 
+  const role = session.user.role as any
+  const hideLabelsAndNotifications = isLineSupervisor(role)
+
   return (
     <div className="text-right space-y-8">
       <div className="mb-6 lg:mb-8">
         <h1 className="text-2xl lg:text-3xl font-bold">الإعدادات</h1>
-        <p className="text-muted-foreground mt-2">إدارة الملف الشخصي وتسميات المؤسسة</p>
+        <p className="text-muted-foreground mt-2">
+          {hideLabelsAndNotifications ? "إدارة الملف الشخصي" : "إدارة الملف الشخصي وتسميات المؤسسة"}
+        </p>
       </div>
 
       <div>
@@ -33,21 +39,25 @@ export default async function SettingsPage() {
             id: session.user.id,
             name: user?.name || session.user.name || "",
             email: user?.email || session.user.email || "",
-            avatar: user?.avatar || null,
-            businessName: (user as any)?.businessName || null,
+            avatar: user?.avatar || undefined,
+            businessName: (user as any)?.businessName || undefined,
           }}
         />
       </div>
 
-      <div>
-        <h2 className="text-xl font-semibold mb-3">تسميات المؤسسة</h2>
-        <OrganizationLabelsSettings />
-      </div>
+      {!hideLabelsAndNotifications && (
+        <>
+          <div>
+            <h2 className="text-xl font-semibold mb-3">تسميات المؤسسة</h2>
+            <OrganizationLabelsSettings />
+          </div>
 
-      <div>
-        <h2 className="text-xl font-semibold mb-3">تخصيص الإشعارات</h2>
-        <NotificationSettings />
-      </div>
+          <div>
+            <h2 className="text-xl font-semibold mb-3">تخصيص الإشعارات</h2>
+            <NotificationSettings />
+          </div>
+        </>
+      )}
 
     </div>
   )

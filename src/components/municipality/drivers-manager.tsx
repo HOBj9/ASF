@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { useSession } from "next-auth/react"
 import { apiClient } from "@/lib/api/client"
 import { isAdmin, isOrganizationAdmin } from "@/lib/permissions"
@@ -66,7 +66,7 @@ export function DriversManager() {
   const needsBranchSelector = userIsAdmin || (userIsOrgAdmin && !sessionBranchId)
   const resolvedBranchId = selectedBranchId || sessionBranchId
 
-  const loadOrganizations = async () => {
+  const loadOrganizations = useCallback(async () => {
     try {
       const res = await apiClient.get("/organizations").catch(() => ({ organizations: [] } as any))
       const list = res.organizations || res.data?.organizations || []
@@ -75,9 +75,9 @@ export function DriversManager() {
     } catch {
       return []
     }
-  }
+  }, [])
 
-  const loadBranches = async (organizationId: string | null) => {
+  const loadBranches = useCallback(async (organizationId: string | null) => {
     if (!organizationId) {
       setBranches([])
       return
@@ -89,9 +89,9 @@ export function DriversManager() {
     } catch {
       setBranches([])
     }
-  }
+  }, [])
 
-  const loadBranchesForOrgUser = async () => {
+  const loadBranchesForOrgUser = useCallback(async () => {
     try {
       const res = await apiClient.get("/branches")
       const list = res.branches || res.data?.branches || []
@@ -100,9 +100,9 @@ export function DriversManager() {
     } catch {
       setBranches([])
     }
-  }
+  }, [selectedBranchId])
 
-  const load = async (branchId: string | null) => {
+  const load = useCallback(async (branchId: string | null) => {
     if (needsBranchSelector && !branchId) {
       setItems([])
       setVehicles([])
@@ -124,40 +124,44 @@ export function DriversManager() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [labels.driverLabel, needsBranchSelector])
 
   useEffect(() => {
     if (session === undefined) return
     if (userIsAdmin) {
-      loadOrganizations().then((list) => {
+      void loadOrganizations().then((list) => {
         if (list.length === 1 && !selectedOrganizationId) setSelectedOrganizationId(list[0]._id)
       })
     } else if (userIsOrgAdmin && !sessionBranchId) {
-      loadBranchesForOrgUser()
+      void loadBranchesForOrgUser()
     } else {
-      load(null)
+      void load(null)
     }
-  }, [session?.user])
+  }, [load, loadBranchesForOrgUser, loadOrganizations, selectedOrganizationId, session, sessionBranchId, userIsAdmin, userIsOrgAdmin])
 
   useEffect(() => {
     if (userIsAdmin && selectedOrganizationId) {
-      loadBranches(selectedOrganizationId)
+      void loadBranches(selectedOrganizationId)
       setSelectedBranchId("")
     }
-  }, [userIsAdmin, selectedOrganizationId])
+  }, [loadBranches, selectedOrganizationId, userIsAdmin])
 
   useEffect(() => {
     if (!needsBranchSelector) return
-    if (resolvedBranchId) load(resolvedBranchId)
+    if (resolvedBranchId) {
+      void load(resolvedBranchId)
+    }
     else {
       setItems([])
       setVehicles([])
     }
-  }, [needsBranchSelector, resolvedBranchId])
+  }, [load, needsBranchSelector, resolvedBranchId])
 
   useEffect(() => {
-    if (!needsBranchSelector && session?.user) load(null)
-  }, [needsBranchSelector, session?.user])
+    if (!needsBranchSelector && session?.user) {
+      void load(null)
+    }
+  }, [load, needsBranchSelector, session])
 
   const filteredItems = useMemo(() => {
     const q = search.trim().toLowerCase()

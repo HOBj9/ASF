@@ -1,4 +1,6 @@
-﻿import { NextResponse } from 'next/server';
+export const dynamic = 'force-dynamic';
+
+import { NextResponse } from 'next/server';
 import { requirePermission, handleApiError } from '@/lib/middleware/api-auth.middleware';
 import { OrganizationService } from '@/lib/services/organization.service';
 import { permissionActions, permissionResources } from '@/constants/permissions';

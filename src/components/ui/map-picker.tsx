@@ -109,11 +109,14 @@ export function MapPicker({
   lng,
   onSelect,
   height = "240px",
+  showHint = true,
 }: {
   lat: number;
   lng: number;
   onSelect: (lat: number, lng: number) => void;
   height?: string;
+  /** When false, hides the "click to set location" hint (e.g. for read-only view) */
+  showHint?: boolean;
 }) {
   const hasPosition = lat !== undefined && lng !== undefined && (lat !== 0 || lng !== 0);
   const position: [number, number] = hasPosition ? [lat, lng] : DEFAULT_CENTER;
@@ -139,13 +142,15 @@ export function MapPicker({
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
-        <MapClickHandler onSelect={handleSelect} />
+        {showHint && <MapClickHandler onSelect={handleSelect} />}
         {hasPosition && <MapCenterUpdater lat={lat} lng={lng} />}
         <ImperativeMarker lat={markerLat} lng={markerLng} visible={hasPosition} />
       </MapContainer>
-      <p className="text-xs text-muted-foreground text-right mt-1 px-1">
-        انقر على الخريطة لتحديد الموقع
-      </p>
+      {showHint && (
+        <p className="text-xs text-muted-foreground text-right mt-1 px-1">
+          انقر على الخريطة لتحديد الموقع
+        </p>
+      )}
     </div>
   );
 }

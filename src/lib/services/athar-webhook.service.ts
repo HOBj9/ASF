@@ -586,7 +586,9 @@ export async function handleAtharWebhookRequest(
           (await PointVisit.exists({ entryEventId: matchingEntry._id }));
 
         if (matchingEntry && !alreadyUsed) {
-          const entryTime = new Date(matchingEntry.eventTimestamp);
+          const entryTime = matchingEntry.eventTimestamp
+            ? new Date(matchingEntry.eventTimestamp)
+            : eventTimestamp;
           const durationSeconds = Math.max(
             0,
             Math.floor((eventTimestamp.getTime() - entryTime.getTime()) / 1000)
@@ -657,4 +659,3 @@ export async function handleAtharWebhookRequest(
     );
   }
 }
-

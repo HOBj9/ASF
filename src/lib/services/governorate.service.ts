@@ -21,14 +21,14 @@ export interface UpdateGovernorateData {
 }
 
 export class GovernorateService {
-  async list(organizationId: string): Promise<IGovernorate[]> {
+  async list(organizationId: string): Promise<any[]> {
     await connectDB();
     const org = await Organization.findById(organizationId).lean();
     if (!org) throw new Error('المؤسسة غير موجودة');
     return Governorate.find({ organizationId }).sort({ order: 1, name: 1 }).lean().exec();
   }
 
-  async create(organizationId: string, data: CreateGovernorateData): Promise<IGovernorate> {
+  async create(organizationId: string, data: CreateGovernorateData): Promise<any> {
     await connectDB();
     const org = await Organization.findById(organizationId).lean();
     if (!org) throw new Error('المؤسسة غير موجودة');
@@ -40,7 +40,7 @@ export class GovernorateService {
     });
   }
 
-  async update(id: string, organizationId: string, data: UpdateGovernorateData): Promise<IGovernorate | null> {
+  async update(id: string, organizationId: string, data: UpdateGovernorateData): Promise<any | null> {
     await connectDB();
     const gov = await Governorate.findOne({ _id: id, organizationId });
     if (!gov) return null;
@@ -69,7 +69,7 @@ export class GovernorateService {
     return !!deleted;
   }
 
-  async getById(id: string, organizationId: string): Promise<IGovernorate | null> {
+  async getById(id: string, organizationId: string): Promise<any | null> {
     await connectDB();
     return Governorate.findOne({ _id: id, organizationId }).lean().exec();
   }

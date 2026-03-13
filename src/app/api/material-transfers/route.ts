@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { NextResponse } from 'next/server';
 import mongoose from 'mongoose';
 import connectDB from '@/lib/mongodb';
@@ -35,19 +37,23 @@ async function resolveUnitFactorToRoot(
 
     let unit = cache.get(currentId);
     if (!unit) {
-      const found = await Unit.findOne({
+      const foundUnit = await (Unit.findOne({
         _id: currentId,
         organizationId,
       })
         .select('_id baseUnitId factor')
-        .lean();
-      if (!found) {
+        .lean() as Promise<{
+          _id: mongoose.Types.ObjectId;
+          baseUnitId?: mongoose.Types.ObjectId | null;
+          factor?: number;
+        } | null>);
+      if (!foundUnit) {
         throw new Error('الوحدة غير موجودة');
       }
       unit = {
-        _id: String(found._id),
-        baseUnitId: found.baseUnitId ? String(found.baseUnitId) : null,
-        factor: typeof found.factor === 'number' ? found.factor : 1,
+        _id: String(foundUnit._id),
+        baseUnitId: foundUnit.baseUnitId ? String(foundUnit.baseUnitId) : null,
+        factor: typeof foundUnit.factor === 'number' ? foundUnit.factor : 1,
       };
       cache.set(currentId, unit);
     }

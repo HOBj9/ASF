@@ -1,4 +1,6 @@
-﻿import { NextResponse } from 'next/server';
+export const dynamic = 'force-dynamic';
+
+import { NextResponse } from 'next/server';
 import { requireAuth, handleApiError } from '@/lib/middleware/api-auth.middleware';
 import { resolveBranchId } from '@/lib/utils/municipality.util';
 import Branch from '@/models/Branch';

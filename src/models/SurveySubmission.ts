@@ -4,6 +4,8 @@ export interface ISurveySubmission extends Document {
   surveyId: mongoose.Types.ObjectId;
   userId: mongoose.Types.ObjectId;
   organizationId: mongoose.Types.ObjectId;
+  /** Set when submitter has branchId (line supervisor / branch admin) for filtering by branch. */
+  branchId?: mongoose.Types.ObjectId | null;
   mapLat: number;
   mapLng: number;
   deviceLat?: number | null;
@@ -34,6 +36,12 @@ const SurveySubmissionSchema: Schema = new Schema(
       required: true,
       index: true,
     },
+    branchId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Branch',
+      default: null,
+      index: true,
+    },
     mapLat: { type: Number, required: true },
     mapLng: { type: Number, required: true },
     deviceLat: { type: Number, default: null },
@@ -50,6 +58,7 @@ const SurveySubmissionSchema: Schema = new Schema(
 
 SurveySubmissionSchema.index({ surveyId: 1, userId: 1 });
 SurveySubmissionSchema.index({ organizationId: 1, createdAt: -1 });
+SurveySubmissionSchema.index({ organizationId: 1, branchId: 1, createdAt: -1 });
 
 let SurveySubmission: Model<ISurveySubmission>;
 

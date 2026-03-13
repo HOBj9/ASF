@@ -26,7 +26,7 @@ export interface UpdateDriverData {
 }
 
 export class DriverService {
-  async create(data: CreateDriverData): Promise<IDriver> {
+  async create(data: CreateDriverData): Promise<any> {
     await connectDB();
 
     const branch = await Branch.findById(data.branchId).lean();
@@ -52,17 +52,17 @@ export class DriverService {
     return driver;
   }
 
-  async getAll(branchId: string): Promise<IDriver[]> {
+  async getAll(branchId: string): Promise<any[]> {
     await connectDB();
     return Driver.find({ branchId }).lean().exec();
   }
 
-  async getById(id: string, branchId: string): Promise<IDriver | null> {
+  async getById(id: string, branchId: string): Promise<any | null> {
     await connectDB();
     return Driver.findOne({ _id: id, branchId }).lean().exec();
   }
 
-  async update(id: string, branchId: string, data: UpdateDriverData): Promise<IDriver | null> {
+  async update(id: string, branchId: string, data: UpdateDriverData): Promise<any | null> {
     await connectDB();
 
     const driver = await Driver.findOne({ _id: id, branchId });

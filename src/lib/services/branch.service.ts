@@ -42,7 +42,7 @@ export interface UpdateBranchData {
 }
 
 export class BranchService {
-  async create(data: CreateBranchData): Promise<IBranch> {
+  async create(data: CreateBranchData): Promise<any> {
     await connectDB();
     const createPayload: any = {
       organizationId: data.organizationId,
@@ -68,18 +68,18 @@ export class BranchService {
     return branch;
   }
 
-  async getAll(organizationId?: string): Promise<IBranch[]> {
+  async getAll(organizationId?: string): Promise<any[]> {
     await connectDB();
     const query = organizationId ? { organizationId } : {};
     return Branch.find(query).lean().exec();
   }
 
-  async getById(id: string): Promise<IBranch | null> {
+  async getById(id: string): Promise<any | null> {
     await connectDB();
     return Branch.findById(id).lean().exec();
   }
 
-  async update(id: string, data: UpdateBranchData): Promise<IBranch | null> {
+  async update(id: string, data: UpdateBranchData): Promise<any | null> {
     await connectDB();
     const updateData: any = { ...data };
     if (data.nameAr !== undefined && data.nameAr === '') updateData.nameAr = null;
@@ -87,8 +87,8 @@ export class BranchService {
     if (data.areaName !== undefined && data.areaName === '') updateData.areaName = null;
     if (data.addressText !== undefined && data.addressText === '') updateData.addressText = null;
     if (data.atharKey !== undefined && data.atharKey === '') updateData.atharKey = null;
-    if (data.fuelPricePerKmGasoline !== undefined && (data.fuelPricePerKmGasoline === '' || data.fuelPricePerKmGasoline == null)) updateData.fuelPricePerKmGasoline = null;
-    if (data.fuelPricePerKmDiesel !== undefined && (data.fuelPricePerKmDiesel === '' || data.fuelPricePerKmDiesel == null)) updateData.fuelPricePerKmDiesel = null;
+    if (data.fuelPricePerKmGasoline == null) updateData.fuelPricePerKmGasoline = null;
+    if (data.fuelPricePerKmDiesel == null) updateData.fuelPricePerKmDiesel = null;
     if (data.labels !== undefined) {
       updateData.labels = data.labels;
     }

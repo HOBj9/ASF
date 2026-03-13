@@ -36,7 +36,7 @@ export class UserService {
   /**
    * Create a new user
    */
-  async create(data: CreateUserData): Promise<IUser> {
+  async create(data: CreateUserData): Promise<any> {
     await connectDB();
 
     // Check if user already exists
@@ -72,7 +72,7 @@ export class UserService {
   /**
    * Get user by ID
    */
-  async getById(id: string): Promise<IUser | null> {
+  async getById(id: string): Promise<any | null> {
     await connectDB();
     return User.findById(id).populate('role').lean().exec();
   }
@@ -80,7 +80,7 @@ export class UserService {
   /**
    * Get user by email
    */
-  async getByEmail(email: string): Promise<IUser | null> {
+  async getByEmail(email: string): Promise<any | null> {
     await connectDB();
     return await User.findOne({ email: email.toLowerCase() })
       .populate({
@@ -93,15 +93,27 @@ export class UserService {
   /**
    * Get all users
    */
-  async getAll(): Promise<IUser[]> {
+  async getAll(): Promise<any[]> {
     await connectDB();
     return User.find({}).populate('role').lean().exec();
   }
 
   /**
+   * Get users by organization and role (e.g. all line supervisors for an org)
+   */
+  async getByOrganizationAndRole(organizationId: string, roleId: string): Promise<any[]> {
+    await connectDB();
+    return User.find({ organizationId, role: roleId })
+      .populate('role', 'name nameAr')
+      .sort({ createdAt: -1 })
+      .lean()
+      .exec();
+  }
+
+  /**
    * Update user
    */
-  async update(id: string, data: UpdateUserData): Promise<IUser | null> {
+  async update(id: string, data: UpdateUserData): Promise<any | null> {
     await connectDB();
 
     const user = await User.findById(id);
@@ -168,7 +180,7 @@ export class UserService {
   /**
    * Toggle user active status
    */
-  async toggleActiveStatus(id: string): Promise<IUser | null> {
+  async toggleActiveStatus(id: string): Promise<any | null> {
     await connectDB();
 
     const user = await User.findById(id);
@@ -186,7 +198,7 @@ export class UserService {
    * Validate user credentials
    * Returns user if valid, throws error if user is disabled, returns null if credentials are invalid
    */
-  async validateCredentials(email: string, password: string): Promise<IUser | null> {
+  async validateCredentials(email: string, password: string): Promise<any | null> {
     await connectDB();
 
     const user = await User.findOne({ email: email.toLowerCase() })

@@ -1,12 +1,14 @@
 "use client";
 
 import { MunicipalityDashboard } from "./municipality-dashboard";
+import type { DashboardOverviewData } from "@/lib/contracts/dashboard";
 
 type UserDashboardProps = {
   isOrganizationAdmin?: boolean;
   isLineSupervisor?: boolean;
   organizationId?: string | null;
   sessionBranchId?: string | null;
+  initialOverview?: DashboardOverviewData | null;
 };
 
 export function UserDashboard({
@@ -14,6 +16,7 @@ export function UserDashboard({
   isLineSupervisor,
   organizationId,
   sessionBranchId,
+  initialOverview,
 }: UserDashboardProps) {
   return (
     <MunicipalityDashboard
@@ -21,6 +24,7 @@ export function UserDashboard({
       isLineSupervisor={isLineSupervisor}
       organizationId={organizationId}
       sessionBranchId={sessionBranchId}
+      initialOverview={initialOverview}
     />
   );
 }

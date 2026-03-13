@@ -14,7 +14,7 @@ import { successResponse, errorResponse } from "./api.util";
 export interface RouteContext {
   session: any;
   role?: any;
-  params?: Record<string, string>;
+  params?: Record<string, any>;
   searchParams?: URLSearchParams;
   body?: any;
 }

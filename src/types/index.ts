@@ -141,6 +141,7 @@ export interface ApiResponse<T = any> {
   data?: T
   message?: string
   error?: string
+  [key: string]: any
 }
 
 // Bulk Send Job Types

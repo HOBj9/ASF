@@ -147,7 +147,7 @@ export function PointsManager() {
   const resolvedBranchId = selectedBranchId || sessionBranchId
   resolvedBranchIdRef.current = resolvedBranchId || ""
 
-  const loadOrganizations = async () => {
+  const loadOrganizations = useCallback(async () => {
     try {
       const res = await apiClient.get("/organizations").catch(() => ({ organizations: [] } as any))
       const list = res.organizations || res.data?.organizations || []
@@ -156,9 +156,9 @@ export function PointsManager() {
     } catch {
       return []
     }
-  }
+  }, [])
 
-  const loadBranches = async (organizationId: string | null) => {
+  const loadBranches = useCallback(async (organizationId: string | null) => {
     if (!organizationId) {
       setBranches([])
       return
@@ -170,9 +170,9 @@ export function PointsManager() {
     } catch {
       setBranches([])
     }
-  }
+  }, [])
 
-  const loadBranchesForOrgUser = async () => {
+  const loadBranchesForOrgUser = useCallback(async () => {
     try {
       const res = await apiClient.get("/branches")
       const list = res.branches || res.data?.branches || []
@@ -181,9 +181,9 @@ export function PointsManager() {
     } catch {
       setBranches([])
     }
-  }
+  }, [selectedBranchId])
 
-  const loadLocalPoints = async (branchId: string | null) => {
+  const loadLocalPoints = useCallback(async (branchId: string | null) => {
     if (needsBranchSelector && !branchId) {
       setLocalPoints([])
       return
@@ -199,9 +199,9 @@ export function PointsManager() {
     } finally {
       setLoadingLocal(false)
     }
-  }
+  }, [labels.pointLabel, needsBranchSelector])
 
-  const loadAtharMarkers = async () => {
+  const loadAtharMarkers = useCallback(async () => {
     const branchId = resolvedBranchIdRef.current || resolvedBranchId
     if (needsBranchSelector && !branchId) {
       toast.error("يرجى تحديد الفرع أولاً")
@@ -218,9 +218,9 @@ export function PointsManager() {
     } finally {
       setLoadingMarkers(false)
     }
-  }
+  }, [needsBranchSelector, resolvedBranchId])
 
-  const loadAtharZones = async () => {
+  const loadAtharZones = useCallback(async () => {
     const branchId = resolvedBranchIdRef.current || resolvedBranchId
     if (needsBranchSelector && !branchId) {
       toast.error("يرجى تحديد الفرع أولاً")
@@ -237,37 +237,37 @@ export function PointsManager() {
     } finally {
       setLoadingZones(false)
     }
-  }
+  }, [needsBranchSelector, resolvedBranchId])
 
   useEffect(() => {
     if (session === undefined) return
     if (userIsAdmin) {
-      loadOrganizations().then((list) => {
+      void loadOrganizations().then((list) => {
         if (list.length === 1 && !selectedOrganizationId) setSelectedOrganizationId(list[0]._id)
       })
     } else if (userIsOrgAdmin && !sessionBranchId) {
-      loadBranchesForOrgUser()
+      void loadBranchesForOrgUser()
     } else {
-      loadLocalPoints(null)
+      void loadLocalPoints(null)
     }
-  }, [session?.user])
+  }, [loadBranchesForOrgUser, loadLocalPoints, loadOrganizations, selectedOrganizationId, session, sessionBranchId, userIsAdmin, userIsOrgAdmin])
 
   useEffect(() => {
     if (userIsAdmin && selectedOrganizationId) {
-      loadBranches(selectedOrganizationId)
+      void loadBranches(selectedOrganizationId)
       setSelectedBranchId("")
     }
-  }, [userIsAdmin, selectedOrganizationId])
+  }, [loadBranches, selectedOrganizationId, userIsAdmin])
 
   useEffect(() => {
     if (!needsBranchSelector) return
-    if (resolvedBranchId) loadLocalPoints(resolvedBranchId)
+    if (resolvedBranchId) void loadLocalPoints(resolvedBranchId)
     else setLocalPoints([])
-  }, [needsBranchSelector, resolvedBranchId])
+  }, [loadLocalPoints, needsBranchSelector, resolvedBranchId])
 
   useEffect(() => {
-    if (!needsBranchSelector && session?.user) loadLocalPoints(null)
-  }, [needsBranchSelector, session?.user])
+    if (!needsBranchSelector && session?.user) void loadLocalPoints(null)
+  }, [loadLocalPoints, needsBranchSelector, session])
 
   useEffect(() => {
     setMarkersLoaded(false)

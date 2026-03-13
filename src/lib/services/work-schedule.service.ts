@@ -39,7 +39,7 @@ export interface WorkScheduleForBranch {
 }
 
 export class WorkScheduleService {
-  async getAllForOrganization(organizationId: string): Promise<IWorkSchedule[]> {
+  async getAllForOrganization(organizationId: string): Promise<any[]> {
     await connectDB();
     const org = await Organization.findById(organizationId).lean();
     if (!org) throw new Error('المؤسسة غير موجودة');
@@ -110,7 +110,7 @@ export class WorkScheduleService {
     return result;
   }
 
-  async create(data: CreateWorkScheduleData): Promise<IWorkSchedule> {
+  async create(data: CreateWorkScheduleData): Promise<any> {
     await connectDB();
 
     const org = await Organization.findById(data.organizationId).lean();
@@ -147,7 +147,7 @@ export class WorkScheduleService {
     });
   }
 
-  async createBranchCopy(branchId: string, sourceId: string): Promise<IWorkSchedule> {
+  async createBranchCopy(branchId: string, sourceId: string): Promise<any> {
     await connectDB();
     const branch = await Branch.findById(branchId).lean();
     if (!branch) throw new Error('الفرع غير موجود');
@@ -182,7 +182,7 @@ export class WorkScheduleService {
     id: string,
     context: { organizationId?: string; branchId?: string },
     data: UpdateWorkScheduleData
-  ): Promise<IWorkSchedule | null> {
+  ): Promise<any | null> {
     await connectDB();
 
     const filter: any = { _id: id };
@@ -240,7 +240,7 @@ export class WorkScheduleService {
   async getById(
     id: string,
     context: { organizationId?: string; branchId?: string }
-  ): Promise<IWorkSchedule | null> {
+  ): Promise<any | null> {
     await connectDB();
 
     const filter: any = { _id: id };

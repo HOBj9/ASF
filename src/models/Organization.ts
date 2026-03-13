@@ -63,7 +63,6 @@ const OrganizationSchema: Schema = new Schema(
 );
 
 OrganizationSchema.index({ name: 1 });
-OrganizationSchema.index({ slug: 1 }, { unique: true });
 
 let Organization: Model<IOrganization>;
 

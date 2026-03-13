@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { useSearchParams } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { useLabels } from "@/hooks/use-labels"
@@ -217,7 +217,7 @@ export function ReportsPanel({ isSystemAdmin = false, isOrganizationAdmin = fals
     })
   }
 
-  function buildParams(extra?: { page?: number; pageSize?: number }) {
+  const buildParams = useCallback((extra?: { page?: number; pageSize?: number }) => {
     const params = new URLSearchParams()
     if (showBranchSelector && selectedBranchId) params.set("branchId", selectedBranchId)
     params.set("period", period)
@@ -237,7 +237,7 @@ export function ReportsPanel({ isSystemAdmin = false, isOrganizationAdmin = fals
     if (extra?.pageSize) params.set("pageSize", String(extra.pageSize))
 
     return params
-  }
+  }, [durationUnit, period, pointId, selectedBranchId, selectedColumns, showBranchSelector, status, to, from, vehicleId])
 
   async function loadPreview(nextPage = 1) {
     if (isSystemAdmin && !selectedBranchId) {
@@ -276,15 +276,10 @@ export function ReportsPanel({ isSystemAdmin = false, isOrganizationAdmin = fals
     const params = buildParams()
     return `/api/reports/export?${params.toString()}`
   }, [
+    buildParams,
     isSystemAdmin,
-    isOrganizationAdmin,
     selectedBranchId,
     period,
-    status,
-    durationUnit,
-    selectedColumns,
-    vehicleId,
-    pointId,
     from,
     to,
   ])

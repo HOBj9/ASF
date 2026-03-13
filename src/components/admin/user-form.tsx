@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -82,28 +82,7 @@ export function UserForm({ open, onOpenChange, onSuccess }: UserFormProps) {
     },
   })
 
-  useEffect(() => {
-    if (open) {
-      fetchRoles()
-      if (userIsAdmin) {
-        fetchOrganizations()
-        setSelectedOrganizationId("")
-        setBranches([])
-      } else {
-        fetchBranches(null)
-      }
-    }
-  }, [open, userIsAdmin])
-
-  useEffect(() => {
-    if (open && userIsAdmin && selectedOrganizationId) {
-      fetchBranches(selectedOrganizationId)
-    } else if (open && userIsAdmin && !selectedOrganizationId) {
-      setBranches([])
-    }
-  }, [open, userIsAdmin, selectedOrganizationId])
-
-  const fetchRoles = async () => {
+  const fetchRoles = useCallback(async () => {
     setLoadingRoles(true)
     try {
       const response = await apiClient.get("/admin/roles")
@@ -117,9 +96,9 @@ export function UserForm({ open, onOpenChange, onSuccess }: UserFormProps) {
     } finally {
       setLoadingRoles(false)
     }
-  }
+  }, [])
 
-  const fetchOrganizations = async () => {
+  const fetchOrganizations = useCallback(async () => {
     try {
       const res = await apiClient.get("/organizations").catch(() => ({ organizations: [] } as any))
       const list = res.organizations || res.data?.organizations || []
@@ -128,9 +107,9 @@ export function UserForm({ open, onOpenChange, onSuccess }: UserFormProps) {
       console.error("Failed to fetch organizations:", error)
       toast.error("فشل في تحميل المؤسسات")
     }
-  }
+  }, [])
 
-  const fetchBranches = async (organizationId: string | null) => {
+  const fetchBranches = useCallback(async (organizationId: string | null) => {
     setLoadingBranches(true)
     try {
       if (userIsAdmin && !organizationId) {
@@ -153,7 +132,28 @@ export function UserForm({ open, onOpenChange, onSuccess }: UserFormProps) {
     } finally {
       setLoadingBranches(false)
     }
-  }
+  }, [labels.branchLabel, userIsAdmin])
+
+  useEffect(() => {
+    if (open) {
+      void fetchRoles()
+      if (userIsAdmin) {
+        void fetchOrganizations()
+        setSelectedOrganizationId("")
+        setBranches([])
+      } else {
+        void fetchBranches(null)
+      }
+    }
+  }, [fetchBranches, fetchOrganizations, fetchRoles, open, userIsAdmin])
+
+  useEffect(() => {
+    if (open && userIsAdmin && selectedOrganizationId) {
+      void fetchBranches(selectedOrganizationId)
+    } else if (open && userIsAdmin && !selectedOrganizationId) {
+      setBranches([])
+    }
+  }, [fetchBranches, open, selectedOrganizationId, userIsAdmin])
 
   const onSubmit = async (values: UserFormValues) => {
     setSubmitting(true)
