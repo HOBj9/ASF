@@ -75,6 +75,8 @@ export function DriversManager() {
   })
   const branches = (branchesQuery.data ?? []) as Branch[]
 
+  const userId = (session?.user as any)?.id as string | undefined
+
   const load = useCallback(async (branchId: string | null) => {
     if (needsBranchSelector && !branchId) {
       setItems([])
@@ -91,13 +93,13 @@ export function DriversManager() {
       setItems(driversRes.drivers || driversRes.data?.drivers || [])
       setVehicles(vehiclesRes.vehicles || vehiclesRes.data?.vehicles || [])
     } catch (error: any) {
-      toast.error(error.message || `فشل تحميل ${labels.driverLabel}`)
+      toast.error(error.message || "فشل تحميل البيانات")
       setItems([])
       setVehicles([])
     } finally {
       setLoading(false)
     }
-  }, [labels.driverLabel, needsBranchSelector])
+  }, [needsBranchSelector])
 
   useEffect(() => {
     if (!userIsAdmin || organizations.length !== 1 || selectedOrganizationId) return
@@ -110,11 +112,11 @@ export function DriversManager() {
   }, [branches, selectedBranchId, sessionBranchId, userIsAdmin, userIsOrgAdmin])
 
   useEffect(() => {
-    if (session === undefined) return
+    if (!userId) return
     if (userIsAdmin) return
     if (userIsOrgAdmin && !sessionBranchId) return
     void load(null)
-  }, [load, session, sessionBranchId, userIsAdmin, userIsOrgAdmin])
+  }, [load, userId, sessionBranchId, userIsAdmin, userIsOrgAdmin])
 
   useEffect(() => {
     if (userIsAdmin && selectedOrganizationId) {
@@ -134,10 +136,8 @@ export function DriversManager() {
   }, [load, needsBranchSelector, resolvedBranchId])
 
   useEffect(() => {
-    if (!needsBranchSelector && session?.user) {
-      void load(null)
-    }
-  }, [load, needsBranchSelector, session])
+    if (!needsBranchSelector && userId) void load(null)
+  }, [load, needsBranchSelector, userId])
 
   const filteredItems = useMemo(() => {
     const q = search.trim().toLowerCase()

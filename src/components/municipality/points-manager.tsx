@@ -167,12 +167,12 @@ export function PointsManager() {
       const res: any = await apiClient.get(url)
       setLocalPoints(res.points || res.data?.points || [])
     } catch (error: any) {
-      toast.error(error.message || `فشل تحميل ${labels.pointLabel}`)
+      toast.error(error.message || "فشل تحميل النقاط")
       setLocalPoints([])
     } finally {
       setLoadingLocal(false)
     }
-  }, [labels.pointLabel, needsBranchSelector])
+  }, [needsBranchSelector])
 
   const loadAtharMarkers = useCallback(async () => {
     const branchId = resolvedBranchIdRef.current || resolvedBranchId
@@ -222,12 +222,14 @@ export function PointsManager() {
     if (branches.length === 1 && !selectedBranchId) setSelectedBranchId(branches[0]._id)
   }, [branches, selectedBranchId, sessionBranchId, userIsAdmin, userIsOrgAdmin])
 
+  const userId = (session?.user as any)?.id as string | undefined
+
   useEffect(() => {
-    if (session === undefined) return
+    if (!userId) return
     if (userIsAdmin) return
     if (userIsOrgAdmin && !sessionBranchId) return
     void loadLocalPoints(null)
-  }, [loadLocalPoints, session, sessionBranchId, userIsAdmin, userIsOrgAdmin])
+  }, [loadLocalPoints, userId, sessionBranchId, userIsAdmin, userIsOrgAdmin])
 
   useEffect(() => {
     if (userIsAdmin && selectedOrganizationId) {
@@ -242,8 +244,8 @@ export function PointsManager() {
   }, [loadLocalPoints, needsBranchSelector, resolvedBranchId])
 
   useEffect(() => {
-    if (!needsBranchSelector && session?.user) void loadLocalPoints(null)
-  }, [loadLocalPoints, needsBranchSelector, session])
+    if (!needsBranchSelector && userId) void loadLocalPoints(null)
+  }, [loadLocalPoints, needsBranchSelector, userId])
 
   useEffect(() => {
     setMarkersLoaded(false)

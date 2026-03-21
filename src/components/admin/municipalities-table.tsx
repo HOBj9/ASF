@@ -139,12 +139,14 @@ export function MunicipalitiesTable() {
     return org?.labels?.branchLabel || labels.branchLabel || "الفرع"
   }, [form.organizationId, organizations, labels.branchLabel])
 
+  const userId = (session?.user as any)?.id as string | undefined
+
   useEffect(() => {
-    if (session === undefined || !userIsAdmin) return
+    if (!userId || !userIsAdmin) return
     if (organizations.length === 1 && !selectedOrganizationId) {
       setSelectedOrganizationId(organizations[0]._id)
     }
-  }, [organizations, selectedOrganizationId, session, userIsAdmin])
+  }, [organizations, selectedOrganizationId, userId, userIsAdmin])
 
   const openCreate = () => {
     const defaultOrgId = userIsAdmin

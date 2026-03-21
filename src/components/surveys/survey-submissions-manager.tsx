@@ -107,7 +107,7 @@ export function SurveySubmissionsManager({
     } finally {
       setLoading(false)
     }
-  }, [organizationId, surveyIdFilter, labels.surveyLabel])
+  }, [organizationId, surveyIdFilter])
 
   useEffect(() => {
     loadSurveys()

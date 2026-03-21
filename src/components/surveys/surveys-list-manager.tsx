@@ -1,7 +1,7 @@
 "use client"
 
 import { useSession } from "next-auth/react"
-import { useMemo, useEffect, useState, useCallback } from "react"
+import { useMemo, useEffect, useState, useCallback, useRef } from "react"
 import Link from "next/link"
 import { apiClient } from "@/lib/api/client"
 import { useLabels } from "@/hooks/use-labels"
@@ -68,6 +68,9 @@ export function SurveysListManager() {
     setSelectedOrgId(organizations[0]._id)
   }, [organizations, selectedOrgId, userIsAdmin])
 
+  const surveyLabelRef = useRef(labels.surveyLabel)
+  useEffect(() => { surveyLabelRef.current = labels.surveyLabel }, [labels.surveyLabel])
+
   const loadSurveys = useCallback(async (organizationId: string, activeOnly = false) => {
     if (!organizationId) {
       setSurveys([])
@@ -79,25 +82,23 @@ export function SurveysListManager() {
       const res: any = await apiClient.get(url)
       setSurveys(res.surveys || res.data?.surveys || [])
     } catch (e: any) {
-      toast.error(e?.message || `فشل تحميل ${labels.surveyLabel}`)
+      toast.error(e?.message || `فشل تحميل ${surveyLabelRef.current}`)
       setSurveys([])
     } finally {
       setLoading(false)
     }
-  }, [labels.surveyLabel])
+  }, [])
+
+  const userId = (session?.user as any)?.id as string | undefined
 
   useEffect(() => {
-    if (!session) return
+    if (!userId) return
     if (userIsAdmin) return
-    if (orgId) {
-      void loadSurveys(orgId, !canManage)
-    }
-  }, [canManage, loadSurveys, orgId, session, userIsAdmin])
+    if (orgId) void loadSurveys(orgId, !canManage)
+  }, [canManage, loadSurveys, orgId, userId, userIsAdmin])
 
   useEffect(() => {
-    if (orgId && userIsAdmin) {
-      void loadSurveys(orgId, !canManage)
-    }
+    if (orgId && userIsAdmin) void loadSurveys(orgId, !canManage)
   }, [canManage, loadSurveys, orgId, userIsAdmin])
 
   return (

@@ -31,7 +31,7 @@ export function useDashboardOverview(
     queryFn: () => fetchOverview(params),
     enabled: params.enabled !== false,
     initialData: initialData ?? undefined,
-    staleTime: 30 * 1000, // 30s - dashboard data refreshes more often
-    refetchInterval: 15_000,
+    staleTime: 30 * 1000,
+    refetchInterval: params.enabled !== false ? 30_000 : false,
   });
 }

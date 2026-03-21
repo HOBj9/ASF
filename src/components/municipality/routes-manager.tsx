@@ -242,6 +242,8 @@ export function RoutesManager() {
 
   const pointMap = useMemo(() => new Map(points.map((p) => [p._id, p])), [points])
 
+  const userId = (session?.user as any)?.id as string | undefined
+
   const load = useCallback(async (branchId: string | null) => {
     if (needsBranchSelector && !branchId) {
       setItems([])
@@ -258,13 +260,13 @@ export function RoutesManager() {
       setItems(routesRes.routes || routesRes.data?.routes || [])
       setVehicles(vehiclesRes.vehicles || vehiclesRes.data?.vehicles || [])
     } catch (error: any) {
-      toast.error(error.message || `فشل تحميل ${labels.routeLabel}`)
+      toast.error(error.message || "فشل تحميل البيانات")
       setItems([])
       setVehicles([])
     } finally {
       setLoading(false)
     }
-  }, [labels.routeLabel, needsBranchSelector])
+  }, [needsBranchSelector])
 
   const loadRouteZones = useCallback(async (branchId: string | null) => {
     if (!branchId) { setRouteZones([]); return }
@@ -297,12 +299,12 @@ export function RoutesManager() {
       const res: any = await apiClient.get(url)
       setPoints(res.points || res.data?.points || [])
     } catch (error: any) {
-      toast.error(error.message || `فشل تحميل ${labels.pointLabel}`)
+      toast.error(error.message || "فشل تحميل النقاط")
       setPoints([])
     } finally {
       setPointsLoading(false)
     }
-  }, [labels.pointLabel, needsBranchSelector])
+  }, [needsBranchSelector])
 
   useEffect(() => {
     if (!userIsAdmin || organizations.length !== 1 || selectedOrganizationId) return
@@ -316,12 +318,12 @@ export function RoutesManager() {
   }, [branchIdFromUrl, branches, selectedBranchId, sessionBranchId, userIsAdmin, userIsBranchAdmin, userIsOrgAdmin])
 
   useEffect(() => {
-    if (session === undefined) return
+    if (!userId) return
     if (userIsAdmin) return
     if (userIsOrgAdmin && !sessionBranchId) return
     if (userIsBranchAdmin) return
     void load(null)
-  }, [load, session, sessionBranchId, userIsAdmin, userIsBranchAdmin, userIsOrgAdmin])
+  }, [load, userId, sessionBranchId, userIsAdmin, userIsBranchAdmin, userIsOrgAdmin])
 
   useEffect(() => {
     if (branchIdFromUrl && needsBranchSelector) {
@@ -346,10 +348,8 @@ export function RoutesManager() {
   const hasHandledEditFromUrl = useRef(false)
 
   useEffect(() => {
-    if (!needsBranchSelector && session?.user) {
-      void load(resolvedBranchId)
-    }
-  }, [load, needsBranchSelector, resolvedBranchId, session])
+    if (!needsBranchSelector && userId) void load(resolvedBranchId)
+  }, [load, needsBranchSelector, resolvedBranchId, userId])
 
   useEffect(() => {
     if (resolvedBranchId) {
