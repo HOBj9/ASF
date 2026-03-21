@@ -39,7 +39,7 @@ const RouteScheduleVehicleSchema: Schema = new Schema(
   { timestamps: true }
 );
 
-RouteScheduleVehicleSchema.index({ routeId: 1, workScheduleId: 1 }, { unique: true });
+RouteScheduleVehicleSchema.index({ routeId: 1, workScheduleId: 1, vehicleId: 1 }, { unique: true });
 
 let RouteScheduleVehicle: Model<IRouteScheduleVehicle>;
 

@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { apiClient } from "@/lib/api/client";
+import { useBranches } from "@/hooks/queries/use-branches";
+import { useOrganizations } from "@/hooks/queries/use-organizations";
 import { isAdmin, isOrganizationAdmin } from "@/lib/permissions";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -28,8 +30,6 @@ export function RouteStatsPageClient({
   const searchParams = useSearchParams();
   const branchIdFromUrl = searchParams.get("branchId");
 
-  const [organizations, setOrganizations] = useState<OrganizationItem[]>([]);
-  const [branches, setBranches] = useState<BranchItem[]>([]);
   const [selectedOrganizationId, setSelectedOrganizationId] = useState("");
   const [selectedBranchId, setSelectedBranchId] = useState(branchIdFromUrl || "");
   const [route, setRoute] = useState<RouteItem | null>(null);
@@ -42,43 +42,16 @@ export function RouteStatsPageClient({
   const needsBranchSelector = userIsAdmin || (userIsOrgAdmin && !sessionBranchId);
   const resolvedBranchId = needsBranchSelector ? selectedBranchId : (branchIdFromUrl || sessionBranchId);
 
-  const loadOrganizations = useCallback(async () => {
-    try {
-      const res: any = await apiClient.get("/organizations");
-      const list = res.organizations || res.data?.organizations || [];
-      setOrganizations(list);
-      if (list.length === 1) setSelectedOrganizationId(list[0]._id);
-      return list;
-    } catch {
-      return [];
-    }
-  }, []);
-
-  const loadBranches = useCallback(async (organizationId: string) => {
-    if (!organizationId) {
-      setBranches([]);
-      return;
-    }
-    try {
-      const res: any = await apiClient.get(`/branches?organizationId=${organizationId}`);
-      const list = res.branches || res.data?.branches || [];
-      setBranches(list);
-      if (list.length === 1) setSelectedBranchId(list[0]._id);
-    } catch {
-      setBranches([]);
-    }
-  }, []);
-
-  const loadBranchesForOrgUser = useCallback(async () => {
-    try {
-      const res: any = await apiClient.get("/branches");
-      const list = res.branches || res.data?.branches || [];
-      setBranches(list);
-      if (list.length === 1 && !selectedBranchId) setSelectedBranchId(list[0]._id);
-    } catch {
-      setBranches([]);
-    }
-  }, [selectedBranchId]);
+  const { data: organizations = [] } = useOrganizations(Boolean(session && userIsAdmin));
+  const branchesAdminQuery = useBranches({
+    organizationId: selectedOrganizationId || null,
+    enabled: Boolean(session && userIsAdmin && !!selectedOrganizationId),
+  });
+  const branchesSessionQuery = useBranches({
+    organizationId: null,
+    enabled: Boolean(session && userIsOrgAdmin && !sessionBranchId),
+  });
+  const branches = ((userIsAdmin ? branchesAdminQuery.data : branchesSessionQuery.data) ?? []) as BranchItem[];
 
   const loadRoute = useCallback(async () => {
     if (!resolvedBranchId) {
@@ -115,20 +88,35 @@ export function RouteStatsPageClient({
   }, [branchIdFromUrl]);
 
   useEffect(() => {
-    if (userIsAdmin) {
-      void loadOrganizations();
-    } else if (userIsOrgAdmin && !sessionBranchId) {
-      void loadBranchesForOrgUser();
-    } else if (sessionBranchId && !branchIdFromUrl) {
-      setSelectedBranchId(sessionBranchId);
+    if (userIsAdmin && organizations.length === 1 && !selectedOrganizationId) {
+      setSelectedOrganizationId(organizations[0]._id);
     }
-  }, [branchIdFromUrl, loadBranchesForOrgUser, loadOrganizations, sessionBranchId, userIsAdmin, userIsOrgAdmin]);
+  }, [organizations, selectedOrganizationId, userIsAdmin]);
 
   useEffect(() => {
-    if (userIsAdmin && selectedOrganizationId) {
-      void loadBranches(selectedOrganizationId);
+    if (userIsOrgAdmin && !sessionBranchId && branches.length === 1 && !selectedBranchId && !branchIdFromUrl) {
+      setSelectedBranchId(branches[0]._id);
     }
-  }, [loadBranches, selectedOrganizationId, userIsAdmin]);
+  }, [branchIdFromUrl, branches, selectedBranchId, sessionBranchId, userIsOrgAdmin]);
+
+  useEffect(() => {
+    if (!userIsAdmin || !selectedOrganizationId) return;
+    if (branches.length === 1 && !selectedBranchId && !branchIdFromUrl) {
+      setSelectedBranchId(branches[0]._id);
+    }
+  }, [branchIdFromUrl, branches, selectedBranchId, selectedOrganizationId, userIsAdmin]);
+
+  useEffect(() => {
+    if (sessionBranchId && !branchIdFromUrl && !userIsAdmin) {
+      setSelectedBranchId(sessionBranchId);
+    }
+  }, [branchIdFromUrl, sessionBranchId, userIsAdmin]);
+
+  useEffect(() => {
+    if (userIsAdmin && selectedOrganizationId && !branchIdFromUrl) {
+      setSelectedBranchId("");
+    }
+  }, [branchIdFromUrl, selectedOrganizationId, userIsAdmin]);
 
   useEffect(() => {
     void loadRoute();

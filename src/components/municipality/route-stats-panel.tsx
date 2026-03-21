@@ -34,6 +34,7 @@ type DayDetailItem = {
   entryTime: string;
   exitTime?: string;
   durationSeconds?: number;
+  withinWorkHours?: boolean;
 };
 type DayDetailResponse = {
   visits: DayDetailItem[];
@@ -94,11 +95,18 @@ export function RouteStatsPanel({
     if (!branchId) return;
     setLoadingVehicles(true);
     try {
-      const res: any = await apiClient.get(`/vehicles?branchId=${encodeURIComponent(branchId)}`);
-      const all = res.vehicles || res.data?.vehicles || [];
-      const list = all.filter(
-        (v: VehicleItem) => String((v as any).routeId || "") === String(routeId)
-      ).map((v: VehicleItem) => ({ _id: (v as any)._id, name: (v as any).name || "" }));
+      const svRes: any = await apiClient.get(`/routes/${routeId}/schedule-vehicles?branchId=${encodeURIComponent(branchId)}`);
+      const scheduleVehicles: { workScheduleId: string; vehicleId: string }[] = svRes.scheduleVehicles || [];
+      const uniqueVehicleIds = [...new Set(scheduleVehicles.map((sv) => sv.vehicleId))];
+      if (uniqueVehicleIds.length === 0) {
+        setVehicles([]);
+        return;
+      }
+      const vehiclesRes: any = await apiClient.get(`/vehicles?branchId=${encodeURIComponent(branchId)}`);
+      const all = vehiclesRes.vehicles || vehiclesRes.data?.vehicles || [];
+      const list = all
+        .filter((v: any) => uniqueVehicleIds.includes(String(v._id)))
+        .map((v: any) => ({ _id: String(v._id), name: v.name || "" }));
       setVehicles(list);
     } catch {
       setVehicles([]);

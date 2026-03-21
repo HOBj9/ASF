@@ -13,6 +13,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch"
 import toast from "react-hot-toast"
 import { useLabels } from "@/hooks/use-labels"
+import { useBranches } from "@/hooks/queries/use-branches"
+import { useOrganizations } from "@/hooks/queries/use-organizations"
 import { Loading } from "@/components/ui/loading"
 import { ExportExcelDialog, type ExportColumn } from "@/components/municipality/export-excel-dialog"
 
@@ -45,8 +47,6 @@ export function DriversManager() {
   const [items, setItems] = useState<Driver[]>([])
   const [vehicles, setVehicles] = useState<Vehicle[]>([])
 
-  const [organizations, setOrganizations] = useState<Organization[]>([])
-  const [branches, setBranches] = useState<Branch[]>([])
   const [selectedOrganizationId, setSelectedOrganizationId] = useState("")
   const [selectedBranchId, setSelectedBranchId] = useState("")
 
@@ -66,41 +66,14 @@ export function DriversManager() {
   const needsBranchSelector = userIsAdmin || (userIsOrgAdmin && !sessionBranchId)
   const resolvedBranchId = selectedBranchId || sessionBranchId
 
-  const loadOrganizations = useCallback(async () => {
-    try {
-      const res = await apiClient.get("/organizations").catch(() => ({ organizations: [] } as any))
-      const list = res.organizations || res.data?.organizations || []
-      setOrganizations(list)
-      return list
-    } catch {
-      return []
-    }
-  }, [])
-
-  const loadBranches = useCallback(async (organizationId: string | null) => {
-    if (!organizationId) {
-      setBranches([])
-      return
-    }
-    try {
-      const res = await apiClient.get(`/branches?organizationId=${organizationId}`)
-      const list = res.branches || res.data?.branches || []
-      setBranches(list)
-    } catch {
-      setBranches([])
-    }
-  }, [])
-
-  const loadBranchesForOrgUser = useCallback(async () => {
-    try {
-      const res = await apiClient.get("/branches")
-      const list = res.branches || res.data?.branches || []
-      setBranches(list)
-      if (list.length === 1 && !selectedBranchId) setSelectedBranchId(list[0]._id)
-    } catch {
-      setBranches([])
-    }
-  }, [selectedBranchId])
+  const { data: organizations = [] } = useOrganizations(userIsAdmin)
+  const branchesQuery = useBranches({
+    organizationId: userIsAdmin ? selectedOrganizationId || null : null,
+    enabled:
+      session !== undefined &&
+      (userIsAdmin ? !!selectedOrganizationId : Boolean(userIsOrgAdmin && !sessionBranchId)),
+  })
+  const branches = (branchesQuery.data ?? []) as Branch[]
 
   const load = useCallback(async (branchId: string | null) => {
     if (needsBranchSelector && !branchId) {
@@ -127,24 +100,27 @@ export function DriversManager() {
   }, [labels.driverLabel, needsBranchSelector])
 
   useEffect(() => {
+    if (!userIsAdmin || organizations.length !== 1 || selectedOrganizationId) return
+    setSelectedOrganizationId(organizations[0]._id)
+  }, [userIsAdmin, organizations, selectedOrganizationId])
+
+  useEffect(() => {
+    if (!userIsOrgAdmin || sessionBranchId || userIsAdmin) return
+    if (branches.length === 1 && !selectedBranchId) setSelectedBranchId(branches[0]._id)
+  }, [branches, selectedBranchId, sessionBranchId, userIsAdmin, userIsOrgAdmin])
+
+  useEffect(() => {
     if (session === undefined) return
-    if (userIsAdmin) {
-      void loadOrganizations().then((list) => {
-        if (list.length === 1 && !selectedOrganizationId) setSelectedOrganizationId(list[0]._id)
-      })
-    } else if (userIsOrgAdmin && !sessionBranchId) {
-      void loadBranchesForOrgUser()
-    } else {
-      void load(null)
-    }
-  }, [load, loadBranchesForOrgUser, loadOrganizations, selectedOrganizationId, session, sessionBranchId, userIsAdmin, userIsOrgAdmin])
+    if (userIsAdmin) return
+    if (userIsOrgAdmin && !sessionBranchId) return
+    void load(null)
+  }, [load, session, sessionBranchId, userIsAdmin, userIsOrgAdmin])
 
   useEffect(() => {
     if (userIsAdmin && selectedOrganizationId) {
-      void loadBranches(selectedOrganizationId)
       setSelectedBranchId("")
     }
-  }, [loadBranches, selectedOrganizationId, userIsAdmin])
+  }, [selectedOrganizationId, userIsAdmin])
 
   useEffect(() => {
     if (!needsBranchSelector) return

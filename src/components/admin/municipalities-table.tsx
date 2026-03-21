@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useSession } from "next-auth/react"
 import { apiClient } from "@/lib/api/client"
 import { Button } from "@/components/ui/button"
@@ -11,7 +11,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import toast from "react-hot-toast"
+import { useQueryClient } from "@tanstack/react-query"
 import { useLabels } from "@/hooks/use-labels"
+import { useBranches, branchesQueryKey } from "@/hooks/queries/use-branches"
+import { useOrganizations } from "@/hooks/queries/use-organizations"
 import { isAdmin } from "@/lib/permissions"
 import { Loading } from "@/components/ui/loading"
 import dynamic from "next/dynamic"
@@ -100,9 +103,7 @@ const emptyAdminUser: AdminUserForm = {
 
 export function MunicipalitiesTable() {
   const { data: session } = useSession()
-  const [items, setItems] = useState<Branch[]>([])
-  const [organizations, setOrganizations] = useState<Organization[]>([])
-  const [loading, setLoading] = useState(false)
+  const queryClient = useQueryClient()
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState<Branch | null>(null)
   const [form, setForm] = useState<Partial<Branch>>(emptyBranch)
@@ -116,70 +117,34 @@ export function MunicipalitiesTable() {
     return role?.name === "super_admin"
   }, [session?.user?.role])
 
+  const { data: organizations = [] } = useOrganizations(Boolean(session && userIsAdmin))
+  const adminBranchesQuery = useBranches({
+    organizationId: selectedOrganizationId || null,
+    enabled: Boolean(session && userIsAdmin && !!selectedOrganizationId),
+  })
+  const orgUserBranchesQuery = useBranches({
+    organizationId: null,
+    enabled: Boolean(session && !userIsAdmin),
+  })
+  const items = (
+    userIsAdmin && !selectedOrganizationId
+      ? []
+      : (userIsAdmin ? adminBranchesQuery.data : orgUserBranchesQuery.data) ?? []
+  ) as Branch[]
+  const loading = userIsAdmin ? adminBranchesQuery.isPending : orgUserBranchesQuery.isPending
+
   const branchLabel = useMemo(() => {
     if (!form.organizationId) return labels.branchLabel || "الفرع"
     const org = organizations.find((o) => o._id === form.organizationId)
     return org?.labels?.branchLabel || labels.branchLabel || "الفرع"
   }, [form.organizationId, organizations, labels.branchLabel])
 
-  const loadOrganizations = useCallback(async () => {
-    try {
-      const orgRes = await apiClient.get("/organizations").catch(() => ({ organizations: [] as Organization[] } as any))
-      const orgList = orgRes.organizations || orgRes.data?.organizations || []
-      setOrganizations(orgList)
-      return orgList
-    } catch {
-      return []
-    }
-  }, [])
-
-  const loadBranches = useCallback(async (organizationId?: string | null) => {
-    setLoading(true)
-    try {
-      if (userIsAdmin && !organizationId) {
-        setItems([])
-        setLoading(false)
-        return
-      }
-      const url = organizationId ? `/branches?organizationId=${organizationId}` : "/branches"
-      const branchesRes = await apiClient.get(url)
-      const branchList = branchesRes.branches || branchesRes.data?.branches || []
-      setItems(branchList)
-    } catch (error: any) {
-      toast.error(error.message || `فشل تحميل ${labels.branchLabel}`)
-      setItems([])
-    } finally {
-      setLoading(false)
-    }
-  }, [labels.branchLabel, userIsAdmin])
-
   useEffect(() => {
-    if (session === undefined) return
-    let cancelled = false
-    const run = async () => {
-      const orgList = await loadOrganizations()
-      if (cancelled) return
-      if (userIsAdmin) {
-        setItems([])
-        if (!selectedOrganizationId && orgList.length === 1) {
-          setSelectedOrganizationId(orgList[0]._id)
-        }
-      } else {
-        await loadBranches(null)
-      }
+    if (session === undefined || !userIsAdmin) return
+    if (organizations.length === 1 && !selectedOrganizationId) {
+      setSelectedOrganizationId(organizations[0]._id)
     }
-    void run()
-    return () => { cancelled = true }
-  }, [loadBranches, loadOrganizations, selectedOrganizationId, session, userIsAdmin])
-
-  useEffect(() => {
-    if (!userIsAdmin) return
-    if (selectedOrganizationId) {
-      void loadBranches(selectedOrganizationId)
-    } else {
-      setItems([])
-    }
-  }, [loadBranches, selectedOrganizationId, userIsAdmin])
+  }, [organizations, selectedOrganizationId, session, userIsAdmin])
 
   const openCreate = () => {
     const defaultOrgId = userIsAdmin
@@ -258,8 +223,8 @@ export function MunicipalitiesTable() {
         toast.success(`تم إنشاء ${labels.branchLabel}`)
       }
       setOpen(false)
-      if (userIsAdmin) await loadBranches(selectedOrganizationId)
-      else await loadBranches(null)
+      await queryClient.invalidateQueries({ queryKey: ["branches"] })
+      await queryClient.invalidateQueries({ queryKey: ["labels"] })
     } catch (error: any) {
       toast.error(error.message || "حدث خطأ")
     }
@@ -269,9 +234,9 @@ export function MunicipalitiesTable() {
     if (!confirm(`حذف ${labels.branchLabel} ${item.name}؟`)) return
     try {
       await apiClient.delete(`/branches/${item._id}`)
-      setItems((prev) => prev.filter((i) => i._id !== item._id))
       toast.success(`تم حذف ${labels.branchLabel}`)
-      if (userIsAdmin) await loadBranches(selectedOrganizationId)
+      await queryClient.invalidateQueries({ queryKey: branchesQueryKey(userIsAdmin ? selectedOrganizationId : null) })
+      await queryClient.invalidateQueries({ queryKey: ["labels"] })
     } catch (error: any) {
       toast.error(error.message || "حدث خطأ")
     }

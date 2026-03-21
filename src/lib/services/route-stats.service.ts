@@ -8,12 +8,13 @@ import Route from '@/models/Route';
 import RoutePoint from '@/models/RoutePoint';
 import Point from '@/models/Point';
 import PointVisit from '@/models/PointVisit';
-import Vehicle from '@/models/Vehicle';
 import Branch from '@/models/Branch';
 import WorkSchedule from '@/models/WorkSchedule';
+import RouteScheduleVehicle from '@/models/RouteScheduleVehicle';
 import {
   enumerateWorkDaysInRange,
   getWorkDayRangeForDate,
+  getDayOfWeekInTimezone,
   WorkDayEntry,
   WorkScheduleDayDef,
 } from '@/lib/utils/work-day.util';
@@ -57,6 +58,20 @@ export interface VisitedPointsResult {
     exitTime?: Date;
     durationSeconds?: number;
   }>;
+}
+
+export interface VisitedPointsAllResult {
+  visitedPointIds: Set<string>; // only within work hours
+  visits: Array<{
+    _id: string;
+    pointId: string;
+    vehicleId: string;
+    entryTime: Date;
+    exitTime?: Date;
+    durationSeconds?: number;
+    withinWorkHours: boolean;
+  }>;
+  workDayRange: { start: Date; end: Date } | null;
 }
 
 export interface VisitOrderAnalysis {
@@ -158,8 +173,8 @@ export class RouteStatsService {
       timezone
     );
 
-    const vehicleIds = await Vehicle.find({ routeId, branchId }).select('_id').lean().exec();
-    const routeVehicleIds = vehicleIds.map((v: any) => String(v._id));
+    const svDocs = await RouteScheduleVehicle.find({ routeId, branchId }).select('vehicleId').lean().exec();
+    const routeVehicleIds = [...new Set(svDocs.map((sv: any) => String(sv.vehicleId)))];
     let filteredVehicleIds: string[] | undefined = routeVehicleIds;
 
     if (options?.vehicleId) {
@@ -252,8 +267,8 @@ export class RouteStatsService {
     if (vehicleIds && vehicleIds.length > 0) {
       vehicleIdSet = new Set(vehicleIds);
     } else {
-      const vehicles = await Vehicle.find({ routeId, branchId }).select('_id').lean().exec();
-      vehicleIdSet = new Set(vehicles.map((v: any) => String(v._id)));
+      const svDocs = await RouteScheduleVehicle.find({ routeId, branchId }).select('vehicleId').lean().exec();
+      vehicleIdSet = new Set(svDocs.map((sv: any) => String(sv.vehicleId)));
     }
 
     const filter: any = {
@@ -281,6 +296,124 @@ export class RouteStatsService {
     });
 
     return { visitedPointIds, visits: visitList };
+  }
+
+  /**
+   * Get all visits for a calendar day (full day range) and mark each as within/outside work hours
+   */
+  async getVisitedPointsForDayAll(
+    routeId: string,
+    branchId: string,
+    dateStr: string,
+    vehicleIds?: string[]
+  ): Promise<VisitedPointsAllResult> {
+    await connectDB();
+
+    const route = await Route.findOne({ _id: routeId, branchId }).lean().exec();
+    if (!route) throw new Error('المسار غير موجود');
+
+    const branch = await Branch.findById(branchId).select('timezone').lean().exec();
+    const timezone = (branch as any)?.timezone || 'Asia/Damascus';
+
+    // Determine work day range for this specific date
+    let workDayRange: { start: Date; end: Date } | null = null;
+    const workScheduleId = (route as any).workScheduleId;
+    if (workScheduleId) {
+      const workSchedule = await WorkSchedule.findById(workScheduleId).lean().exec();
+      if (workSchedule && (workSchedule as any).days?.length) {
+        const tempDate = new Date(dateStr + 'T12:00:00Z');
+        const dayOfWeek = getDayOfWeekInTimezone(tempDate, timezone);
+        const dayDef = (workSchedule as any).days.find((d: any) => d.dayOfWeek === dayOfWeek);
+        if (dayDef) {
+          workDayRange = getWorkDayRangeForDate(dateStr, dayDef.startTime, dayDef.endTime, timezone) as { start: Date; end: Date };
+        }
+      }
+    }
+
+    // Full calendar day range in the branch timezone (00:00 - 23:59)
+    const fullDayRange = getWorkDayRangeForDate(dateStr, '00:00', '23:59', timezone) as { start: Date; end: Date };
+
+    let vehicleIdSet: Set<string>;
+    if (vehicleIds && vehicleIds.length > 0) {
+      vehicleIdSet = new Set(vehicleIds);
+    } else {
+      const svDocs = await RouteScheduleVehicle.find({ routeId, branchId }).select('vehicleId').lean().exec();
+      vehicleIdSet = new Set(svDocs.map((sv: any) => String(sv.vehicleId)));
+    }
+
+    if (vehicleIdSet.size === 0) {
+      return { visitedPointIds: new Set(), visits: [], workDayRange };
+    }
+
+    const visits = await PointVisit.find({
+      branchId: new mongoose.Types.ObjectId(branchId),
+      vehicleId: { $in: Array.from(vehicleIdSet).map((id) => new mongoose.Types.ObjectId(id)) },
+      entryTime: { $gte: fullDayRange.start, $lte: fullDayRange.end },
+    })
+      .sort({ entryTime: 1 })
+      .lean()
+      .exec();
+
+    const visitedPointIds = new Set<string>(); // only within work hours
+    const visitList = (visits as any[]).map((v) => {
+      const entryTime = v.entryTime as Date;
+      const withinWorkHours = workDayRange
+        ? entryTime.getTime() >= workDayRange.start.getTime() && entryTime.getTime() <= workDayRange.end.getTime()
+        : false;
+      if (withinWorkHours) {
+        visitedPointIds.add(String(v.pointId));
+      }
+      return {
+        _id: String(v._id),
+        pointId: String(v.pointId),
+        vehicleId: String(v.vehicleId),
+        entryTime,
+        exitTime: v.exitTime,
+        durationSeconds: v.durationSeconds,
+        withinWorkHours,
+      };
+    });
+
+    return { visitedPointIds, visits: visitList, workDayRange };
+  }
+
+  /**
+   * Analyze visit order from pre-fetched visits (avoids extra DB query)
+   */
+  async getVisitOrderAnalysisFromVisits(
+    routeId: string,
+    visits: Array<{ pointId: string; entryTime: Date }>
+  ): Promise<VisitOrderAnalysis | null> {
+    const routePoints = await this.getRoutePoints(routeId);
+    const expectedOrder = routePoints.map((rp) => rp.pointId);
+    const visitedPointIds = new Set(visits.map((v) => v.pointId));
+
+    if (visitedPointIds.size < expectedOrder.length) return null;
+
+    const firstVisitByPoint = new Map<string, { entryTime: Date }>();
+    for (const v of visits) {
+      if (!firstVisitByPoint.has(v.pointId)) {
+        firstVisitByPoint.set(v.pointId, { entryTime: v.entryTime });
+      }
+    }
+
+    const actualOrder = [...firstVisitByPoint.entries()]
+      .sort((a, b) => a[1].entryTime.getTime() - b[1].entryTime.getTime())
+      .map(([pointId]) => pointId);
+
+    const outOfOrderPoints: string[] = [];
+    for (let i = 0; i < Math.min(actualOrder.length, expectedOrder.length); i++) {
+      if (actualOrder[i] !== expectedOrder[i]) {
+        outOfOrderPoints.push(actualOrder[i]);
+      }
+    }
+
+    return {
+      inOrder: outOfOrderPoints.length === 0,
+      actualOrder,
+      expectedOrder,
+      outOfOrderPoints,
+    };
   }
 
   /**

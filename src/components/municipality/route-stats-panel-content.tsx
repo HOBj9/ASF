@@ -32,7 +32,7 @@ export type RouteStatsPanelContentProps = {
   closeDetailModal: () => void;
   loadingDayDetail: boolean;
   dayDetail: {
-    visits: Array<{ _id: string; entryTime: string; exitTime?: string; durationSeconds?: number }>;
+    visits: Array<{ _id: string; entryTime: string; exitTime?: string; durationSeconds?: number; withinWorkHours?: boolean }>;
     visitedPointIds: string[];
     orderAnalysis: VisitOrderAnalysis | null;
   } | null;

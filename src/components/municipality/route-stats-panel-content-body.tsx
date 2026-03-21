@@ -29,46 +29,45 @@ const RouteVisitsMap = dynamic(
 );
 
 const TEXT = {
-  routeStatsTitle: "\u0625\u062d\u0635\u0627\u0626\u064a\u0627\u062a \u0627\u0644\u0645\u0633\u0627\u0631",
-  fromDate: "\u0645\u0646 \u062a\u0627\u0631\u064a\u062e",
-  toDate: "\u0625\u0644\u0649 \u062a\u0627\u0631\u064a\u062e",
-  vehicle: "\u0627\u0644\u0645\u0631\u0643\u0628\u0629",
-  noLinkedVehicles: "\u0644\u0627 \u062a\u0648\u062c\u062f \u0645\u0631\u0643\u0628\u0627\u062a \u0645\u0631\u0628\u0648\u0637\u0629",
-  allVehicles: "\u0643\u0644 \u0627\u0644\u0645\u0631\u0643\u0628\u0627\u062a",
-  noVehiclesHint:
-    "\u0644\u0627 \u062a\u0648\u062c\u062f \u0645\u0631\u0643\u0628\u0627\u062a \u0645\u0631\u0628\u0648\u0637\u0629 \u0628\u0647\u0630\u0627 \u0627\u0644\u0645\u0633\u0627\u0631. \u0631\u0628\u0637 \u0627\u0644\u0645\u0631\u0643\u0628\u0627\u062a \u0645\u0646 \u062c\u062f\u0648\u0644 \u0627\u0644\u0645\u0633\u0627\u0631.",
-  show: "\u0639\u0631\u0636",
-  loadingStats: "\u062c\u0627\u0631\u064a \u062a\u062d\u0645\u064a\u0644 \u0627\u0644\u0625\u062d\u0635\u0627\u0626\u064a\u0627\u062a...",
-  workDaysLog: "\u0633\u062c\u0644 \u0623\u064a\u0627\u0645 \u0627\u0644\u0639\u0645\u0644",
-  completionRate: "\u0646\u0633\u0628\u0629 \u0627\u0644\u0625\u062a\u0645\u0627\u0645",
-  exportVisitsLog: "\u062a\u0635\u062f\u064a\u0631 \u0633\u062c\u0644 \u0627\u0644\u0632\u064a\u0627\u0631\u0627\u062a",
-  exportExcel: "\u062a\u0635\u062f\u064a\u0631 Excel",
-  noWorkDays: "\u0644\u0627 \u062a\u0648\u062c\u062f \u0623\u064a\u0627\u0645 \u0639\u0645\u0644 \u0641\u064a \u0627\u0644\u0641\u062a\u0631\u0629 \u0627\u0644\u0645\u062d\u062f\u062f\u0629.",
-  date: "\u0627\u0644\u062a\u0627\u0631\u064a\u062e",
-  day: "\u0627\u0644\u064a\u0648\u0645",
-  visitedPoints: "\u0627\u0644\u0646\u0642\u0627\u0637 \u0627\u0644\u0645\u0632\u0627\u0631\u0629",
-  completion: "\u0646\u0633\u0628\u0629 \u0627\u0644\u0625\u0646\u062c\u0627\u0632",
-  actions: "\u0627\u0644\u0625\u062c\u0631\u0627\u0621\u0627\u062a",
-  today: "\u0627\u0644\u064a\u0648\u0645",
-  viewDetails: "\u0639\u0631\u0636 \u0627\u0644\u062a\u0641\u0627\u0635\u064a\u0644",
-  dayWorkDetails: "\u062a\u0641\u0627\u0635\u064a\u0644 \u064a\u0648\u0645 \u0627\u0644\u0639\u0645\u0644",
-  loadingDetails: "\u062c\u0627\u0631\u064a \u062a\u062d\u0645\u064a\u0644 \u0627\u0644\u062a\u0641\u0627\u0635\u064a\u0644...",
-  visitReport: "\u062a\u0642\u0631\u064a\u0631 \u0627\u0644\u0632\u064a\u0627\u0631\u0629",
-  noVisits: "\u0644\u0627 \u062a\u0648\u062c\u062f \u0632\u064a\u0627\u0631\u0627\u062a \u0645\u0633\u062c\u0644\u0629.",
-  entryTime: "\u0648\u0642\u062a \u0627\u0644\u062f\u062e\u0648\u0644",
-  exitTime: "\u0648\u0642\u062a \u0627\u0644\u062e\u0631\u0648\u062c",
-  duration: "\u0627\u0644\u0645\u062f\u0629",
-  orderAnalysis: "\u062a\u062d\u0644\u064a\u0644 \u0627\u0644\u062a\u0631\u062a\u064a\u0628",
-  visitInOrder:
-    "\u0627\u0644\u0632\u064a\u0627\u0631\u0629 \u062a\u0645\u062a \u0628\u0627\u0644\u062a\u0631\u062a\u064a\u0628 \u0627\u0644\u0635\u062d\u064a\u062d",
-  randomVisitPrefix:
-    "\u0639\u0634\u0648\u0627\u0626\u064a\u0629 \u2013 \u0627\u0644\u0646\u0642\u0627\u0637 \u0627\u0644\u0634\u0627\u0630\u0629:",
-  pointsMap: "\u062e\u0631\u064a\u0637\u0629 \u0627\u0644\u0646\u0642\u0627\u0637",
-  point: "\u0646\u0642\u0637\u0629",
-  previous: "\u0627\u0644\u0633\u0627\u0628\u0642",
-  next: "\u0627\u0644\u062a\u0627\u0644\u064a",
-  secondsSuffix: "\u062b",
-  dash: "\u2014",
+  routeStatsTitle: "إحصائيات المسار",
+  fromDate: "من تاريخ",
+  toDate: "إلى تاريخ",
+  vehicle: "المركبة",
+  noLinkedVehicles: "لا توجد مركبات مربوطة",
+  allVehicles: "كل المركبات",
+  noVehiclesHint: "لا توجد مركبات مربوطة بهذا المسار. ربط المركبات من جدول المسار.",
+  show: "عرض",
+  loadingStats: "جاري تحميل الإحصائيات...",
+  workDaysLog: "سجل أيام العمل",
+  completionRate: "نسبة الإتمام",
+  exportVisitsLog: "تصدير سجل الزيارات",
+  exportExcel: "تصدير Excel",
+  noWorkDays: "لا توجد أيام عمل في الفترة المحددة.",
+  date: "التاريخ",
+  day: "اليوم",
+  visitedPoints: "النقاط المزارة",
+  completion: "نسبة الإنجاز",
+  actions: "الإجراءات",
+  today: "اليوم",
+  viewDetails: "عرض التفاصيل",
+  dayWorkDetails: "تفاصيل يوم العمل",
+  loadingDetails: "جاري تحميل التفاصيل...",
+  visitReport: "تقرير الزيارة",
+  noVisits: "لا توجد زيارات مسجلة.",
+  entryTime: "وقت الدخول",
+  exitTime: "وقت الخروج",
+  duration: "المدة",
+  withinHours: "داخل الدوام",
+  outsideHours: "خارج الدوام",
+  orderAnalysis: "تحليل الترتيب",
+  visitInOrder: "الزيارة تمت بالترتيب الصحيح",
+  randomVisitPrefix: "عشوائية – النقاط الشاذة:",
+  pointsMap: "خريطة النقاط",
+  point: "نقطة",
+  previous: "السابق",
+  next: "التالي",
+  secondsSuffix: "ث",
+  dash: "—",
 } as const;
 
 export function RouteStatsPanelContentBody(props: RouteStatsPanelContentProps) {
@@ -293,6 +292,9 @@ export function RouteStatsPanelContentBody(props: RouteStatsPanelContentProps) {
                                         <th className="px-2 py-1 text-right">
                                           {TEXT.duration}
                                         </th>
+                                        <th className="px-2 py-1 text-right">
+                                          الدوام
+                                        </th>
                                       </tr>
                                     </thead>
                                     <tbody>
@@ -310,6 +312,17 @@ export function RouteStatsPanelContentBody(props: RouteStatsPanelContentProps) {
                                             {v.durationSeconds != null
                                               ? `${v.durationSeconds} ${TEXT.secondsSuffix}`
                                               : TEXT.dash}
+                                          </td>
+                                          <td className="px-2 py-1">
+                                            {v.withinWorkHours === undefined ? null : v.withinWorkHours ? (
+                                              <span className="rounded bg-green-100 px-1.5 py-0.5 text-xs font-medium text-green-700">
+                                                {TEXT.withinHours}
+                                              </span>
+                                            ) : (
+                                              <span className="rounded bg-red-100 px-1.5 py-0.5 text-xs font-medium text-red-700">
+                                                {TEXT.outsideHours}
+                                              </span>
+                                            )}
                                           </td>
                                         </tr>
                                       ))}

@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { isAdmin, isOrganizationAdmin } from "@/lib/permissions"
+import { useBranches } from "@/hooks/queries/use-branches"
 
 type Point = {
   _id: string
@@ -66,7 +67,6 @@ const transactionTypeOptions = [
 export function PointMaterialsManager() {
   const { data: session } = useSession()
   const [points, setPoints] = useState<Point[]>([])
-  const [branches, setBranches] = useState<Branch[]>([])
   const [selectedBranchId, setSelectedBranchId] = useState("")
   const [materials, setMaterials] = useState<Material[]>([])
   const [units, setUnits] = useState<Unit[]>([])
@@ -91,6 +91,23 @@ export function PointMaterialsManager() {
 
   const sessionBranchId = (session?.user as any)?.branchId || ""
   const activeBranchId = canSelectBranch ? selectedBranchId : sessionBranchId
+
+  const branchesQuery = useBranches({
+    organizationId: null,
+    enabled: session !== undefined && canSelectBranch,
+  })
+  const branches = (branchesQuery.data ?? []) as Branch[]
+
+  useEffect(() => {
+    if (canSelectBranch) {
+      if (!selectedBranchId) {
+        const fallback = sessionBranchId || branches[0]?._id || ""
+        if (fallback) setSelectedBranchId(fallback)
+      }
+    } else if (sessionBranchId) {
+      setSelectedBranchId(sessionBranchId)
+    }
+  }, [branches, canSelectBranch, selectedBranchId, sessionBranchId])
 
   const [txForm, setTxForm] = useState({
     materialId: "",
@@ -144,24 +161,6 @@ export function PointMaterialsManager() {
     if (!pointId) return
     await Promise.all([loadStocks(branchId, pointId), loadTransactions(branchId, pointId)])
   }, [loadStocks, loadTransactions])
-
-  useEffect(() => {
-    if (canSelectBranch) {
-      apiClient
-        .get("/branches")
-        .then((res: any) => {
-          const list = res.branches || res.data?.branches || []
-          setBranches(list)
-          if (!selectedBranchId) {
-            const fallback = sessionBranchId || list[0]?._id || ""
-            setSelectedBranchId(fallback)
-          }
-        })
-        .catch((error: any) => toast.error(error.message || "حدث خطأ"))
-    } else if (sessionBranchId) {
-      setSelectedBranchId(sessionBranchId)
-    }
-  }, [canSelectBranch, selectedBranchId, sessionBranchId])
 
   useEffect(() => {
     if (!activeBranchId) return

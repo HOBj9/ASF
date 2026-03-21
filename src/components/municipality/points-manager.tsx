@@ -16,6 +16,8 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Progress } from "@/components/ui/progress"
 import toast from "react-hot-toast"
 import { useLabels } from "@/hooks/use-labels"
+import { useBranches } from "@/hooks/queries/use-branches"
+import { useOrganizations } from "@/hooks/queries/use-organizations"
 import { ExportExcelDialog, type ExportColumn } from "@/components/municipality/export-excel-dialog"
 import { BranchPointClassificationsAdd } from "@/components/municipality/branch-point-classifications-add"
 import { Loading } from "@/components/ui/loading"
@@ -90,8 +92,6 @@ export function PointsManager() {
 
   const [activeTab, setActiveTab] = useState("local")
 
-  const [organizations, setOrganizations] = useState<Organization[]>([])
-  const [branches, setBranches] = useState<Branch[]>([])
   const [selectedOrganizationId, setSelectedOrganizationId] = useState("")
   const [selectedBranchId, setSelectedBranchId] = useState("")
 
@@ -147,41 +147,14 @@ export function PointsManager() {
   const resolvedBranchId = selectedBranchId || sessionBranchId
   resolvedBranchIdRef.current = resolvedBranchId || ""
 
-  const loadOrganizations = useCallback(async () => {
-    try {
-      const res = await apiClient.get("/organizations").catch(() => ({ organizations: [] } as any))
-      const list = res.organizations || res.data?.organizations || []
-      setOrganizations(list)
-      return list
-    } catch {
-      return []
-    }
-  }, [])
-
-  const loadBranches = useCallback(async (organizationId: string | null) => {
-    if (!organizationId) {
-      setBranches([])
-      return
-    }
-    try {
-      const res = await apiClient.get(`/branches?organizationId=${organizationId}`)
-      const list = res.branches || res.data?.branches || []
-      setBranches(list)
-    } catch {
-      setBranches([])
-    }
-  }, [])
-
-  const loadBranchesForOrgUser = useCallback(async () => {
-    try {
-      const res = await apiClient.get("/branches")
-      const list = res.branches || res.data?.branches || []
-      setBranches(list)
-      if (list.length === 1 && !selectedBranchId) setSelectedBranchId(list[0]._id)
-    } catch {
-      setBranches([])
-    }
-  }, [selectedBranchId])
+  const { data: organizations = [] } = useOrganizations(userIsAdmin)
+  const branchesQuery = useBranches({
+    organizationId: userIsAdmin ? selectedOrganizationId || null : null,
+    enabled:
+      session !== undefined &&
+      (userIsAdmin ? !!selectedOrganizationId : Boolean(userIsOrgAdmin && !sessionBranchId)),
+  })
+  const branches = (branchesQuery.data ?? []) as Branch[]
 
   const loadLocalPoints = useCallback(async (branchId: string | null) => {
     if (needsBranchSelector && !branchId) {
@@ -240,24 +213,27 @@ export function PointsManager() {
   }, [needsBranchSelector, resolvedBranchId])
 
   useEffect(() => {
+    if (!userIsAdmin || organizations.length !== 1 || selectedOrganizationId) return
+    setSelectedOrganizationId(organizations[0]._id)
+  }, [userIsAdmin, organizations, selectedOrganizationId])
+
+  useEffect(() => {
+    if (!userIsOrgAdmin || sessionBranchId || userIsAdmin) return
+    if (branches.length === 1 && !selectedBranchId) setSelectedBranchId(branches[0]._id)
+  }, [branches, selectedBranchId, sessionBranchId, userIsAdmin, userIsOrgAdmin])
+
+  useEffect(() => {
     if (session === undefined) return
-    if (userIsAdmin) {
-      void loadOrganizations().then((list) => {
-        if (list.length === 1 && !selectedOrganizationId) setSelectedOrganizationId(list[0]._id)
-      })
-    } else if (userIsOrgAdmin && !sessionBranchId) {
-      void loadBranchesForOrgUser()
-    } else {
-      void loadLocalPoints(null)
-    }
-  }, [loadBranchesForOrgUser, loadLocalPoints, loadOrganizations, selectedOrganizationId, session, sessionBranchId, userIsAdmin, userIsOrgAdmin])
+    if (userIsAdmin) return
+    if (userIsOrgAdmin && !sessionBranchId) return
+    void loadLocalPoints(null)
+  }, [loadLocalPoints, session, sessionBranchId, userIsAdmin, userIsOrgAdmin])
 
   useEffect(() => {
     if (userIsAdmin && selectedOrganizationId) {
-      void loadBranches(selectedOrganizationId)
       setSelectedBranchId("")
     }
-  }, [loadBranches, selectedOrganizationId, userIsAdmin])
+  }, [selectedOrganizationId, userIsAdmin])
 
   useEffect(() => {
     if (!needsBranchSelector) return

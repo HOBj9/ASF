@@ -1,7 +1,9 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useState } from "react"
+import { useQueryClient } from "@tanstack/react-query"
 import { apiClient } from "@/lib/api/client"
+import { useOrganizations, ORGANIZATIONS_QUERY_KEY } from "@/hooks/queries/use-organizations"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -65,28 +67,13 @@ const emptyAdminForm: OrganizationAdminForm = {
 }
 
 export function OrganizationsTable() {
-  const [items, setItems] = useState<Organization[]>([])
-  const [loading, setLoading] = useState(false)
+  const queryClient = useQueryClient()
+  const { data: orgData = [], isPending: loading } = useOrganizations(true)
+  const items = orgData as Organization[]
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState<Organization | null>(null)
   const [form, setForm] = useState<Partial<Organization>>(emptyForm)
   const [adminForm, setAdminForm] = useState<OrganizationAdminForm>(emptyAdminForm)
-
-  const load = async () => {
-    setLoading(true)
-    try {
-      const data = await apiClient.get("/organizations")
-      setItems(data.organizations || data.data?.organizations || [])
-    } catch (error: any) {
-      toast.error(error.message || "فشل تحميل المؤسسات")
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    load()
-  }, [])
 
   const openCreate = () => {
     setEditing(null)
@@ -161,7 +148,9 @@ export function OrganizationsTable() {
         toast.success("تم إنشاء المؤسسة")
       }
       setOpen(false)
-      await load()
+      await queryClient.invalidateQueries({ queryKey: ORGANIZATIONS_QUERY_KEY })
+      await queryClient.invalidateQueries({ queryKey: ["labels"] })
+      await queryClient.invalidateQueries({ queryKey: ["branches"] })
     } catch (error: any) {
       toast.error(error.message || "حدث خطأ")
     }
@@ -171,8 +160,10 @@ export function OrganizationsTable() {
     if (!confirm(`حذف المؤسسة ${item.name}؟`)) return
     try {
       await apiClient.delete(`/organizations/${item._id}`)
-      setItems((prev) => prev.filter((i) => i._id !== item._id))
       toast.success("تم حذف المؤسسة")
+      await queryClient.invalidateQueries({ queryKey: ORGANIZATIONS_QUERY_KEY })
+      await queryClient.invalidateQueries({ queryKey: ["labels"] })
+      await queryClient.invalidateQueries({ queryKey: ["branches"] })
     } catch (error: any) {
       toast.error(error.message || "حدث خطأ")
     }

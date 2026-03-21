@@ -7,6 +7,8 @@ import { useSession } from "next-auth/react"
 import toast from "react-hot-toast"
 import { apiClient } from "@/lib/api/client"
 import { useLabels } from "@/hooks/use-labels"
+import { useBranches } from "@/hooks/queries/use-branches"
+import { useOrganizations } from "@/hooks/queries/use-organizations"
 import { isAdmin, isOrganizationAdmin, isBranchAdmin } from "@/lib/permissions"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -103,12 +105,85 @@ type VehicleItem = {
 
 type RouteZoneItem = { _id: string; name: string; nameAr?: string | null; cityId: string; branchId: string; order?: number }
 
+function VehicleMultiSelect({
+  vehicles,
+  selected,
+  onChange,
+}: {
+  vehicles: VehicleItem[]
+  selected: string[]
+  onChange: (ids: string[]) => void
+}) {
+  const [search, setSearch] = useState("")
+  const filtered = useMemo(
+    () => vehicles.filter((v) => v.name.toLowerCase().includes(search.toLowerCase())),
+    [vehicles, search]
+  )
+  const allFilteredSelected = filtered.length > 0 && filtered.every((v) => selected.includes(v._id))
+
+  const toggleAll = () => {
+    if (allFilteredSelected) {
+      onChange(selected.filter((id) => !filtered.some((v) => v._id === id)))
+    } else {
+      const toAdd = filtered.map((v) => v._id).filter((id) => !selected.includes(id))
+      onChange([...selected, ...toAdd])
+    }
+  }
+
+  return (
+    <div className="rounded-md border bg-background text-right">
+      <div className="flex items-center gap-2 border-b px-2 py-1.5">
+        <input
+          type="text"
+          placeholder="بحث عن مركبة..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+        />
+        <button
+          type="button"
+          onClick={toggleAll}
+          className="shrink-0 rounded px-2 py-0.5 text-xs font-medium text-primary hover:bg-primary/10"
+        >
+          {allFilteredSelected ? "إلغاء الكل" : "اختيار الكل"}
+        </button>
+      </div>
+      <div className="max-h-44 overflow-y-auto">
+        {filtered.length === 0 ? (
+          <div className="px-3 py-2 text-xs text-muted-foreground">لا توجد نتائج</div>
+        ) : (
+          filtered.map((v) => {
+            const checked = selected.includes(v._id)
+            return (
+              <label key={v._id} className="flex cursor-pointer items-center gap-2 px-3 py-1.5 hover:bg-muted/50 select-none">
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={(e) => {
+                    if (e.target.checked) onChange([...selected, v._id])
+                    else onChange(selected.filter((id) => id !== v._id))
+                  }}
+                  className="rounded"
+                />
+                <span className="text-sm">{v.name}</span>
+              </label>
+            )
+          })
+        )}
+      </div>
+      {selected.length > 0 && (
+        <div className="border-t px-3 py-1 text-xs text-green-600">
+          تم اختيار {selected.length} مركبة
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function RoutesManager() {
   const { data: session } = useSession()
   const { labels } = useLabels()
 
-  const [organizations, setOrganizations] = useState<Organization[]>([])
-  const [branches, setBranches] = useState<Branch[]>([])
   const [selectedOrganizationId, setSelectedOrganizationId] = useState("")
   const [selectedBranchId, setSelectedBranchId] = useState("")
 
@@ -134,7 +209,7 @@ export function RoutesManager() {
   const previewDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [optimalOrderLoading, setOptimalOrderLoading] = useState(false)
   const [formVehicleId, setFormVehicleId] = useState<string>("")
-  const [formScheduleVehicles, setFormScheduleVehicles] = useState<Record<string, string>>({})
+  const [formScheduleVehicles, setFormScheduleVehicles] = useState<Record<string, string[]>>({})
   const [formZoneIds, setFormZoneIds] = useState<string[]>([])
   const [formWorkScheduleId, setFormWorkScheduleId] = useState<string>("")
   const formWorkScheduleIdRef = useRef<string>("")
@@ -155,43 +230,17 @@ export function RoutesManager() {
   const resolvedBranchId = selectedBranchId || branchIdFromUrl || sessionBranchId
   const [routeZones, setRouteZones] = useState<RouteZoneItem[]>([])
 
+  const loadBranchesForRole = !userIsAdmin && (userIsOrgAdmin || userIsBranchAdmin)
+  const { data: organizations = [] } = useOrganizations(userIsAdmin)
+  const branchesQuery = useBranches({
+    organizationId: userIsAdmin ? selectedOrganizationId || null : null,
+    enabled:
+      session !== undefined &&
+      (userIsAdmin ? !!selectedOrganizationId : loadBranchesForRole),
+  })
+  const branches = (branchesQuery.data ?? []) as Branch[]
+
   const pointMap = useMemo(() => new Map(points.map((p) => [p._id, p])), [points])
-
-  const loadOrganizations = useCallback(async () => {
-    try {
-      const res = await apiClient.get("/organizations").catch(() => ({ organizations: [] } as any))
-      const list = res.organizations || res.data?.organizations || []
-      setOrganizations(list)
-      return list
-    } catch {
-      return []
-    }
-  }, [])
-
-  const loadBranches = useCallback(async (organizationId: string | null) => {
-    if (!organizationId) {
-      setBranches([])
-      return
-    }
-    try {
-      const res = await apiClient.get(`/branches?organizationId=${organizationId}`)
-      const list = res.branches || res.data?.branches || []
-      setBranches(list)
-    } catch {
-      setBranches([])
-    }
-  }, [])
-
-  const loadBranchesForOrgUser = useCallback(async () => {
-    try {
-      const res = await apiClient.get("/branches")
-      const list = res.branches || res.data?.branches || []
-      setBranches(list)
-      if (list.length === 1 && !selectedBranchId) setSelectedBranchId(list[0]._id)
-    } catch {
-      setBranches([])
-    }
-  }, [selectedBranchId])
 
   const load = useCallback(async (branchId: string | null) => {
     if (needsBranchSelector && !branchId) {
@@ -256,19 +305,23 @@ export function RoutesManager() {
   }, [labels.pointLabel, needsBranchSelector])
 
   useEffect(() => {
+    if (!userIsAdmin || organizations.length !== 1 || selectedOrganizationId) return
+    setSelectedOrganizationId(organizations[0]._id)
+  }, [userIsAdmin, organizations, selectedOrganizationId])
+
+  useEffect(() => {
+    if (userIsAdmin || sessionBranchId) return
+    if (!(userIsOrgAdmin || userIsBranchAdmin)) return
+    if (branches.length === 1 && !selectedBranchId && !branchIdFromUrl) setSelectedBranchId(branches[0]._id)
+  }, [branchIdFromUrl, branches, selectedBranchId, sessionBranchId, userIsAdmin, userIsBranchAdmin, userIsOrgAdmin])
+
+  useEffect(() => {
     if (session === undefined) return
-    if (userIsAdmin) {
-      void loadOrganizations().then((list) => {
-        if (list.length === 1 && !selectedOrganizationId) setSelectedOrganizationId(list[0]._id)
-      })
-    } else if (userIsOrgAdmin && !sessionBranchId) {
-      void loadBranchesForOrgUser()
-    } else if (userIsBranchAdmin) {
-      void loadBranchesForOrgUser()
-    } else {
-      void load(null)
-    }
-  }, [load, loadBranchesForOrgUser, loadOrganizations, selectedOrganizationId, session, sessionBranchId, userIsAdmin, userIsBranchAdmin, userIsOrgAdmin])
+    if (userIsAdmin) return
+    if (userIsOrgAdmin && !sessionBranchId) return
+    if (userIsBranchAdmin) return
+    void load(null)
+  }, [load, session, sessionBranchId, userIsAdmin, userIsBranchAdmin, userIsOrgAdmin])
 
   useEffect(() => {
     if (branchIdFromUrl && needsBranchSelector) {
@@ -277,11 +330,10 @@ export function RoutesManager() {
   }, [branchIdFromUrl, needsBranchSelector])
 
   useEffect(() => {
-    if (userIsAdmin && selectedOrganizationId) {
-      void loadBranches(selectedOrganizationId)
-      if (!branchIdFromUrl) setSelectedBranchId("")
+    if (userIsAdmin && selectedOrganizationId && !branchIdFromUrl) {
+      setSelectedBranchId("")
     }
-  }, [branchIdFromUrl, loadBranches, selectedOrganizationId, userIsAdmin])
+  }, [branchIdFromUrl, selectedOrganizationId, userIsAdmin])
 
   useEffect(() => {
     if (!needsBranchSelector) return
@@ -456,12 +508,16 @@ export function RoutesManager() {
       const branchParam = resolvedBranchId ? `?branchId=${resolvedBranchId}` : ""
       const res: any = await apiClient.get(`/routes/${item._id}/schedule-vehicles${branchParam}`)
       const list = res.scheduleVehicles || []
-      const next: Record<string, string> = {}
+      const next: Record<string, string[]> = {}
       list.forEach((sv: { workScheduleId: string; vehicleId: string }) => {
-        if (sv?.workScheduleId && sv?.vehicleId) next[String(sv.workScheduleId)] = String(sv.vehicleId)
+        if (sv?.workScheduleId && sv?.vehicleId) {
+          const wsId = String(sv.workScheduleId)
+          if (!next[wsId]) next[wsId] = []
+          next[wsId].push(String(sv.vehicleId))
+        }
       })
       if (Object.keys(next).length === 0 && assignedVehicle && wsIdStr) {
-        next[wsIdStr] = assignedVehicle._id
+        next[wsIdStr] = [assignedVehicle._id]
       }
       setFormScheduleVehicles(next)
     } catch {
@@ -544,7 +600,8 @@ export function RoutesManager() {
       return
     }
 
-    const scheduleVehicleEntries = Object.entries(formScheduleVehicles).filter(([, v]) => v?.trim())
+    const scheduleVehicleEntries = Object.entries(formScheduleVehicles)
+      .flatMap(([wsId, vIds]) => (vIds || []).filter(Boolean).map((vId) => ({ workScheduleId: wsId, vehicleId: vId })))
     if (workSchedules.length > 0 && scheduleVehicleEntries.length === 0) {
       toast.error("يجب اختيار مركبة على الأقل لجدول عمل واحد (المركبة اجبارية)")
       return
@@ -590,13 +647,9 @@ export function RoutesManager() {
         }
         toast.success(`تم إضافة ${labels.routeLabel}`)
       }
-      const scheduleVehiclesPayload = scheduleVehicleEntries.map(([workScheduleId, vehicleId]) => ({
-        workScheduleId,
-        vehicleId,
-      }))
       await apiClient.put(`/routes/${routeId}/schedule-vehicles`, {
         branchId: resolvedBranchId,
-        scheduleVehicles: scheduleVehiclesPayload,
+        scheduleVehicles: scheduleVehicleEntries,
       })
       setOpen(false)
       await load(resolvedBranchId || null)
@@ -846,30 +899,22 @@ export function RoutesManager() {
                 {resolvedBranchId && workSchedules.length > 0 && (
                   <div className="space-y-3">
                     <Label>المركبات حسب جدول العمل (اجبارية)</Label>
-                    <p className="text-xs text-muted-foreground">حدد مركبة لكل وردية (صباحية/مسائية). يجب اختيار مركبة على الأقل لجدول واحد.</p>
-                    <div className="space-y-2 rounded-lg border p-3 bg-muted/30">
+                    <p className="text-xs text-muted-foreground">يمكن اختيار أكثر من مركبة لكل وردية. يجب اختيار مركبة على الأقل لجدول واحد.</p>
+                    <div className="space-y-3 rounded-lg border p-3 bg-muted/30">
                       {workSchedules.map((ws) => (
-                        <div key={ws._id} className="flex items-center gap-3 flex-wrap">
-                          <span className="text-sm font-medium min-w-[120px]">{ws.nameAr || ws.name}</span>
-                          <Select
-                            value={formScheduleVehicles[ws._id] || "none"}
-                            onValueChange={(v) =>
-                              setFormScheduleVehicles((prev) => ({
-                                ...prev,
-                                [ws._id]: v === "none" ? "" : v,
-                              }))
-                            }
-                          >
-                            <SelectTrigger className="text-right flex-1 max-w-[220px]">
-                              <SelectValue placeholder="اختر المركبة" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="none">بدون مركبة</SelectItem>
-                              {vehicles.map((v) => (
-                                <SelectItem key={v._id} value={v._id}>{v.name}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                        <div key={ws._id} className="space-y-1.5">
+                          <span className="text-sm font-medium">{ws.nameAr || ws.name}</span>
+                          {vehicles.length === 0 ? (
+                            <p className="text-xs text-muted-foreground">لا توجد مركبات في هذا الفرع</p>
+                          ) : (
+                            <VehicleMultiSelect
+                              vehicles={vehicles}
+                              selected={formScheduleVehicles[ws._id] || []}
+                              onChange={(ids) =>
+                                setFormScheduleVehicles((prev) => ({ ...prev, [ws._id]: ids }))
+                              }
+                            />
+                          )}
                         </div>
                       ))}
                     </div>
@@ -930,7 +975,30 @@ export function RoutesManager() {
 
             <div className="grid gap-4 lg:grid-cols-2">
               <div className="border rounded-lg p-3 space-y-3">
-                <div className="font-medium">النقاط المتاحة</div>
+                <div className="flex items-center justify-between">
+                  <div className="font-medium">النقاط المتاحة</div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={availablePoints.length === 0}
+                      onClick={() => availablePoints.forEach((p) => addPointToRoute(p._id))}
+                    >
+                      إضافة الكل ({availablePoints.length})
+                    </Button>
+                    {orderedRoutePoints.length > 0 && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => setRoutePoints([])}
+                      >
+                        إزالة الكل ({orderedRoutePoints.length})
+                      </Button>
+                    )}
+                  </div>
+                </div>
                 <Input
                   placeholder={`بحث في ${labels.pointLabel}...`}
                   value={pointSearch}
@@ -1025,7 +1093,7 @@ export function RoutesManager() {
                         </span>
                       )}
                       {inlinePreviewData.distanceKm != null && (() => {
-                        const firstVehicleId = Object.values(formScheduleVehicles).find((v) => v?.trim()) || formVehicleId
+                        const firstVehicleId = Object.values(formScheduleVehicles).flatMap((v) => v || []).find(Boolean) || formVehicleId
                         const vehicle = firstVehicleId ? vehicles.find((v) => v._id === firstVehicleId) : null
                         if (!vehicle) return null
                         const pricePerKm = vehicle.fuelPricePerKm != null && vehicle.fuelPricePerKm > 0

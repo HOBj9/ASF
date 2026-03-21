@@ -1,55 +1,45 @@
-import { useEffect, useState } from "react";
-import { defaultLabels, sanitizeLabels } from "@/lib/utils/labels.util";
+"use client";
 
-export type Labels = {
-  branchLabel: string;
-  pointLabel: string;
-  vehicleLabel: string;
-  driverLabel: string;
-  routeLabel: string;
-  lineSupervisorLabel: string;
-  surveyLabel: string;
-  eventsReportLabel: string;
-  latestEventsLabel: string;
-};
+import { defaultLabels, sanitizeLabels, type Labels } from "@/lib/utils/labels.util";
+import { useLabelsQuery } from "@/hooks/queries/use-labels-query";
+
+export type { Labels };
+
+function snapshotFromInitial(initialData: { labels: Labels; organizationName?: string }) {
+  return {
+    labels: sanitizeLabels(initialData.labels),
+    organizationName:
+      initialData.organizationName && !/^[\s?]+$/.test(String(initialData.organizationName).trim())
+        ? initialData.organizationName
+        : "المؤسسة",
+  };
+}
 
 export function useLabels(initialData?: { labels?: Labels; organizationName?: string }) {
-  const [labels, setLabels] = useState<Labels>(initialData?.labels || defaultLabels);
-  const [organizationName, setOrganizationName] = useState<string>(initialData?.organizationName || "");
-  const [loading, setLoading] = useState<boolean>(!initialData);
-
-  useEffect(() => {
-    if (initialData?.labels) {
-      setLabels(sanitizeLabels(initialData.labels));
-      setOrganizationName(initialData.organizationName || "");
-      setLoading(false);
-      return;
-    }
-
-    let active = true;
-    setLoading(true);
-
-    fetch("/api/labels")
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (!active || !data) return;
-
-        if (data.labels) {
-          setLabels(sanitizeLabels(data.labels));
+  const hasServerLabels = Boolean(initialData?.labels);
+  const query = useLabelsQuery(
+    hasServerLabels && initialData?.labels
+      ? {
+          initialSnapshot: {
+            labels: initialData.labels,
+            organizationName: initialData.organizationName,
+          },
         }
+      : undefined,
+  );
 
-        const name = data.organizationName;
-        setOrganizationName(name && !/^[\s?]+$/.test(String(name).trim()) ? name : "المؤسسة");
-      })
-      .catch(() => null)
-      .finally(() => {
-        if (active) setLoading(false);
-      });
-
-    return () => {
-      active = false;
+  if (hasServerLabels && initialData?.labels && !query.data) {
+    const snap = snapshotFromInitial(initialData as { labels: Labels; organizationName?: string });
+    return {
+      labels: snap.labels,
+      organizationName: snap.organizationName,
+      loading: query.isPending && query.fetchStatus === "fetching",
     };
-  }, [initialData?.labels, initialData?.organizationName]);
+  }
 
-  return { labels, organizationName, loading };
+  return {
+    labels: query.data?.labels ?? defaultLabels,
+    organizationName: query.data?.organizationName ?? "",
+    loading: query.isPending && !query.data,
+  };
 }

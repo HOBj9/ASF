@@ -4,6 +4,7 @@ import { useSession } from "next-auth/react"
 import { useMemo, useEffect, useState, useCallback } from "react"
 import { apiClient } from "@/lib/api/client"
 import { isAdmin, isOrganizationAdmin } from "@/lib/permissions"
+import { useOrganizations } from "@/hooks/queries/use-organizations"
 import { toast } from "react-hot-toast"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -37,7 +38,6 @@ type Organization = { _id: string; name: string }
 
 export function OrganizationPointsManager() {
   const { data: session } = useSession()
-  const [organizations, setOrganizations] = useState<Organization[]>([])
   const [selectedOrgId, setSelectedOrgId] = useState("")
   const [points, setPoints] = useState<OrgPoint[]>([])
   const [branchPoints, setBranchPoints] = useState<BranchPoint[]>([])
@@ -57,17 +57,12 @@ export function OrganizationPointsManager() {
     return ""
   }, [selectedOrgId, session?.user])
 
-  const loadOrganizations = useCallback(async () => {
-    try {
-      const res: any = await apiClient.get("/organizations").catch(() => ({ organizations: [] }))
-      const list = res.organizations || res.data?.organizations || []
-      setOrganizations(list)
-      if (list.length === 1 && !selectedOrgId) setSelectedOrgId(list[0]._id)
-      return list
-    } catch {
-      return []
-    }
-  }, [selectedOrgId])
+  const { data: organizations = [] } = useOrganizations(Boolean(session && userIsAdmin))
+
+  useEffect(() => {
+    if (!userIsAdmin || organizations.length !== 1 || selectedOrgId) return
+    setSelectedOrgId(organizations[0]._id)
+  }, [organizations, selectedOrgId, userIsAdmin])
 
   const loadPoints = useCallback(async (organizationId: string) => {
     if (!organizationId) {
@@ -99,11 +94,6 @@ export function OrganizationPointsManager() {
       setLoadingBranchPoints(false)
     }
   }, [])
-
-  useEffect(() => {
-    if (!session) return
-    void loadOrganizations()
-  }, [loadOrganizations, session])
 
   useEffect(() => {
     if (orgId) {

@@ -5,6 +5,7 @@ import { useMemo, useEffect, useState, useCallback } from "react"
 import Link from "next/link"
 import { apiClient } from "@/lib/api/client"
 import { useLabels } from "@/hooks/use-labels"
+import { useOrganizations } from "@/hooks/queries/use-organizations"
 import { hasPermission, isAdmin, isOrganizationAdmin, isBranchAdmin } from "@/lib/permissions"
 import { permissionResources, permissionActions } from "@/constants/permissions"
 import { toast } from "react-hot-toast"
@@ -34,7 +35,6 @@ type Organization = { _id: string; name: string }
 export function SurveysListManager() {
   const { data: session } = useSession()
   const { labels } = useLabels()
-  const [organizations, setOrganizations] = useState<Organization[]>([])
   const [selectedOrgId, setSelectedOrgId] = useState("")
   const [surveys, setSurveys] = useState<Survey[]>([])
   const [loading, setLoading] = useState(false)
@@ -61,17 +61,12 @@ export function SurveysListManager() {
     return (session?.user as any)?.organizationId || ""
   }, [selectedOrgId, session?.user])
 
-  const loadOrganizations = useCallback(async () => {
-    try {
-      const res: any = await apiClient.get("/organizations").catch(() => ({ organizations: [] }))
-      const list = res.organizations || res.data?.organizations || []
-      setOrganizations(list)
-      if (list.length === 1 && !selectedOrgId) setSelectedOrgId(list[0]._id)
-      return list
-    } catch {
-      return []
-    }
-  }, [selectedOrgId])
+  const { data: organizations = [] } = useOrganizations(Boolean(session && userIsAdmin))
+
+  useEffect(() => {
+    if (!userIsAdmin || organizations.length !== 1 || selectedOrgId) return
+    setSelectedOrgId(organizations[0]._id)
+  }, [organizations, selectedOrgId, userIsAdmin])
 
   const loadSurveys = useCallback(async (organizationId: string, activeOnly = false) => {
     if (!organizationId) {
@@ -93,12 +88,11 @@ export function SurveysListManager() {
 
   useEffect(() => {
     if (!session) return
-    if (userIsAdmin) {
-      void loadOrganizations()
-    } else if (orgId) {
+    if (userIsAdmin) return
+    if (orgId) {
       void loadSurveys(orgId, !canManage)
     }
-  }, [canManage, loadOrganizations, loadSurveys, orgId, session, userIsAdmin])
+  }, [canManage, loadSurveys, orgId, session, userIsAdmin])
 
   useEffect(() => {
     if (orgId && userIsAdmin) {

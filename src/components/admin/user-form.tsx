@@ -22,6 +22,8 @@ import { ActionButton } from "@/components/ui/action-button"
 import { apiClient } from "@/lib/api/client"
 import toast from "react-hot-toast"
 import { useLabels } from "@/hooks/use-labels"
+import { useBranches } from "@/hooks/queries/use-branches"
+import { useOrganizations } from "@/hooks/queries/use-organizations"
 
 const userFormSchema = z.object({
   name: z.string().min(2, "الاسم يجب أن يكون على الأقل حرفين"),
@@ -60,14 +62,30 @@ interface UserFormProps {
 export function UserForm({ open, onOpenChange, onSuccess }: UserFormProps) {
   const { data: session } = useSession()
   const [roles, setRoles] = useState<Role[]>([])
-  const [organizations, setOrganizations] = useState<Organization[]>([])
-  const [branches, setBranches] = useState<Branch[]>([])
   const [selectedOrganizationId, setSelectedOrganizationId] = useState("")
   const [loadingRoles, setLoadingRoles] = useState(false)
-  const [loadingBranches, setLoadingBranches] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const { labels } = useLabels()
   const userIsAdmin = isAdmin(session?.user?.role as any)
+
+  const { data: organizations = [] } = useOrganizations(open && userIsAdmin)
+  const adminBranchesQuery = useBranches({
+    organizationId: selectedOrganizationId || null,
+    enabled: Boolean(open && userIsAdmin && selectedOrganizationId),
+  })
+  const nonAdminBranchesQuery = useBranches({
+    organizationId: null,
+    enabled: Boolean(open && !userIsAdmin),
+  })
+  const branches: Branch[] =
+    open && userIsAdmin && !selectedOrganizationId
+      ? []
+      : userIsAdmin
+        ? ((adminBranchesQuery.data ?? []) as Branch[])
+        : ((nonAdminBranchesQuery.data ?? []) as Branch[])
+  const loadingBranches = userIsAdmin
+    ? Boolean(selectedOrganizationId && adminBranchesQuery.isPending && !adminBranchesQuery.data)
+    : Boolean(open && nonAdminBranchesQuery.isPending && !nonAdminBranchesQuery.data)
 
   const form = useForm<UserFormValues>({
     resolver: zodResolver(userFormSchema),
@@ -98,62 +116,14 @@ export function UserForm({ open, onOpenChange, onSuccess }: UserFormProps) {
     }
   }, [])
 
-  const fetchOrganizations = useCallback(async () => {
-    try {
-      const res = await apiClient.get("/organizations").catch(() => ({ organizations: [] } as any))
-      const list = res.organizations || res.data?.organizations || []
-      setOrganizations(list)
-    } catch (error) {
-      console.error("Failed to fetch organizations:", error)
-      toast.error("فشل في تحميل المؤسسات")
-    }
-  }, [])
-
-  const fetchBranches = useCallback(async (organizationId: string | null) => {
-    setLoadingBranches(true)
-    try {
-      if (userIsAdmin && !organizationId) {
-        setBranches([])
-        setLoadingBranches(false)
-        return
-      }
-      const url = organizationId ? `/branches?organizationId=${organizationId}` : "/branches"
-      const response = await apiClient.get(url)
-      const data = response.branches || response.data?.branches || response.data?.data?.branches
-      if (Array.isArray(data)) {
-        setBranches(data)
-      } else {
-        setBranches([])
-      }
-    } catch (error) {
-      console.error("Failed to fetch branches:", error)
-      toast.error(`فشل في تحميل ${labels.branchLabel}`)
-      setBranches([])
-    } finally {
-      setLoadingBranches(false)
-    }
-  }, [labels.branchLabel, userIsAdmin])
-
   useEffect(() => {
     if (open) {
       void fetchRoles()
       if (userIsAdmin) {
-        void fetchOrganizations()
         setSelectedOrganizationId("")
-        setBranches([])
-      } else {
-        void fetchBranches(null)
       }
     }
-  }, [fetchBranches, fetchOrganizations, fetchRoles, open, userIsAdmin])
-
-  useEffect(() => {
-    if (open && userIsAdmin && selectedOrganizationId) {
-      void fetchBranches(selectedOrganizationId)
-    } else if (open && userIsAdmin && !selectedOrganizationId) {
-      setBranches([])
-    }
-  }, [fetchBranches, open, selectedOrganizationId, userIsAdmin])
+  }, [fetchRoles, open, userIsAdmin])
 
   const onSubmit = async (values: UserFormValues) => {
     setSubmitting(true)

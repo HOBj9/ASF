@@ -20,6 +20,8 @@ import { Switch } from "@/components/ui/switch"
 import { Plus, Trash2, Loader2 } from "lucide-react"
 import type { ISurveyQuestion } from "@/models/Survey"
 import { isBranchAdmin } from "@/lib/permissions"
+import { useBranches } from "@/hooks/queries/use-branches"
+import { useOrganizations } from "@/hooks/queries/use-organizations"
 
 const QUESTION_TYPES = [
   { value: "text", label: "نص حر" },
@@ -50,9 +52,7 @@ const emptyQuestion: ISurveyQuestion = {
 export function SurveyBuilder({ surveyId }: { surveyId?: string }) {
   const { data: session } = useSession()
   const router = useRouter()
-  const [organizations, setOrganizations] = useState<Organization[]>([])
   const [organizationId, setOrganizationId] = useState("")
-  const [branches, setBranches] = useState<Branch[]>([])
   const [branchId, setBranchId] = useState<string | null>(null)
   const [title, setTitle] = useState("")
   const [titleAr, setTitleAr] = useState("")
@@ -70,31 +70,16 @@ export function SurveyBuilder({ surveyId }: { surveyId?: string }) {
 
   const resolvedOrgId = organizationId || sessionOrgId
 
-  const loadOrganizations = useCallback(async () => {
-    try {
-      const res: any = await apiClient.get("/organizations").catch(() => ({ organizations: [] }))
-      const list = res.organizations || res.data?.organizations || []
-      setOrganizations(list)
-      if (list.length === 1) setOrganizationId(list[0]._id)
-      return list
-    } catch {
-      return []
-    }
-  }, [])
+  const { data: organizations = [] } = useOrganizations(Boolean(session && userIsAdmin))
+  const { data: branches = [] } = useBranches({
+    organizationId: resolvedOrgId || null,
+    enabled: Boolean(session && canChooseScope && resolvedOrgId),
+  })
 
-  const loadBranches = useCallback(async (orgId: string) => {
-    if (!orgId) {
-      setBranches([])
-      return
-    }
-    try {
-      const res: any = await apiClient.get(`/branches?organizationId=${orgId}`).catch(() => ({ branches: [] }))
-      const list = res.branches || res.data?.branches || []
-      setBranches(list)
-    } catch {
-      setBranches([])
-    }
-  }, [])
+  useEffect(() => {
+    if (!userIsAdmin || organizations.length !== 1 || organizationId) return
+    setOrganizationId(organizations[0]._id)
+  }, [organizationId, organizations, userIsAdmin])
 
   const loadSurvey = useCallback(async () => {
     if (!surveyId) return
@@ -131,14 +116,6 @@ export function SurveyBuilder({ surveyId }: { surveyId?: string }) {
       setLoading(false)
     }
   }, [surveyId, router])
-
-  useEffect(() => {
-    if (userIsAdmin) loadOrganizations()
-  }, [userIsAdmin, loadOrganizations])
-
-  useEffect(() => {
-    if (resolvedOrgId && canChooseScope) loadBranches(resolvedOrgId)
-  }, [resolvedOrgId, canChooseScope, loadBranches])
 
   useEffect(() => {
     if (surveyId) loadSurvey()
@@ -254,7 +231,7 @@ export function SurveyBuilder({ surveyId }: { surveyId?: string }) {
         {userIsAdmin && organizations.length > 1 && (
           <div className="space-y-2">
             <Label>المؤسسة</Label>
-            <Select value={organizationId} onValueChange={(v) => { setOrganizationId(v); setBranchId(null); loadBranches(v); }}>
+            <Select value={organizationId} onValueChange={(v) => { setOrganizationId(v); setBranchId(null); }}>
               <SelectTrigger>
                 <SelectValue placeholder="اختر المؤسسة" />
               </SelectTrigger>

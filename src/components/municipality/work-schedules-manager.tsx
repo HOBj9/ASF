@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { useSession } from "next-auth/react"
 import toast from "react-hot-toast"
 import { apiClient } from "@/lib/api/client"
+import { useBranches } from "@/hooks/queries/use-branches"
+import { useOrganizations } from "@/hooks/queries/use-organizations"
 import { isAdmin, isOrganizationAdmin, isBranchAdmin } from "@/lib/permissions"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -47,8 +49,6 @@ type Branch = { _id: string; name: string; nameAr?: string; organizationId: stri
 export function WorkSchedulesManager() {
   const { data: session } = useSession()
 
-  const [organizations, setOrganizations] = useState<Organization[]>([])
-  const [branches, setBranches] = useState<Branch[]>([])
   const [selectedOrganizationId, setSelectedOrganizationId] = useState("")
   const [selectedBranchId, setSelectedBranchId] = useState("")
 
@@ -76,6 +76,16 @@ export function WorkSchedulesManager() {
   const resolvedBranchId = needsBranchSelector
     ? (selectedBranchId || null)
     : sessionBranchId
+  const { data: organizations = [] } = useOrganizations(userIsAdmin)
+  const loadBranchesForRole = !userIsAdmin && (userIsOrgAdmin || userIsBranchAdmin)
+  const branchesQuery = useBranches({
+    organizationId: userIsAdmin ? selectedOrganizationId || null : null,
+    enabled:
+      session !== undefined &&
+      (userIsAdmin ? !!selectedOrganizationId : loadBranchesForRole),
+  })
+  const branches = (branchesQuery.data ?? []) as Branch[]
+
   const branchOrgId = useMemo(() => branches.find((b) => b._id === resolvedBranchId)?.organizationId, [branches, resolvedBranchId])
   const resolvedOrganizationId =
     selectedOrganizationId ||
@@ -92,38 +102,6 @@ export function WorkSchedulesManager() {
     if (userIsOrgAdmin && resolvedOrganizationId) return "org"
     return "branch"
   }, [needsBranchSelector, resolvedBranchId, resolvedOrganizationId, userIsBranchAdmin, userIsOrgAdmin])
-
-  const loadOrganizations = useCallback(async () => {
-    try {
-      const res = await apiClient.get("/organizations").catch(() => ({ organizations: [] } as any))
-      const list = res.organizations || res.data?.organizations || []
-      setOrganizations(list)
-      return list
-    } catch {
-      return []
-    }
-  }, [])
-
-  const loadBranches = useCallback(async (organizationId: string | null) => {
-    if (!organizationId) { setBranches([]); return }
-    try {
-      const res = await apiClient.get(`/branches?organizationId=${organizationId}`)
-      setBranches(res.branches || res.data?.branches || [])
-    } catch {
-      setBranches([])
-    }
-  }, [])
-
-  const loadBranchesForOrgUser = useCallback(async () => {
-    try {
-      const res = await apiClient.get("/branches")
-      const list = res.branches || res.data?.branches || []
-      setBranches(list)
-      if (list.length === 1 && !selectedBranchId) setSelectedBranchId(list[0]._id)
-    } catch {
-      setBranches([])
-    }
-  }, [selectedBranchId])
 
   const load = useCallback(async () => {
     if (viewMode === "org" && resolvedOrganizationId) {
@@ -152,24 +130,21 @@ export function WorkSchedulesManager() {
   }, [resolvedBranchId, resolvedOrganizationId, viewMode])
 
   useEffect(() => {
-    if (session === undefined) return
-    if (userIsAdmin) {
-      void loadOrganizations().then((list) => {
-        if (list.length === 1 && !selectedOrganizationId) setSelectedOrganizationId(list[0]._id)
-      })
-    } else if (userIsOrgAdmin && !sessionBranchId) {
-      void loadBranchesForOrgUser()
-    } else if (userIsBranchAdmin) {
-      void loadBranchesForOrgUser()
-    }
-  }, [loadBranchesForOrgUser, loadOrganizations, selectedOrganizationId, session, sessionBranchId, userIsAdmin, userIsBranchAdmin, userIsOrgAdmin])
+    if (!userIsAdmin || organizations.length !== 1 || selectedOrganizationId) return
+    setSelectedOrganizationId(organizations[0]._id)
+  }, [userIsAdmin, organizations, selectedOrganizationId])
+
+  useEffect(() => {
+    if (userIsAdmin || sessionBranchId) return
+    if (!(userIsOrgAdmin || userIsBranchAdmin)) return
+    if (branches.length === 1 && !selectedBranchId) setSelectedBranchId(branches[0]._id)
+  }, [branches, selectedBranchId, sessionBranchId, userIsAdmin, userIsBranchAdmin, userIsOrgAdmin])
 
   useEffect(() => {
     if (userIsAdmin && selectedOrganizationId) {
-      void loadBranches(selectedOrganizationId)
       setSelectedBranchId("")
     }
-  }, [loadBranches, selectedOrganizationId, userIsAdmin])
+  }, [selectedOrganizationId, userIsAdmin])
 
   useEffect(() => {
     void load()

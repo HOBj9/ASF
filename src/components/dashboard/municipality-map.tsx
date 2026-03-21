@@ -5,7 +5,9 @@ import "@/lib/leaflet-patch";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { MapContainer, TileLayer, Marker, Popup, Polygon } from "react-leaflet";
-import { MapLabelTooltip } from "@/components/ui/map-label-tooltip";
+import MarkerClusterGroup from "react-leaflet-cluster";
+import "react-leaflet-cluster/lib/assets/MarkerCluster.css";
+import "react-leaflet-cluster/lib/assets/MarkerCluster.Default.css";
 import L from "leaflet";
 import { Maximize2, BusFront, MapPin, Hexagon, CarFront, X, BarChart2, CalendarDays, Layers, PanelRightOpen, PanelRightClose, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -125,14 +127,25 @@ L.Icon.Default.mergeOptions({
   shadowUrl: defaultShadowUrl,
 });
 
+function escapeHtml(s: string) {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+const LABEL_STYLE =
+  "position:absolute;bottom:calc(100% + 2px);left:50%;transform:translateX(-50%);white-space:nowrap;" +
+  "background:#fff;border:1px solid #e2e8f0;font-size:11px;font-weight:500;color:#000;" +
+  "padding:1px 6px;border-radius:3px;box-shadow:0 1px 3px rgba(0,0,0,.15);pointer-events:none;";
+
 /** Default icon for points (نقاط) when no custom icon is provided; avoids broken Leaflet default image */
-function getDefaultPointIcon(): L.DivIcon {
+function getDefaultPointIcon(label?: string): L.DivIcon {
+  const labelHtml = label ? `<div style="${LABEL_STYLE}">${escapeHtml(label)}</div>` : "";
   return L.divIcon({
     className: "",
-    html: `<div style="
-      width:28px;height:36px;display:flex;align-items:center;justify-content:center;
-      font-size:24px;line-height:1;filter:drop-shadow(0 2px 4px rgba(0,0,0,.35));
-    ">📍</div>`,
+    html: `<div style="position:relative;overflow:visible;width:28px;height:36px;">
+      ${labelHtml}
+      <div style="width:28px;height:36px;display:flex;align-items:center;justify-content:center;
+        font-size:24px;line-height:1;filter:drop-shadow(0 2px 4px rgba(0,0,0,.35));">📍</div>
+    </div>`,
     iconSize: [28, 36],
     iconAnchor: [14, 36],
     popupAnchor: [0, -36],
@@ -140,54 +153,56 @@ function getDefaultPointIcon(): L.DivIcon {
 }
 
 /** Default icon for vehicles/markers when no custom icon is provided (e.g. Athar marker without icon) */
-function getDefaultVehicleIcon(): L.DivIcon {
+
+/** Leaflet icon from Athar marker icon URL (e.g. SVG from API); falls back to default vehicle icon when missing */
+function getAtharMarkerIcon(iconUrl: string | undefined, label?: string): L.DivIcon {
+  const labelHtml = label ? `<div style="${LABEL_STYLE}">${escapeHtml(label)}</div>` : "";
+  if (iconUrl?.trim()) {
+    return L.divIcon({
+      className: "",
+      html: `<div style="position:relative;overflow:visible;width:32px;height:32px;">
+        ${labelHtml}
+        <img src="${escapeHtml(iconUrl)}" style="width:32px;height:32px;" />
+      </div>`,
+      iconSize: [32, 32],
+      iconAnchor: [16, 32],
+      popupAnchor: [0, -32],
+    });
+  }
   return L.divIcon({
     className: "",
-    html: `<div style="
-      width:28px;height:28px;border-radius:50%;
-      background:#0ea5e9;display:flex;align-items:center;justify-content:center;
-      border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.35);
-      font-size:14px;line-height:1;
-    ">🚗</div>`,
+    html: `<div style="position:relative;overflow:visible;width:28px;height:28px;">
+      ${labelHtml}
+      <div style="width:28px;height:28px;border-radius:50%;
+        background:#0ea5e9;display:flex;align-items:center;justify-content:center;
+        border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.35);
+        font-size:14px;line-height:1;">🚗</div>
+    </div>`,
     iconSize: [28, 28],
     iconAnchor: [14, 14],
     popupAnchor: [0, -14],
   });
 }
 
-/** Leaflet icon from Athar marker icon URL (e.g. SVG from API); falls back to default vehicle icon when missing */
-function getAtharMarkerIcon(iconUrl: string | undefined): L.Icon | L.DivIcon {
-  if (iconUrl?.trim()) {
-    try {
-      const icon = L.icon({
-        iconUrl,
-        iconSize: [32, 32],
-        iconAnchor: [16, 32],
-        popupAnchor: [0, -32],
-      });
-      return icon;
-    } catch {
-      // fall through to default
-    }
-  }
-  return getDefaultVehicleIcon();
-}
-
-function getBusIcon(status: LiveVehicle["status"], heading: number) {
+function getBusIcon(status: LiveVehicle["status"], heading: number, label?: string) {
   const bgColor = status === "moving" ? "#16a34a" : status === "stopped" ? "#f59e0b" : "#6b7280";
+  const labelHtml = label ? `<div style="${LABEL_STYLE}">${escapeHtml(label)}</div>` : "";
   return L.divIcon({
     className: "",
-    html: `<div style="
-      width:26px;height:26px;border-radius:999px;background:${bgColor};
-      display:flex;align-items:center;justify-content:center;
-      border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.35);
-      position:relative;
-    ">
-      <span style="
-        position:absolute;top:-10px;left:50%;transform:translateX(-50%) rotate(${Number(heading) || 0}deg);
-        color:#dc2626;font-size:14px;line-height:1;
-      ">▲</span>
-      <span style="font-size:12px;line-height:1">🚌</span>
+    html: `<div style="position:relative;overflow:visible;width:26px;height:26px;">
+      ${labelHtml}
+      <div style="
+        width:26px;height:26px;border-radius:999px;background:${bgColor};
+        display:flex;align-items:center;justify-content:center;
+        border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.35);
+        position:relative;
+      ">
+        <span style="
+          position:absolute;top:-10px;left:50%;transform:translateX(-50%) rotate(${Number(heading) || 0}deg);
+          color:#dc2626;font-size:14px;line-height:1;
+        ">▲</span>
+        <span style="font-size:12px;line-height:1">🚌</span>
+      </div>
     </div>`,
     iconSize: [26, 26],
     iconAnchor: [13, 13],
@@ -306,6 +321,8 @@ export function MunicipalityMap({
   const [showVehicleNamesOnMap, setShowVehicleNamesOnMap] = useState(true);
   const [atharCarsSearchQuery, setAtharCarsSearchQuery] = useState("");
   const [eventsSearchQuery, setEventsSearchQuery] = useState("");
+  const [pointTypeFilter, setPointTypeFilter] = useState<string | null>(null);
+  const [pointPanelSearch, setPointPanelSearch] = useState("");
   const [objectsPanelOpen, setObjectsPanelOpen] = useState(false);
   const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null);
   const [selectedPoint, setSelectedPoint] = useState<MapPoint | null>(null);
@@ -431,6 +448,8 @@ export function MunicipalityMap({
     }
     if (activeTab !== "points") {
       setSelectedPoint(null);
+      setPointTypeFilter(null);
+      setPointPanelSearch("");
     }
     setLayersVisibleLimit(MAP_LAYER_BATCH_SIZE);
   }, [activeTab]);
@@ -501,19 +520,28 @@ export function MunicipalityMap({
     setSelectedPoint(point);
     showPanel("system-points");
     onTabChange("points");
-    if (!Number.isFinite(lat) || !Number.isFinite(lng) || !mapRef.current) return;
-    mapRef.current.flyTo([lat, lng], 16, { duration: 0.5 });
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+    // setTimeout يضمن تنفيذ flyTo بعد اكتمال أي إعادة رندر ناتجة عن تغيير التبويب
+    setTimeout(() => {
+      if (mapRef.current) {
+        mapRef.current.flyTo([lat, lng], 17, { duration: 0.6 });
+      }
+    }, 100);
   }, [onTabChange, showPanel]);
 
   const focusOnObject = useCallback((obj: AtharObject | null) => {
-    if (!obj || obj.lat == null || obj.lng == null || !mapRef.current) return;
+    if (!obj || obj.lat == null || obj.lng == null) return;
     showPanel("athar-live");
     onTabChange("objects");
     setTrackingObjectId(obj.id);
     const lat = Number(obj.lat);
     const lng = Number(obj.lng);
     trackingLastPosRef.current = { lat, lng };
-    mapRef.current.flyTo([lat, lng], 17, { duration: 0.6 });
+    setTimeout(() => {
+      if (mapRef.current) {
+        mapRef.current.flyTo([lat, lng], 17, { duration: 0.6 });
+      }
+    }, 100);
   }, [onTabChange, showPanel]);
 
   useEffect(() => {
@@ -554,7 +582,7 @@ export function MunicipalityMap({
     return defaultCenter;
   }, [municipality, activeTab, visibleLiveVehicles, points, atharMarkers, zones, atharObjects]);
 
-  const mapKey = `map-${activeTab}-${municipality?.name ?? "default"}`;
+  const mapKey = `map-${municipality?.name ?? "default"}`;
   const initialCenter = center;
 
   const liveMarkersLayer = useMemo(() => {
@@ -565,11 +593,8 @@ export function MunicipalityMap({
         <Marker
           key={`${vehicle.id}-${showVehicleNamesOnMap ? "label" : "nolabel"}`}
           position={vehicle.coordinates as [number, number]}
-          icon={getBusIcon(vehicle.status, vehicle.heading)}
+          icon={getBusIcon(vehicle.status, vehicle.heading, showVehicleNamesOnMap ? vehicle.busNumber : undefined)}
         >
-          {showVehicleNamesOnMap && (
-            <MapLabelTooltip>{vehicle.busNumber}</MapLabelTooltip>
-          )}
           <Popup>
             <div className="text-right space-y-1 max-w-[300px]">
               <div className="font-semibold">{vehicle.busNumber}</div>
@@ -601,7 +626,8 @@ export function MunicipalityMap({
 
   const pointsMarkersLayer = useMemo(() => {
     if (activeTab !== "points") return null;
-    return points.slice(0, layersVisibleLimit).map((point) => {
+    const filtered = pointTypeFilter ? points.filter((p) => p.type === pointTypeFilter) : points;
+    return filtered.map((point) => {
       const pointId = point._id != null ? String(point._id) : `${point.lat}-${point.lng}`;
       const lat = Number(point.lat);
       const lng = Number(point.lng);
@@ -611,14 +637,11 @@ export function MunicipalityMap({
         <Marker
           key={pointId}
           position={[lat, lng]}
-          icon={getDefaultPointIcon()}
+          icon={getDefaultPointIcon(showVehicleNamesOnMap ? (point.nameAr || point.name || "نقطة") : undefined)}
           eventHandlers={{
             click: () => focusOnPoint(point),
           }}
         >
-          {showVehicleNamesOnMap && (
-            <MapLabelTooltip>{point.nameAr || point.name || "نقطة"}</MapLabelTooltip>
-          )}
           <Popup>
             <div className="text-right">
               <div className="font-semibold">{point.nameAr || point.name || "نقطة"}</div>
@@ -632,24 +655,22 @@ export function MunicipalityMap({
         </Marker>
       );
     });
-  }, [activeTab, points, showVehicleNamesOnMap, layersVisibleLimit, focusOnPoint]);
+  }, [activeTab, points, pointTypeFilter, showVehicleNamesOnMap, layersVisibleLimit, focusOnPoint]);
 
   const atharMarkersLayer = useMemo(() => {
     if (activeTab !== "points") return null;
-    return atharMarkers.slice(0, layersVisibleLimit).map((marker) => {
+    return atharMarkers.map((marker) => {
       const lat = Number(marker.lat);
       const lng = Number(marker.lng);
       if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
-      const customIcon = getAtharMarkerIcon(marker.icon);
+      const label = showVehicleNamesOnMap ? (marker.name || `نقطة أثر ${marker.id}`) : undefined;
+      const customIcon = getAtharMarkerIcon(marker.icon, label);
       return (
         <Marker
           key={`marker-${marker.id}`}
           position={[lat, lng]}
           icon={customIcon}
         >
-          {showVehicleNamesOnMap && (
-            <MapLabelTooltip>{marker.name || `نقطة أثر ${marker.id}`}</MapLabelTooltip>
-          )}
           <Popup>
             <div className="text-right">
               <div className="font-semibold">{marker.name || `نقطة أثر ${marker.id}`}</div>
@@ -729,9 +750,19 @@ export function MunicipalityMap({
 
         {liveMarkersLayer}
 
-        {pointsMarkersLayer}
-
-        {atharMarkersLayer}
+        <MarkerClusterGroup
+          disableClusteringAtZoom={17}
+          showCoverageOnHover={false}
+          animate={true}
+          animateAddingMarkers={false}
+          removeOutsideVisibleBounds={true}
+          maxClusterRadius={80}
+          spiderfyOnMaxZoom={false}
+          zoomToBoundsOnClick={true}
+        >
+          {pointsMarkersLayer}
+          {atharMarkersLayer}
+        </MarkerClusterGroup>
 
         {(activeTab === "zones" || (activeTab === "points" && showZonesWithPoints)) &&
           zones.slice(0, layersVisibleLimit).map((zone) => {
@@ -763,7 +794,11 @@ export function MunicipalityMap({
               <Marker
                 key={`obj-${obj.id}-${showVehicleNamesOnMap ? "label" : "nolabel"}`}
                 position={[Number(obj.lat), Number(obj.lng)]}
-                icon={getBusIcon(obj.active ? "moving" : "stopped", obj.angle)}
+                icon={getBusIcon(
+                  obj.active ? "moving" : "stopped",
+                  obj.angle,
+                  showVehicleNamesOnMap ? (obj.name || obj.plateNumber || obj.imei || `سيارة ${obj.id}`) : undefined,
+                )}
                 eventHandlers={{
                   click: () => {
                     setSelectedObjectId(String(obj.id));
@@ -771,11 +806,6 @@ export function MunicipalityMap({
                   },
                 }}
               >
-                {showVehicleNamesOnMap && (
-                  <MapLabelTooltip>
-                    {obj.name || obj.plateNumber || obj.imei || `سيارة ${obj.id}`}
-                  </MapLabelTooltip>
-                )}
                 <Popup>
                   <div className="text-right space-y-1 max-w-[300px]">
                     <div className="font-semibold">{obj.name}</div>
@@ -974,12 +1004,47 @@ export function MunicipalityMap({
                       {showZonesWithPoints ? "عرض النقاط فقط" : "عرض النقاط والمناطق"}
                     </Button>
                   )}
-                  <div className="mb-2 text-xs text-muted-foreground">
-                    نقاط النظام: {points.length}
-                    {layersVisibleLimit < points.length && ` (عرض ${layersVisibleLimit}...)`}
+                  <div className="mb-2 space-y-2">
+                    <div className="relative">
+                      <Search className="absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        type="search"
+                        placeholder="بحث في النقاط..."
+                        value={pointPanelSearch}
+                        onChange={(e) => setPointPanelSearch(e.target.value)}
+                        className="h-8 pr-8 text-xs"
+                      />
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {[null, "container", "station", "facility", "other"].map((type) => (
+                        <button
+                          key={type ?? "all"}
+                          type="button"
+                          onClick={() => setPointTypeFilter(type)}
+                          className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium border transition-colors ${
+                            pointTypeFilter === type
+                              ? "bg-primary text-primary-foreground border-primary"
+                              : "bg-muted/50 text-muted-foreground border-border hover:bg-muted"
+                          }`}
+                        >
+                          {type === null ? "الكل" : pointTypeLabels[type] || type}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {pointTypeFilter || pointPanelSearch
+                        ? `عرض: ${points.filter((p) => (!pointTypeFilter || p.type === pointTypeFilter) && (!pointPanelSearch || `${p.name || ""} ${p.nameAr || ""}`.toLowerCase().includes(pointPanelSearch.toLowerCase()))).length} من ${points.length}`
+                        : `نقاط النظام: ${points.length}`}
+                    </div>
                   </div>
                   <div className="max-h-64 space-y-1 overflow-y-auto">
-                    {points.slice(0, layersVisibleLimit).map((point) => {
+                    {points
+                      .filter((p) =>
+                        (!pointTypeFilter || p.type === pointTypeFilter) &&
+                        (!pointPanelSearch || `${p.name || ""} ${p.nameAr || ""}`.toLowerCase().includes(pointPanelSearch.toLowerCase()))
+                      )
+                      .slice(0, layersVisibleLimit)
+                      .map((point) => {
                       const pointId = String(point._id);
                       const isSelected = selectedPoint != null && String(selectedPoint?._id) === pointId;
                       const zoneName = zoneNameById.get(normalizeZoneId(point.zoneId)) || "غير مرتبطة بمنطقة";
@@ -1004,7 +1069,15 @@ export function MunicipalityMap({
                         </button>
                       );
                     })}
-                    {points.length === 0 && <div className="text-xs text-muted-foreground">لا توجد نقاط نظام حالياً.</div>}
+                    {points.length === 0 && (
+                      <div className="py-4 text-center text-xs text-muted-foreground">
+                        <MapPin className="mx-auto mb-1 h-6 w-6 opacity-30" />
+                        لا توجد نقاط نظام مسجلة لهذا الفرع.
+                      </div>
+                    )}
+                    {points.length > 0 && pointTypeFilter && points.filter((p) => p.type === pointTypeFilter).length === 0 && (
+                      <div className="py-3 text-center text-xs text-muted-foreground">لا توجد نقاط من نوع "{pointTypeLabels[pointTypeFilter] || pointTypeFilter}".</div>
+                    )}
                   </div>
                   {selectedPoint ? (
                     <div className="mt-4 space-y-2 border-t pt-3">
@@ -1097,16 +1170,24 @@ export function MunicipalityMap({
                         className={`cursor-pointer rounded-lg border p-3 text-right transition-colors hover:bg-muted/50 ${
                           newEventIds[event._id]
                             ? "animate-pulse border-emerald-400 bg-emerald-500/20 ring-2 ring-emerald-400/80 shadow-lg shadow-emerald-500/30"
-                            : ""
+                            : event.type === "zone_in"
+                              ? "border-emerald-500/25 bg-emerald-500/5"
+                              : "border-red-500/25 bg-red-500/5"
                         }`}
                       >
                         <div className="flex items-center justify-between">
                           <span className="text-xs text-muted-foreground">{event.eventTimestamp || ""}</span>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-1.5">
                             {newEventIds[event._id] && (
                               <span className="rounded-full bg-emerald-600 px-2 py-0.5 text-[10px] font-semibold text-white">جديد</span>
                             )}
-                            <span className="text-xs text-muted-foreground">{event.type === "zone_in" ? "دخول" : "خروج"}</span>
+                            <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                              event.type === "zone_in"
+                                ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
+                                : "bg-red-500/15 text-red-700 dark:text-red-400"
+                            }`}>
+                              {event.type === "zone_in" ? "دخول" : "خروج"}
+                            </span>
                           </div>
                         </div>
                         <div className="mt-1 font-semibold">

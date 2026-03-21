@@ -6,7 +6,12 @@ import Link from "next/link";
 import type { MapTab } from "./municipality-map";
 import { cn } from "@/lib/utils";
 import { Loading } from "@/components/ui/loading";
-import { ChevronDown, ChevronUp, BarChart2 } from "lucide-react";
+import { ChevronDown, ChevronUp, BarChart2, RefreshCw, Truck, CheckCircle2, MapPin, Info } from "lucide-react";
+import {
+  AreaChart, Area, BarChart, Bar, LineChart, Line,
+  PieChart, Pie, Cell, Legend,
+  ResponsiveContainer, CartesianGrid, XAxis, YAxis, Tooltip,
+} from "recharts";
 import { Button } from "@/components/ui/button";
 
 const MunicipalityMap = dynamic(
@@ -138,10 +143,14 @@ function StatCard({
   label,
   value,
   tone,
+  icon,
+  sub,
 }: {
   label: string;
   value: string | number;
   tone: "emerald" | "sky" | "amber" | "violet";
+  icon?: React.ReactNode;
+  sub?: string;
 }) {
   const toneClasses: Record<string, string> = {
     emerald: "from-emerald-500/20 via-emerald-500/10 to-transparent text-emerald-200 border-emerald-500/30",
@@ -152,8 +161,14 @@ function StatCard({
 
   return (
     <div className={`rounded-lg border bg-gradient-to-br ${toneClasses[tone]} p-3 text-right shadow-sm backdrop-blur-sm`}>
-      <div className="text-xs text-foreground/75">{label}</div>
-      <div className="text-xl font-semibold mt-1">{value}</div>
+      <div className="flex items-start justify-between gap-2">
+        {icon && <div className="mt-0.5 shrink-0 opacity-60">{icon}</div>}
+        <div className="min-w-0 flex-1">
+          <div className="text-xs leading-tight text-foreground/75">{label}</div>
+          <div className="mt-1 text-2xl font-bold tabular-nums">{value}</div>
+          {sub && <div className="mt-0.5 text-xs text-foreground/60">{sub}</div>}
+        </div>
+      </div>
     </div>
   );
 }
@@ -208,7 +223,13 @@ export function MunicipalityDashboard({
   const [newEventIds, setNewEventIds] = useState<Record<string, boolean>>({});
   const [mapFocusPointId, setMapFocusPointId] = useState<string | null>(null);
   const [mapFocusEvent, setMapFocusEvent] = useState<EventItem | null>(null);
-  const [statsSectionCollapsed, setStatsSectionCollapsed] = useState(true);
+  const [statsSectionCollapsed, setStatsSectionCollapsed] = useState(false);
+  const [analyticsCollapsed, setAnalyticsCollapsed] = useState(true);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [lastUpdatedText, setLastUpdatedText] = useState("");
+  const [eventsConnected, setEventsConnected] = useState(false);
+  const [vehiclesConnected, setVehiclesConnected] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const mapSectionRef = useRef<HTMLDivElement | null>(null);
   const eventsStreamConnectedRef = useRef(false);
   const seenEventIdsRef = useRef<Set<string>>(new Set());
@@ -230,6 +251,17 @@ export function MunicipalityDashboard({
   );
 
   eventsLengthRef.current = events.length;
+
+  useEffect(() => {
+    if (!lastUpdated) return;
+    const update = () => {
+      const s = Math.round((Date.now() - lastUpdated.getTime()) / 1000);
+      setLastUpdatedText(s < 60 ? `${s} ث` : `${Math.floor(s / 60)} د`);
+    };
+    update();
+    const t = setInterval(update, 5000);
+    return () => clearInterval(t);
+  }, [lastUpdated]);
 
   const branchQuery =
     isOrganizationAdmin && selectedBranchId ? `?branchId=${encodeURIComponent(selectedBranchId)}` : "";
@@ -311,6 +343,7 @@ export function MunicipalityDashboard({
         setRoutes(data.routes || []);
         setStats(data.stats || null);
         setAnalytics(data.analytics || null);
+        setLastUpdated(new Date());
         setOrgBranches(data.orgBranches || []);
 
         if (!background || !eventsStreamConnectedRef.current) {
@@ -326,6 +359,15 @@ export function MunicipalityDashboard({
     },
     [canLoadBranchData, overviewUrl, rememberEvents],
   );
+
+  const manualRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      await loadOverview();
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [loadOverview]);
 
   const loadLiveVehicles = useCallback(async () => {
     if (!canLoadBranchData || liveVehiclesFetchInFlightRef.current) return;
@@ -483,6 +525,7 @@ export function MunicipalityDashboard({
 
     source.onopen = () => {
       eventsStreamConnectedRef.current = true;
+      setEventsConnected(true);
     };
 
     source.onmessage = (event) => {
@@ -500,6 +543,12 @@ export function MunicipalityDashboard({
         if (payload?.type === "zone_event" && payload?.data?._id) {
           const incomingEvent = payload.data as EventItem;
           if (seenEventIdsRef.current.has(incomingEvent._id)) return;
+
+          // تحديث الإحصائيات فورًا عند كل حدث جديد
+          fetch(`/api/dashboard/stats${branchQuery}`)
+            .then((r) => r.ok ? r.json() : null)
+            .then((data) => { if (data) setStats(data); })
+            .catch(() => {});
 
           const notifPrefs = getNotificationPreferences();
           if (!notifPrefs.enabled) return;
@@ -563,11 +612,13 @@ export function MunicipalityDashboard({
 
     source.onerror = () => {
       eventsStreamConnectedRef.current = false;
+      setEventsConnected(false);
       source.close();
     };
 
     return () => {
       eventsStreamConnectedRef.current = false;
+      setEventsConnected(false);
       source.close();
     };
   }, [
@@ -590,6 +641,7 @@ export function MunicipalityDashboard({
     if (activeMapTab !== "live" || !canLoadBranchData) return;
     const wsUrl = `/api/vehicles/locations/websocket${branchQuery}`;
     const source = new EventSource(wsUrl);
+    source.onopen = () => setVehiclesConnected(true);
     source.onmessage = (event) => {
       try {
         const payload = JSON.parse(event.data);
@@ -603,10 +655,14 @@ export function MunicipalityDashboard({
     };
 
     source.onerror = () => {
+      setVehiclesConnected(false);
       source.close();
     };
 
-    return () => source.close();
+    return () => {
+      setVehiclesConnected(false);
+      source.close();
+    };
   }, [activeMapTab, canLoadBranchData, branchQuery]);
 
   useEffect(() => {
@@ -686,6 +742,23 @@ export function MunicipalityDashboard({
     );
   }
 
+  const chartPalette = ["#0ea5e9", "#10b981", "#f59e0b", "#8b5cf6", "#f97316", "#ef4444"];
+  const vehicleStatusData = analytics?.vehicleStatus
+    ? [
+        { name: "نشطة", value: analytics.vehicleStatus.active },
+        { name: "غير نشطة", value: analytics.vehicleStatus.inactive },
+      ]
+    : [];
+  const pointTypeData = analytics?.pointTypes || [];
+  const eventTypeData = analytics?.eventsByType
+    ? Object.entries(analytics.eventsByType).map(([key, value]) => ({
+        name: key === "zone_in" ? "دخول" : key === "zone_out" ? "خروج" : key,
+        value: value as number,
+      }))
+    : [];
+
+  const isLiveConnected = activeMapTab === "live" ? vehiclesConnected : eventsConnected;
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-start gap-3 text-right">
@@ -712,27 +785,73 @@ export function MunicipalityDashboard({
       </div>
 
       <div className="rounded-lg border bg-card/50 overflow-hidden">
-        <Button
-          variant="ghost"
-          className="w-full justify-between gap-2 rounded-none h-9 px-3 text-right font-medium text-sm"
-          onClick={() => setStatsSectionCollapsed((c) => !c)}
-        >
-          <span className="flex items-center gap-2">
+        <div className="flex h-9 items-center justify-between gap-2 px-3">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <button
+              type="button"
+              onClick={manualRefresh}
+              disabled={isRefreshing}
+              className="rounded p-0.5 transition hover:bg-muted/60 disabled:opacity-50"
+              title="تحديث يدوي"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? "animate-spin" : ""}`} />
+            </button>
+            {lastUpdated && <span>منذ {lastUpdatedText}</span>}
+            <span
+              className={`h-2 w-2 rounded-full ${isLiveConnected ? "bg-emerald-500" : "bg-red-400"}`}
+              title={isLiveConnected ? "الاتصال نشط" : "غير متصل"}
+            />
+          </div>
+          <Button
+            variant="ghost"
+            className="h-7 gap-1.5 px-2 text-xs font-medium"
+            onClick={() => setStatsSectionCollapsed((c) => !c)}
+          >
             <BarChart2 className="h-3.5 w-3.5 text-muted-foreground" />
             {statsSectionCollapsed ? "إظهار الإحصائيات" : "إخفاء الإحصائيات"}
-          </span>
-          {statsSectionCollapsed ? (
-            <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-          ) : (
-            <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" />
-          )}
-        </Button>
+            {statsSectionCollapsed ? (
+              <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+            ) : (
+              <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" />
+            )}
+          </Button>
+        </div>
         {!statsSectionCollapsed && (
-          <div className="grid gap-3 md:grid-cols-4 p-3 pt-0 border-t">
-            <StatCard label={`${labels.vehicleLabel} العاملة الآن`} value={stats?.activeVehicles ?? "--"} tone="emerald" />
-            <StatCard label={`${labels.pointLabel} النشطة الآن`} value={stats?.activePoints ?? "--"} tone="sky" />
-            <StatCard label={`${labels.pointLabel} المنجزة اليوم`} value={stats?.visitedPointsToday ?? "--"} tone="amber" />
-            <StatCard label="نسبة الإنجاز اليومية" value={`${stats?.dailyCompletionPercent ?? 0}%`} tone="violet" />
+          <div className="grid gap-3 border-t p-3 md:grid-cols-4">
+            <StatCard
+              label={`${labels.vehicleLabel} العاملة الآن`}
+              value={stats?.activeVehicles ?? "--"}
+              tone="emerald"
+              icon={<Truck className="h-5 w-5" />}
+              sub={vehicles.length > 0 ? `من ${vehicles.length} مركبة إجمالاً` : undefined}
+            />
+            <StatCard
+              label={`${labels.pointLabel} النشطة الآن`}
+              value={stats?.activePoints ?? "--"}
+              tone="sky"
+              icon={<MapPin className="h-5 w-5" />}
+              sub={stats?.totalPoints ? `من ${stats.totalPoints} نقطة` : undefined}
+            />
+            <StatCard
+              label={`${labels.pointLabel} المنجزة اليوم`}
+              value={stats?.visitedPointsToday ?? "--"}
+              tone="amber"
+              icon={<CheckCircle2 className="h-5 w-5" />}
+              sub={stats?.totalPoints ? `من ${stats.totalPoints} مجدولة` : undefined}
+            />
+            <StatCard
+              label="نسبة الإنجاز اليومية"
+              value={`${stats?.dailyCompletionPercent ?? 0}%`}
+              tone="violet"
+              icon={<BarChart2 className="h-5 w-5" />}
+              sub={
+                stats?.dailyCompletionPercent != null
+                  ? stats.dailyCompletionPercent >= 100
+                    ? "✓ مكتمل"
+                    : "قيد التنفيذ"
+                  : undefined
+              }
+            />
           </div>
         )}
       </div>
@@ -773,6 +892,205 @@ export function MunicipalityDashboard({
           />
         </div>
       </div>
+
+      {analytics && (
+        <div className="rounded-lg border bg-card/50 overflow-hidden">
+          <Button
+            variant="ghost"
+            className="w-full justify-between gap-2 rounded-none h-9 px-3 text-right font-medium text-sm"
+            onClick={() => setAnalyticsCollapsed((c) => !c)}
+          >
+            <span className="flex items-center gap-2">
+              <BarChart2 className="h-3.5 w-3.5 text-muted-foreground" />
+              التحليلات والرسوم البيانية
+            </span>
+            {analyticsCollapsed ? (
+              <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+            ) : (
+              <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" />
+            )}
+          </Button>
+          {!analyticsCollapsed && (
+            <div className="border-t p-4 space-y-4">
+              <div className="flex flex-wrap gap-2 justify-end">
+                <select
+                  className="rounded-lg border bg-background px-3 py-1.5 text-sm"
+                  value={dailyDays}
+                  onChange={(e) => setDailyDays(Number(e.target.value) as 7 | 14 | 30)}
+                >
+                  <option value={7}>آخر 7 أيام</option>
+                  <option value={14}>آخر 14 يوم</option>
+                  <option value={30}>آخر 30 يوم</option>
+                </select>
+                <select
+                  className="rounded-lg border bg-background px-3 py-1.5 text-sm"
+                  value={monthlyMonths}
+                  onChange={(e) => setMonthlyMonths(Number(e.target.value) as 6 | 12)}
+                >
+                  <option value={6}>آخر 6 أشهر</option>
+                  <option value={12}>آخر 12 شهر</option>
+                </select>
+              </div>
+
+              <div className="grid gap-4 lg:grid-cols-2">
+                <div className="rounded-lg border bg-card p-4 text-right">
+                  <div className="flex items-center justify-end gap-1 mb-1">
+                    <Info className="h-3.5 w-3.5 text-muted-foreground" title="عدد النقاط التي تمت زيارتها يومياً." />
+                    <h3 className="text-sm font-semibold">{labels.pointLabel} المنجزة يومياً</h3>
+                  </div>
+                  <div className="h-52">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={analytics.daily}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="date" tick={{ fontSize: 10 }} />
+                        <YAxis tick={{ fontSize: 10 }} />
+                        <Tooltip />
+                        <Bar dataKey="containers" fill="#0ea5e9" radius={[4, 4, 0, 0]} name={labels.pointLabel} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                <div className="rounded-lg border bg-card p-4 text-right">
+                  <div className="flex items-center justify-end gap-1 mb-1">
+                    <Info className="h-3.5 w-3.5 text-muted-foreground" title="إجمالي أحداث الدخول والخروج يومياً." />
+                    <h3 className="text-sm font-semibold">الأحداث اليومية</h3>
+                  </div>
+                  <div className="h-52">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={analytics.daily}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="date" tick={{ fontSize: 10 }} />
+                        <YAxis tick={{ fontSize: 10 }} />
+                        <Tooltip />
+                        <Area type="monotone" dataKey="events" stroke="#8b5cf6" fill="#a78bfa" fillOpacity={0.3} name="أحداث" />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid gap-4 lg:grid-cols-2">
+                <div className="rounded-lg border bg-card p-4 text-right">
+                  <div className="flex items-center justify-end gap-1 mb-1">
+                    <Info className="h-3.5 w-3.5 text-muted-foreground" title="متوسط مدة بقاء المركبة داخل النقطة." />
+                    <h3 className="text-sm font-semibold">متوسط وقت الخدمة (دقائق)</h3>
+                  </div>
+                  <div className="h-52">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={analytics.daily}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="date" tick={{ fontSize: 10 }} />
+                        <YAxis tick={{ fontSize: 10 }} />
+                        <Tooltip />
+                        <Line type="monotone" dataKey="avgMinutes" stroke="#f97316" strokeWidth={2} dot={false} name="دقائق" />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                <div className="rounded-lg border bg-card p-4 text-right">
+                  <div className="flex items-center justify-end gap-1 mb-1">
+                    <Info className="h-3.5 w-3.5 text-muted-foreground" title="مقارنة شهرية للنقاط المخدومة." />
+                    <h3 className="text-sm font-semibold">{labels.pointLabel} الشهرية</h3>
+                  </div>
+                  <div className="h-52">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={analytics.monthly}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="month" tick={{ fontSize: 10 }} />
+                        <YAxis tick={{ fontSize: 10 }} />
+                        <Tooltip />
+                        <Bar dataKey="containers" fill="#10b981" radius={[4, 4, 0, 0]} name={labels.pointLabel} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              </div>
+
+              {(vehicleStatusData.length > 0 || pointTypeData.length > 0 || eventTypeData.length > 0) && (
+                <div className="grid gap-4 lg:grid-cols-3">
+                  {vehicleStatusData.length > 0 && (
+                    <div className="rounded-lg border bg-card p-4 text-right">
+                      <h3 className="text-sm font-semibold mb-1">حالة {labels.vehicleLabel}</h3>
+                      <div className="h-44">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                            <Pie data={vehicleStatusData} dataKey="value" nameKey="name" innerRadius={35} outerRadius={65}>
+                              {vehicleStatusData.map((_, i) => (
+                                <Cell key={i} fill={chartPalette[i % chartPalette.length]} />
+                              ))}
+                            </Pie>
+                            <Tooltip />
+                            <Legend />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+                  )}
+                  {pointTypeData.length > 0 && (
+                    <div className="rounded-lg border bg-card p-4 text-right">
+                      <h3 className="text-sm font-semibold mb-1">توزيع أنواع {labels.pointLabel}</h3>
+                      <div className="h-44">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                            <Pie data={pointTypeData} dataKey="count" nameKey="label" innerRadius={35} outerRadius={65}>
+                              {pointTypeData.map((_, i) => (
+                                <Cell key={i} fill={chartPalette[i % chartPalette.length]} />
+                              ))}
+                            </Pie>
+                            <Tooltip />
+                            <Legend />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+                  )}
+                  {eventTypeData.length > 0 && (
+                    <div className="rounded-lg border bg-card p-4 text-right">
+                      <h3 className="text-sm font-semibold mb-1">توزيع أنواع الأحداث</h3>
+                      <div className="h-44">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                            <Pie data={eventTypeData} dataKey="value" nameKey="name" innerRadius={35} outerRadius={65}>
+                              {eventTypeData.map((_, i) => (
+                                <Cell key={i} fill={i === 0 ? "#10b981" : "#ef4444"} />
+                              ))}
+                            </Pie>
+                            <Tooltip />
+                            <Legend />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="flex flex-wrap gap-3 border-t pt-3">
+                <a
+                  className={cn(
+                    "rounded-lg border px-4 py-2 text-sm hover:bg-muted",
+                    isOrganizationAdmin && !selectedBranchId ? "pointer-events-none opacity-50" : ""
+                  )}
+                  href={isOrganizationAdmin && selectedBranchId ? `/api/reports/vehicles?branchId=${encodeURIComponent(selectedBranchId)}` : "/api/reports/vehicles"}
+                >
+                  تحميل تقرير {labels.vehicleLabel} (CSV)
+                </a>
+                <a
+                  className={cn(
+                    "rounded-lg border px-4 py-2 text-sm hover:bg-muted",
+                    isOrganizationAdmin && !selectedBranchId ? "pointer-events-none opacity-50" : ""
+                  )}
+                  href={isOrganizationAdmin && selectedBranchId ? `/api/reports/points?branchId=${encodeURIComponent(selectedBranchId)}` : "/api/reports/points"}
+                >
+                  تحميل تقرير {labels.pointLabel} (CSV)
+                </a>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* TEMPORARILY HIDDEN — statistics charts
       <div className="rounded-2xl border bg-card p-4 text-right shadow-sm">
