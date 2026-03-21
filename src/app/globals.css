@@ -698,10 +698,13 @@
     }
   }
 
-  /* Ensure text alignment for RTL */
-  [dir="rtl"] input,
-  [dir="rtl"] textarea,
-  [dir="rtl"] select {
+  /* Ensure RTL for all form elements, inputs, and text content */
+  html[dir="rtl"] input,
+  html[dir="rtl"] textarea,
+  html[dir="rtl"] select,
+  html[dir="rtl"] [role="listbox"],
+  html[dir="rtl"] [role="option"] {
+    direction: rtl;
     text-align: right;
   }
 

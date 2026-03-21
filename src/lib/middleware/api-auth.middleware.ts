@@ -11,6 +11,7 @@ import { messages } from '@/constants/messages';
 import connectDB from '@/lib/mongodb';
 import Role from '@/models/Role';
 import type { SessionRole } from '@/lib/contracts/auth';
+import { getOrLoadRolePermissions } from '@/lib/live/role-permission-cache';
 
 export interface ApiContext {
   session: any;
@@ -75,7 +76,12 @@ export async function requirePermission(
   }
 
   await connectDB();
-  const role = await Role.findById(session.user.role).populate('permissions').lean();
+  const roleId = typeof session.user.role === 'string' ? session.user.role : session.user.role?._id;
+  const role = roleId
+    ? await getOrLoadRolePermissions(String(roleId), () =>
+        Role.findById(roleId).populate('permissions').lean(),
+      )
+    : null;
 
   if (!role || !hasPermission(role as any, resource, action)) {
     return NextResponse.json(

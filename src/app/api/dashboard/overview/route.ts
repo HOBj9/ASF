@@ -5,6 +5,8 @@ import { requireAuth, handleApiError } from "@/lib/middleware/api-auth.middlewar
 import { resolveBranchId } from "@/lib/utils/municipality.util";
 import { getDashboardOverview } from "@/lib/queries/dashboard/dashboard-overview.query";
 import { isAdmin, isOrganizationAdmin } from "@/lib/permissions";
+import { withCache } from "@/lib/utils/cache-headers.util";
+import { getCachedOverview } from "@/lib/live/branch-overview-cache";
 
 function parsePositiveInt(value: string | null, fallback: number, min: number, max: number): number {
   const parsed = Number(value);
@@ -32,14 +34,13 @@ export async function GET(request: Request) {
     const dailyDays = parsePositiveInt(searchParams.get("dailyDays"), 14, 7, 60);
     const monthlyMonths = parsePositiveInt(searchParams.get("monthlyMonths"), 12, 3, 24);
 
-    const overview = await getDashboardOverview(session, {
-      branchId,
-      dailyDays,
-      monthlyMonths,
-      eventsLimit: 10,
-    });
+    const overview = branchId
+      ? await getCachedOverview(branchId, dailyDays, monthlyMonths, () =>
+          getDashboardOverview(session, { branchId, dailyDays, monthlyMonths, eventsLimit: 10 }),
+        )
+      : await getDashboardOverview(session, { branchId, dailyDays, monthlyMonths, eventsLimit: 10 });
 
-    return NextResponse.json(overview);
+    return withCache(NextResponse.json(overview), 30, 60);
   } catch (error: any) {
     return handleApiError(error);
   }

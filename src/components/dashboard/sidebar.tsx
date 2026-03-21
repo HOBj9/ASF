@@ -21,7 +21,6 @@ import {
   FileText,
   Boxes,
   UserCheck,
-  MessageSquare,
   ClipboardList,
   Webhook,
   Activity,
@@ -62,15 +61,14 @@ export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarP
   const { labels, loading: labelsLoading } = useLabels()
   const [roleLoading, setRoleLoading] = useState(false)
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(() => ({
-    general: false,
+    home: false,
     organizations: false,
     branchOps: false,
-    geography: false,
     surveys: false,
     reports: false,
     userManagement: false,
-    system: false,
     materials: false,
+    system: false,
   }))
 
   const toggleGroup = (groupKey: string) => {
@@ -154,11 +152,12 @@ export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarP
 
   const menuItems = useMemo(() => ([
     {
-      group: "general" as const,
-      title: "لوحة التحكم",
+      group: "home" as const,
+      title: "الرئيسية",
       href: "/dashboard",
       icon: LayoutDashboard,
       permissions: [{ resource: permissionResources.DASHBOARD, action: permissionActions.READ }],
+      standaloneFirst: true,
     },
     {
       group: "organizations" as const,
@@ -231,7 +230,7 @@ export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarP
       permissions: [{ resource: permissionResources.POINT_CLASSIFICATIONS, action: permissionActions.READ }],
     },
     {
-      group: "geography" as const,
+      group: "branchOps" as const,
       title: "الإدارة الجغرافية",
       href: "/dashboard/geography",
       icon: Globe,
@@ -244,14 +243,6 @@ export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarP
       icon: ClipboardList,
       permissions: [{ resource: permissionResources.FORMS, action: permissionActions.READ }],
       lineSupervisorCanSee: true,
-    },
-    {
-      group: "surveys" as const,
-      title: `ردود ${labels.surveyLabel || "الاستبيانات"}`,
-      href: "/dashboard/survey-responses",
-      icon: MessageSquare,
-      lineSupervisorCanSee: true,
-      submissionsOrOrgAdmin: true,
     },
     {
       group: "reports" as const,
@@ -355,40 +346,37 @@ export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarP
   )
 
   const groupLabels: Record<string, string> = {
-    general: "عام",
+    home: "الرئيسية",
     organizations: "إدارة المؤسسات",
-    branchOps: "الفرع والعمليات",
-    geography: "الإدارة الجغرافية",
+    branchOps: "عمليات",
     surveys: "الاستبيانات",
-    reports: "التقارير",
+    reports: "عام",
     userManagement: "إدارة المستخدمين",
-    system: "النظام",
     materials: "المواد",
+    system: "النظام",
   }
 
   const groupIcons: Record<string, typeof LayoutDashboard> = {
-    general: LayoutDashboard,
+    home: LayoutDashboard,
     organizations: Building,
     branchOps: Building2,
-    geography: Globe,
     surveys: ClipboardList,
     reports: FileText,
     userManagement: UserCog,
-    system: Settings,
     materials: Boxes,
+    system: Settings,
   }
 
   const groupedItems = useMemo(() => {
     const localGroupLabels = {
-      general: "عام",
+      home: "الرئيسية",
       organizations: "إدارة المؤسسات",
-      branchOps: "الفرع والعمليات",
-      geography: "الإدارة الجغرافية",
+      branchOps: "عمليات",
       surveys: "الاستبيانات",
-      reports: "التقارير",
+      reports: "عام",
       userManagement: "إدارة المستخدمين",
-      system: "النظام",
       materials: "المواد",
+      system: "النظام",
     }
     const map = new Map<string, typeof filteredMenuItems>()
     for (const item of filteredMenuItems) {
@@ -397,19 +385,25 @@ export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarP
       map.set(item.group, list)
     }
     const order: (keyof typeof localGroupLabels)[] = [
-      "general",
       "organizations",
       "branchOps",
-      "geography",
       "surveys",
       "reports",
       "userManagement",
-      "system",
       "materials",
+      "system",
     ]
-    return order
+    const homeItems = filteredMenuItems.filter((i) => (i as any).standaloneFirst)
+    const groups = order
       .filter((key) => map.has(key) && map.get(key)!.length > 0)
-      .map((key) => ({ groupKey: key, label: localGroupLabels[key], items: map.get(key)! }))
+      .map((key) => ({ groupKey: key, label: localGroupLabels[key], items: map.get(key)!, isStandalone: false }))
+    if (homeItems.length > 0) {
+      return [
+        { groupKey: "home", label: "", items: homeItems, isStandalone: true },
+        ...groups,
+      ]
+    }
+    return groups
   }, [filteredMenuItems])
   const sidebarLoading = sessionStatus === "loading" || labelsLoading || roleLoading
 
@@ -575,9 +569,49 @@ export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarP
               })}
             </div>
           ) : (
-            groupedItems.map(({ groupKey, label, items }, groupIndex) => {
+            groupedItems.map(({ groupKey, label, items, isStandalone }, groupIndex) => {
               const isExpanded = expandedGroups[groupKey] !== false
               const GroupIcon = groupIcons[groupKey]
+              const itemListContent = (
+                <div className="space-y-1 pt-0.5">
+                  {items.map((item, index) => {
+                    const Icon = item.icon
+                    const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href))
+                    return (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        className={cn(
+                          "flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-all duration-200 text-right",
+                          "group relative overflow-hidden",
+                          "animate-fade-in",
+                          isActive
+                            ? "bg-gradient-to-l from-[hsl(var(--sidebar-item-active-bg))] via-[hsl(var(--sidebar-item-active-bg))]/90 to-[hsl(var(--sidebar-item-active-bg))]/80 text-[hsl(var(--sidebar-item-active-text))] shadow-lg shadow-[hsl(var(--sidebar-item-active-bg))]/40"
+                            : "text-foreground/70 hover:bg-[hsl(var(--sidebar-item-hover))] hover:text-foreground hover:shadow-md"
+                        )}
+                        style={{ animationDelay: `${(groupIndex * 10 + index) * 50}ms` }}
+                      >
+                        <div className={cn(
+                          "absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200",
+                          "bg-gradient-to-l from-[hsl(var(--primary))]/20 to-transparent"
+                        )} />
+                        <Icon className={cn(
+                          "h-5 w-5 relative z-10 transition-transform duration-200",
+                          isActive ? "text-[hsl(var(--sidebar-item-active-text))]" : "text-foreground/70 group-hover:scale-110 group-hover:text-[hsl(var(--icon-hover))]"
+                        )} />
+                        <span className="relative z-10">{item.title}</span>
+                      </Link>
+                    )
+                  })}
+                </div>
+              )
+              if (isStandalone) {
+                return (
+                  <div key={groupKey} className="space-y-1">
+                    {itemListContent}
+                  </div>
+                )
+              }
               return (
                 <div key={groupKey} className="space-y-1">
                   <button
@@ -606,37 +640,7 @@ export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarP
                     )}
                   >
                     <div className="min-h-0 overflow-hidden">
-                      <div className="space-y-1 pt-0.5">
-                        {items.map((item, index) => {
-                          const Icon = item.icon
-                          const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href))
-                          return (
-                            <Link
-                              key={item.href}
-                              href={item.href}
-                              className={cn(
-                                "flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-all duration-200 text-right",
-                                "group relative overflow-hidden",
-                                "animate-fade-in",
-                                isActive
-                                  ? "bg-gradient-to-l from-[hsl(var(--sidebar-item-active-bg))] via-[hsl(var(--sidebar-item-active-bg))]/90 to-[hsl(var(--sidebar-item-active-bg))]/80 text-[hsl(var(--sidebar-item-active-text))] shadow-lg shadow-[hsl(var(--sidebar-item-active-bg))]/40"
-                                  : "text-foreground/70 hover:bg-[hsl(var(--sidebar-item-hover))] hover:text-foreground hover:shadow-md"
-                              )}
-                              style={{ animationDelay: `${(groupIndex * 10 + index) * 50}ms` }}
-                            >
-                              <div className={cn(
-                                "absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200",
-                                "bg-gradient-to-l from-[hsl(var(--primary))]/20 to-transparent"
-                              )} />
-                              <Icon className={cn(
-                                "h-5 w-5 relative z-10 transition-transform duration-200",
-                                isActive ? "text-[hsl(var(--sidebar-item-active-text))]" : "text-foreground/70 group-hover:scale-110 group-hover:text-[hsl(var(--icon-hover))]"
-                              )} />
-                              <span className="relative z-10">{item.title}</span>
-                            </Link>
-                          )
-                        })}
-                      </div>
+                      {itemListContent}
                     </div>
                   </div>
                 </div>

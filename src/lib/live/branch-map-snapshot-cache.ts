@@ -1,7 +1,7 @@
 import type { DashboardMapData } from "@/lib/contracts/dashboard";
 import { TtlCache } from "./ttl-cache";
 
-const mapSnapshotCache = new TtlCache<DashboardMapData>(15_000);
+const mapSnapshotCache = new TtlCache<DashboardMapData>(45_000);
 
 function getMapSnapshotKey(branchId: string): string {
   return `${branchId}:dashboard-map-data`;

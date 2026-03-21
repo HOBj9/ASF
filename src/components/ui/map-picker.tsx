@@ -1,5 +1,6 @@
 "use client";
 
+import "leaflet/dist/leaflet.css";
 import "@/lib/leaflet-patch";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { MapContainer, TileLayer, useMapEvents, useMap } from "react-leaflet";

@@ -5,6 +5,12 @@
 
 import Branch from '@/models/Branch';
 import connectDB from '@/lib/mongodb';
+import { TtlCache } from '@/lib/live/ttl-cache';
+
+// Cache Athar API responses to reduce external API calls
+const zonesCache = new TtlCache<any[]>(5 * 60 * 1000);   // 5min - zones change rarely
+const markersCache = new TtlCache<any[]>(5 * 60 * 1000);  // 5min - markers change rarely
+const objectsCache = new TtlCache<any[]>(30 * 1000);      // 30s - objects are live data
 
 export interface AtharConfig {
   baseUrl: string;
@@ -120,6 +126,11 @@ export class AtharService {
   }
 
   async getZones(): Promise<any[]> {
+    const cacheKey = `zones:${this.config.apiKey}`;
+    return zonesCache.getOrLoad(cacheKey, () => this._fetchZones());
+  }
+
+  private async _fetchZones(): Promise<any[]> {
     const response = await this.makeRequest({ cmd: 'USER_GET_ZONES' });
     if (!response) {
       console.log('[Athar] getZones: empty response');
@@ -162,6 +173,11 @@ export class AtharService {
   }
 
   async getMarkers(): Promise<Array<{ id: string; lat: number; lng: number; name?: string; icon?: string }>> {
+    const cacheKey = `markers:${this.config.apiKey}`;
+    return markersCache.getOrLoad(cacheKey, () => this._fetchMarkers());
+  }
+
+  private async _fetchMarkers(): Promise<Array<{ id: string; lat: number; lng: number; name?: string; icon?: string }>> {
     const response = await this.makeRequest({ cmd: 'USER_GET_MARKERS' });
     if (!response) {
       console.log('[Athar] getMarkers: empty response');
@@ -186,6 +202,11 @@ export class AtharService {
   }
 
   async getObjects(): Promise<any[]> {
+    const cacheKey = `objects:${this.config.apiKey}`;
+    return objectsCache.getOrLoad(cacheKey, () => this._fetchObjects());
+  }
+
+  private async _fetchObjects(): Promise<any[]> {
     const response = await this.makeRequest({ cmd: 'USER_GET_OBJECTS' });
     if (!response) {
       console.log('[Athar] getObjects: empty response');

@@ -1,29 +1,18 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
-import { MunicipalityMap, type MapTab } from "./municipality-map";
+import type { MapTab } from "./municipality-map";
 import { cn } from "@/lib/utils";
 import { Loading } from "@/components/ui/loading";
-import { Info, Download, ChevronDown, ChevronUp, BarChart2 } from "lucide-react";
+import { ChevronDown, ChevronUp, BarChart2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-  LineChart,
-  Line,
-  Legend,
-  AreaChart,
-  Area,
-  CartesianGrid,
-} from "recharts";
+
+const MunicipalityMap = dynamic(
+  () => import("./municipality-map").then((m) => ({ default: m.MunicipalityMap })),
+  { ssr: false, loading: () => <Loading /> },
+);
 import { useLabels } from "@/hooks/use-labels";
 import toast from "react-hot-toast";
 import { playEventToastSound } from "@/lib/utils/event-toast-sound";
@@ -249,7 +238,6 @@ export function MunicipalityDashboard({
   const mapDataUrl = `/api/dashboard/map-data${branchQuery}`;
   const liveVehiclesUrl = `/api/vehicles/locations${branchQuery}`;
 
-  const chartPalette = ["#22c55e", "#0ea5e9", "#f97316", "#a855f7", "#facc15", "#14b8a6"];
   const mapTabLoading: Partial<Record<MapTab, boolean>> = {
     live: activeMapTab === "live" && !liveLoaded,
     points: activeMapTab === "points" && (!pointsLoaded || !markersLoaded),
@@ -598,36 +586,6 @@ export function MunicipalityDashboard({
     void loadMapData();
   }, [canLoadBranchData, loading, loadMapData]);
 
-  function exportChartAsPng(containerId: string, filename: string) {
-    const container = document.getElementById(containerId);
-    const svg = container?.querySelector("svg");
-    if (!svg) return;
-
-    const serializer = new XMLSerializer();
-    const source = serializer.serializeToString(svg);
-    const svgBlob = new Blob([source], { type: "image/svg+xml;charset=utf-8" });
-    const url = URL.createObjectURL(svgBlob);
-    const image = new Image();
-    image.onload = () => {
-      const canvas = document.createElement("canvas");
-      canvas.width = image.width || 1400;
-      canvas.height = image.height || 700;
-      const ctx = canvas.getContext("2d");
-      if (ctx) {
-        ctx.fillStyle = "#ffffff";
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(image, 0, 0);
-        const pngUrl = canvas.toDataURL("image/png");
-        const link = document.createElement("a");
-        link.href = pngUrl;
-        link.download = `${filename}.png`;
-        link.click();
-      }
-      URL.revokeObjectURL(url);
-    };
-    image.src = url;
-  }
-
   useEffect(() => {
     if (activeMapTab !== "live" || !canLoadBranchData) return;
     const wsUrl = `/api/vehicles/locations/websocket${branchQuery}`;
@@ -676,17 +634,6 @@ export function MunicipalityDashboard({
     pointsLoaded,
     zonesLoaded,
   ]);
-
-  const pointTypeData = analytics?.pointTypes || [];
-  const vehicleStatusData = [
-    { name: "مفعّلة", value: analytics?.vehicleStatus?.active || 0 },
-    { name: "غير مفعّلة", value: analytics?.vehicleStatus?.inactive || 0 },
-  ];
-  const eventTypeData = [
-    { name: "دخول", value: analytics?.eventsByType?.zone_in || 0 },
-    { name: "خروج", value: analytics?.eventsByType?.zone_out || 0 },
-  ];
-
 
   if (loading && !branch && !stats) {
     return (

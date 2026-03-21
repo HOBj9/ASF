@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 
 import * as React from "react"
 import { Input } from "@/components/ui/input"
@@ -44,15 +44,15 @@ export const SearchBar = React.forwardRef<HTMLInputElement, SearchBarProps>(
     }, [])
 
     return (
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+      <div className="relative" dir="rtl">
+        <Search className="absolute right-3 left-auto top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
           ref={ref}
           type="search"
           value={searchQuery}
           onChange={handleChange}
           placeholder={props.placeholder || getMessage('tables.searchPlaceholder')}
-          className={cn("pl-10", className)}
+          className={cn("pr-10 pl-3", className)}
           {...props}
         />
       </div>

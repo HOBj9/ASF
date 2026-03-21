@@ -24,6 +24,11 @@ if (!global.mongoose) {
   global.mongoose = cached;
 }
 
+/** Returns true if a connection is already established (avoids unnecessary await). */
+export function isConnected(): boolean {
+  return !!cached.conn;
+}
+
 async function connectDB() {
   if (cached.conn) {
     return cached.conn;

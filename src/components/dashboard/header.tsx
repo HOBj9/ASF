@@ -1,6 +1,6 @@
 "use client"
 
-import { LogOut, AlertCircle, Home, RefreshCw, User, Menu } from "lucide-react"
+import { LogOut, AlertCircle, Home, RefreshCw, User } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useSession, signOut } from "next-auth/react"
 import { apiClient } from "@/lib/api/client"
@@ -9,12 +9,21 @@ import toast from "react-hot-toast"
 import { Loading } from "@/components/ui/loading"
 import { ThemeToggle } from "@/components/theme-toggle"
 import Link from "next/link"
-import { useSidebarStore } from "@/store/sidebar-store"
+import { DashboardNav } from "@/components/dashboard/dashboard-nav"
 
-export function DashboardHeader() {
+interface DashboardHeaderProps {
+  isAdmin?: boolean
+  user?: {
+    name: string
+    email: string
+    avatar?: string | null
+    roleName?: string | null
+  }
+}
+
+export function DashboardHeader({ isAdmin = false, user: initialUser }: DashboardHeaderProps) {
   const { data: session, update } = useSession()
   const [returningToAdmin, setReturningToAdmin] = useState(false)
-  const toggleSidebar = useSidebarStore((s) => s.toggle)
 
   const handleStopImpersonate = useCallback(async () => {
     setReturningToAdmin(true)
@@ -61,6 +70,13 @@ export function DashboardHeader() {
     }
   }, [isImpersonating, returningToAdmin])
 
+  const user = initialUser ?? {
+    name: "",
+    email: "",
+    avatar: null,
+    roleName: null,
+  }
+
   return (
     <>
       {returningToAdmin && (
@@ -105,16 +121,8 @@ export function DashboardHeader() {
             <span className="hidden sm:inline">تسجيل الخروج</span>
           </Button>
         </div>
-        <div className="flex-1 flex justify-end lg:hidden">
-          <Button
-            variant="ghost"
-            size="icon"
-            type="button"
-            onClick={() => toggleSidebar()}
-            title="القائمة"
-          >
-            <Menu className="h-5 w-5" />
-          </Button>
+        <div className="flex-1 flex justify-start min-w-0" dir="rtl">
+          <DashboardNav isAdmin={isAdmin} user={user} />
         </div>
         {isImpersonating && (
           <div className="flex items-center gap-2">

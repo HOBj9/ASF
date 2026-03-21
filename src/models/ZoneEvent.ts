@@ -113,6 +113,7 @@ const ZoneEventSchema: Schema = new Schema(
 
 ZoneEventSchema.index({ branchId: 1, atharEventId: 1 });
 ZoneEventSchema.index({ branchId: 1, zoneId: 1, imei: 1, eventTimestamp: 1 });
+ZoneEventSchema.index({ branchId: 1, eventTimestamp: -1 });
 
 let ZoneEvent: Model<IZoneEvent>;
 

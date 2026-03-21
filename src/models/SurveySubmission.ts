@@ -12,6 +12,8 @@ export interface ISurveySubmission extends Document {
   deviceLng?: number | null;
   answers: Record<string, unknown>;
   pointId?: mongoose.Types.ObjectId | null;
+  /** Set when the point has been converted to Athar (zones created). */
+  convertedToAthar?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -52,6 +54,7 @@ const SurveySubmissionSchema: Schema = new Schema(
       ref: 'Point',
       default: null,
     },
+    convertedToAthar: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

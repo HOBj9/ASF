@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 import { requireAuth, handleApiError } from "@/lib/middleware/api-auth.middleware";
+import { withCache } from "@/lib/utils/cache-headers.util";
 import { resolveOrganizationId } from "@/lib/utils/organization.util";
 import { defaultLabels, sanitizeLabels } from "@/lib/utils/labels.util";
 import Organization from "@/models/Organization";
@@ -35,7 +36,7 @@ export async function GET() {
         ? organization.name
         : "المؤسسة";
 
-    return NextResponse.json({ labels, organizationName });
+    return withCache(NextResponse.json({ labels, organizationName }), 300);
   } catch (error: any) {
     return handleApiError(error);
   }

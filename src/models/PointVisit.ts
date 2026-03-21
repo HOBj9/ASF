@@ -90,6 +90,8 @@ const PointVisitSchema: Schema = new Schema(
 
 PointVisitSchema.index({ branchId: 1, vehicleId: 1, pointId: 1, entryTime: 1 });
 PointVisitSchema.index({ branchId: 1, status: 1 });
+PointVisitSchema.index({ branchId: 1, entryTime: -1 });
+PointVisitSchema.index({ branchId: 1, vehicleId: 1, entryTime: -1 });
 
 let PointVisit: Model<IPointVisit>;
 

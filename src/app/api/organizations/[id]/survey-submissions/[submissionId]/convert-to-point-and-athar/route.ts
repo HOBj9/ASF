@@ -10,6 +10,7 @@ import { resolveOrganizationId } from '@/lib/utils/organization.util';
 import connectDB from '@/lib/mongodb';
 import Point from '@/models/Point';
 import Branch from '@/models/Branch';
+import SurveySubmission from '@/models/SurveySubmission';
 
 const surveyService = new SurveyService();
 const pointService = new PointService();
@@ -87,6 +88,8 @@ export async function POST(
         errors.push(`الفرع ${branchId}: ${err?.message || 'فشل إنشاء المنطقة في أثر'}`);
       }
     }
+
+    await SurveySubmission.findByIdAndUpdate(submissionId, { convertedToAthar: true });
 
     return NextResponse.json({
       point,

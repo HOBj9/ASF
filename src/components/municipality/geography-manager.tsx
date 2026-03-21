@@ -62,10 +62,18 @@ export function GeographyManager() {
   const userIsBranchAdmin = useMemo(() => isBranchAdmin(session?.user?.role as any), [session?.user?.role])
   const sessionBranchId = (session?.user as any)?.branchId ?? null
   const sessionOrgId = (session?.user as any)?.organizationId ?? null
-  const needsBranchSelector = userIsAdmin || (userIsOrgAdmin && !sessionBranchId)
+  /** Super admin always picks org+branch; org/branch roles only see a branch dropdown if the session has no branchId. */
+  const showBranchSelector =
+    userIsAdmin || (((userIsOrgAdmin || userIsBranchAdmin) && !sessionBranchId))
   const resolvedBranchId = selectedBranchId || sessionBranchId
   const branchOrgId = useMemo(() => branches.find((b) => b._id === resolvedBranchId)?.organizationId, [branches, resolvedBranchId])
   const resolvedOrganizationId = selectedOrganizationId || (userIsOrgAdmin ? sessionOrgId : null) || (userIsBranchAdmin ? branchOrgId : null) || ""
+
+  const scopedBranchLabel = useMemo(() => {
+    if (!sessionBranchId) return ""
+    const b = branches.find((x) => x._id === sessionBranchId)
+    return (b?.nameAr || b?.name || "").trim()
+  }, [branches, sessionBranchId])
 
   const loadOrganizations = useCallback(async () => {
     try {
@@ -268,7 +276,7 @@ export function GeographyManager() {
                 </Select>
               </>
             )}
-            {(userIsAdmin || userIsOrgAdmin || userIsBranchAdmin) && (
+            {showBranchSelector && (
               <>
                 <span className="text-sm text-muted-foreground">{labels.branchLabel || "الفرع"}:</span>
                 <Select
@@ -286,6 +294,14 @@ export function GeographyManager() {
                   </SelectContent>
                 </Select>
               </>
+            )}
+            {!showBranchSelector && sessionBranchId && (userIsOrgAdmin || userIsBranchAdmin) && (
+              <span className="text-sm text-muted-foreground">
+                {labels.branchLabel || "الفرع"}:{" "}
+                <span className="font-medium text-foreground">
+                  {scopedBranchLabel || "…"}
+                </span>
+              </span>
             )}
           </div>
         )}

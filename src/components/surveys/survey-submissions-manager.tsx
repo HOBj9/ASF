@@ -35,6 +35,7 @@ type Submission = {
   mapLng: number
   answers: Record<string, unknown>
   pointId: string | null
+  convertedToAthar?: boolean
   createdAt: string
 }
 
@@ -305,22 +306,26 @@ export function SurveySubmissionsManager({
                               </Button>
                             ) : (
                               <>
-                                <Button
-                                  size="sm"
-                                  variant="default"
-                                  disabled={convertingToAtharId === s._id}
-                                  onClick={() => handleConvertToPointAndAthar(s._id)}
-                                >
-                                  {convertingToAtharId === s._id ? (
-                                    <Loader2 className="h-4 w-4 animate-spin" />
-                                  ) : (
-                                    <>
-                                      <Send className="h-4 w-4 ml-2" />
-                                      تحويل إلى نقطة ثم إلى أثر
-                                    </>
-                                  )}
-                                </Button>
-                                <span className="text-xs text-muted-foreground">تم التحويل إلى نقطة</span>
+                                {!s.convertedToAthar && (
+                                  <Button
+                                    size="sm"
+                                    variant="default"
+                                    disabled={convertingToAtharId === s._id}
+                                    onClick={() => handleConvertToPointAndAthar(s._id)}
+                                  >
+                                    {convertingToAtharId === s._id ? (
+                                      <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                      <>
+                                        <Send className="h-4 w-4 ml-2" />
+                                        تحويل إلى نقطة ثم إلى أثر
+                                      </>
+                                    )}
+                                  </Button>
+                                )}
+                                <span className="text-xs text-muted-foreground">
+                                  {s.convertedToAthar ? "تم التحويل إلى نقطة وأثر" : "تم التحويل إلى نقطة"}
+                                </span>
                               </>
                             )
                           )}
