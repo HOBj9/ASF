@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
-import { requirePermission, handleApiError } from '@/lib/middleware/api-auth.middleware';
+import { requireAnyPermission, requirePermission, handleApiError } from '@/lib/middleware/api-auth.middleware';
 import { permissionActions, permissionResources } from '@/constants/permissions';
 import { PointClassificationService } from '@/lib/services/point-classification.service';
 import { resolveBranchId } from '@/lib/utils/municipality.util';
@@ -13,10 +13,11 @@ const service = new PointClassificationService();
 
 export async function GET(request: Request) {
   try {
-    const authResult = await requirePermission(
-      permissionResources.POINT_CLASSIFICATIONS,
-      permissionActions.READ
-    );
+    // Line supervisors and other form users need classifications for surveys without management access.
+    const authResult = await requireAnyPermission([
+      { resource: permissionResources.POINT_CLASSIFICATIONS, action: permissionActions.READ },
+      { resource: permissionResources.FORMS, action: permissionActions.READ },
+    ]);
     if (authResult instanceof NextResponse) return authResult;
 
     const { session } = authResult;

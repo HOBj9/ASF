@@ -1,13 +1,11 @@
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { redirect } from "next/navigation"
-import { isAdmin, isOrganizationAdmin } from "@/lib/permissions"
-import connectDB from "@/lib/mongodb"
-import User from "@/models/User"
-import Role from "@/models/Role"
+import { isAdmin, isOrganizationAdmin, isBranchAdmin } from "@/lib/permissions"
 import { resolveOrganizationId } from "@/lib/utils/organization.util"
 import { getLabelsForSession } from "@/lib/utils/labels-server.util"
 import { LineSupervisorsManager } from "@/components/dashboard/line-supervisors-manager"
+import { loadLineSupervisorsDataset } from "@/lib/server/line-supervisors-dataset"
 
 export default async function LineSupervisorsPage() {
   const session = await getServerSession(authOptions)
@@ -15,8 +13,8 @@ export default async function LineSupervisorsPage() {
     redirect("/login")
   }
 
-  const role = session.user.role as any
-  const allowed = isAdmin(role) || isOrganizationAdmin(role)
+  const role = session.user.role as unknown
+  const allowed = isAdmin(role as any) || isOrganizationAdmin(role as any) || isBranchAdmin(role as any)
   if (!allowed) {
     redirect("/unauthorized")
   }
@@ -28,42 +26,27 @@ export default async function LineSupervisorsPage() {
     redirect("/unauthorized")
   }
 
-  await connectDB()
   const labels = await getLabelsForSession(session)
-  const lineSupervisorRole = await Role.findOne({ name: "line_supervisor" }).select("_id").lean()
-  const Branch = (await import("@/models/Branch")).default
-  const branches = await Branch.find({ organizationId }).select("name nameAr _id").sort({ name: 1 }).lean()
-  const Vehicle = (await import("@/models/Vehicle")).default
-  const branchIds = branches.map((branch: any) => branch._id)
-  const vehicles = branchIds.length
-    ? await Vehicle.find({ branchId: { $in: branchIds }, isActive: true })
-        .select("name plateNumber branchId trackingProvider")
-        .sort({ name: 1 })
-        .lean()
-    : []
-  const initialUsers = lineSupervisorRole
-    ? await User.find({
-        organizationId,
-        role: (lineSupervisorRole as any)._id,
-      })
-        .populate("role", "name nameAr")
-        .populate("branchId", "name nameAr")
-        .populate("trackingVehicleId", "name plateNumber branchId trackingProvider")
-        .sort({ createdAt: -1 })
-        .lean()
-    : []
+  const { initialUsers, branches, vehicles } = await loadLineSupervisorsDataset(organizationId)
+  const sessionBranchId = (session.user as { branchId?: string | null })?.branchId ?? null
 
   return (
     <div className="text-right">
       <div className="mb-6 lg:mb-8">
         <h1 className="text-2xl lg:text-3xl font-bold">{labels.lineSupervisorLabel}</h1>
-        <p className="text-muted-foreground mt-2">عرض وإضافة {labels.lineSupervisorLabel} المرتبطين بفرع محدد من مؤسستك</p>
+        <p className="text-muted-foreground mt-2">
+          عرض وإضافة {labels.lineSupervisorLabel} مع بياناتهم وربطهم بالفرع والمركبة.
+          {!sessionBranchId
+            ? ` على مستوى المؤسسة اختر ${labels.branchLabel || "الفرع"} أولاً لعرض القائمة.`
+            : ""}
+        </p>
       </div>
       <LineSupervisorsManager
         organizationId={organizationId}
-        initialUsers={JSON.parse(JSON.stringify(initialUsers))}
-        branches={JSON.parse(JSON.stringify(branches))}
-        vehicles={JSON.parse(JSON.stringify(vehicles))}
+        initialUsers={initialUsers}
+        branches={branches}
+        vehicles={vehicles}
+        sessionBranchId={sessionBranchId}
       />
     </div>
   )

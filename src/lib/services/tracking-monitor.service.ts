@@ -51,7 +51,7 @@ function createEmptyProviderCounts<TValue>(valueFactory: () => TValue) {
 
 function getProviderLabel(provider: TrackingProvider): string {
   if (provider === 'mobile_app') return 'تطبيق الموبايل';
-  if (provider === 'traccar') return 'Traccar';
+  if (provider === 'traccar') return 'تراكار';
   return 'أثر';
 }
 

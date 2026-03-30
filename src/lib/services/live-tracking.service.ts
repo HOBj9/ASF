@@ -1,29 +1,50 @@
-import connectDB from '@/lib/mongodb';
-import Vehicle from '@/models/Vehicle';
+﻿import connectDB from '@/lib/mongodb';
 import Driver from '@/models/Driver';
+import Route from '@/models/Route';
+import TrackingBinding from '@/models/TrackingBinding';
 import TrackingVehicleState from '@/models/TrackingVehicleState';
+import Vehicle from '@/models/Vehicle';
 import { AtharService } from '@/lib/services/athar.service';
 import { isTrackingStateOffline, resolveTrackingConnectivityStatus } from '@/lib/trackingcore/connectivity';
 import { resolveAtharProviderConfig } from '@/lib/trackingcore/provider-config';
+import type { TrackingProvider } from '@/lib/tracking/types';
 
 export type VehicleLiveLocationItem = {
   id: string;
+  provider: TrackingProvider;
+  providerLabel: string;
+  vehicleName: string;
+  plateNumber: string | null;
   busNumber: string;
   driverName: string;
   route: string;
+  routeId: string | null;
   status: 'moving' | 'stopped' | 'offline';
   lastUpdate: string;
+  lastReceivedAt: string | null;
+  lastRecordedAt: string | null;
   passengers: number;
   capacity: number;
   speed: number;
   heading: number;
+  accuracy: number | null;
   coordinates: [number, number] | null;
   imei?: string;
   engineStatus?: boolean;
+  trackingExternalId?: string | null;
+  deviceName?: string | null;
+  platform?: string | null;
+  appVersion?: string | null;
 };
 
 function createVehicleLabel(vehicleId: string): string {
   return `مركبة ${vehicleId.slice(-4)}`;
+}
+
+function getProviderLabel(provider: TrackingProvider): string {
+  if (provider === 'mobile_app') return 'GPS الموبايل';
+  if (provider === 'traccar') return 'تراكار';
+  return 'أثر';
 }
 
 export class LiveTrackingService {
@@ -48,7 +69,7 @@ export class LiveTrackingService {
       branchId,
       isActive: true,
     })
-      .select('name plateNumber imei driverId trackingProvider')
+      .select('name plateNumber imei driverId trackingProvider routeId')
       .lean();
 
     if (!vehicles.length) return [];
@@ -56,14 +77,9 @@ export class LiveTrackingService {
     const driverIds = vehicles
       .map((vehicle) => (vehicle.driverId ? String(vehicle.driverId) : null))
       .filter((value): value is string => Boolean(value));
-
-    const driverMap = new Map<string, string>();
-    if (driverIds.length) {
-      const drivers = await Driver.find({ _id: { $in: driverIds } }).select('name').lean();
-      for (const driver of drivers) {
-        driverMap.set(String(driver._id), driver.name || 'غير محدد');
-      }
-    }
+    const routeIds = vehicles
+      .map((vehicle) => (vehicle.routeId ? String(vehicle.routeId) : null))
+      .filter((value): value is string => Boolean(value));
 
     const atharVehicles = vehicles.filter(
       (vehicle) => (vehicle.trackingProvider || 'athar') === 'athar' && String(vehicle.imei || '').trim()
@@ -72,7 +88,13 @@ export class LiveTrackingService {
       (vehicle) => (vehicle.trackingProvider || 'athar') !== 'athar'
     );
 
-    const [atharService, trackingStates] = await Promise.all([
+    const [drivers, routes, atharService, trackingStates, trackingBindings] = await Promise.all([
+      driverIds.length
+        ? Driver.find({ _id: { $in: driverIds } }).select('name').lean()
+        : Promise.resolve([]),
+      routeIds.length
+        ? Route.find({ _id: { $in: routeIds } }).select('name').lean()
+        : Promise.resolve([]),
       atharVehicles.length ? this.resolveAtharService(branchId) : Promise.resolve(null),
       managedStateVehicles.length
         ? TrackingVehicleState.find({
@@ -82,7 +104,20 @@ export class LiveTrackingService {
             .lean()
             .exec()
         : Promise.resolve([]),
+      managedStateVehicles.length
+        ? TrackingBinding.find({
+            vehicleId: { $in: managedStateVehicles.map((vehicle) => vehicle._id) },
+            isPrimary: true,
+            isActive: true,
+          })
+            .select('vehicleId externalId metadata provider')
+            .lean()
+            .exec()
+        : Promise.resolve([]),
     ]);
+
+    const driverMap = new Map(drivers.map((driver) => [String(driver._id), driver.name || 'غير محدد']));
+    const routeMap = new Map(routes.map((route) => [String(route._id), route.name || 'غير معين']));
 
     const locationsByImei =
       atharService && atharVehicles.length
@@ -90,17 +125,28 @@ export class LiveTrackingService {
             atharVehicles.map((vehicle) => String(vehicle.imei || '').trim()).filter(Boolean)
           )
         : {};
+
     const trackingStateByVehicleId = new Map(
       trackingStates.map((state) => [String(state.vehicleId), state])
     );
+    const bindingByVehicleId = new Map(
+      trackingBindings.map((binding) => [String(binding.vehicleId), binding])
+    );
 
     return vehicles.map((vehicle) => {
+      const vehicleId = String(vehicle._id);
       const driverName =
         (vehicle.driverId ? driverMap.get(String(vehicle.driverId)) : null) || 'غير محدد';
+      const routeName =
+        (vehicle.routeId ? routeMap.get(String(vehicle.routeId)) : null) || 'غير معين';
+      const routeId = vehicle.routeId ? String(vehicle.routeId) : null;
       const imei = String(vehicle.imei || '').trim() || undefined;
-      const trackingProvider = vehicle.trackingProvider || 'athar';
+      const provider = (vehicle.trackingProvider || 'athar') as TrackingProvider;
+      const vehicleName = vehicle.name || createVehicleLabel(vehicleId);
+      const plateNumber = vehicle.plateNumber || null;
+      const busNumber = plateNumber || vehicleName || createVehicleLabel(vehicleId);
 
-      if (trackingProvider === 'athar') {
+      if (provider === 'athar') {
         const info = imei ? locationsByImei[imei] : null;
         const hasCoordinates =
           info &&
@@ -112,55 +158,90 @@ export class LiveTrackingService {
         if (hasCoordinates) {
           const status: VehicleLiveLocationItem['status'] = info.engineStatus ? 'moving' : 'stopped';
           return {
-            id: String(vehicle._id),
-            busNumber: vehicle.plateNumber || vehicle.name || createVehicleLabel(String(vehicle._id)),
+            id: vehicleId,
+            provider,
+            providerLabel: getProviderLabel(provider),
+            vehicleName,
+            plateNumber,
+            busNumber,
             driverName,
-            route: 'غير محدد',
+            route: routeName,
+            routeId,
             status,
-            lastUpdate: 'منذ لحظات',
+            lastUpdate: 'تم التحديث مؤخراً',
+            lastReceivedAt: null,
+            lastRecordedAt: null,
             passengers: 0,
             capacity: 40,
             speed: Number(info.speed || 0),
             heading: Number(info.heading ?? 0),
+            accuracy: null,
             coordinates: [Number(info.lat), Number(info.lng)],
             imei,
             engineStatus: !!info.engineStatus,
+            trackingExternalId: imei || null,
+            deviceName: null,
+            platform: null,
+            appVersion: null,
           };
         }
 
         return {
-          id: String(vehicle._id),
-          busNumber: vehicle.plateNumber || vehicle.name || createVehicleLabel(String(vehicle._id)),
+          id: vehicleId,
+          provider,
+          providerLabel: getProviderLabel(provider),
+          vehicleName,
+          plateNumber,
+          busNumber,
           driverName,
-          route: 'غير محدد',
+          route: routeName,
+          routeId,
           status: 'offline',
           lastUpdate: 'غير متصل',
+          lastReceivedAt: null,
+          lastRecordedAt: null,
           passengers: 0,
           capacity: 40,
           speed: 0,
           heading: 0,
+          accuracy: null,
           coordinates: null,
           imei,
           engineStatus: false,
+          trackingExternalId: imei || null,
+          deviceName: null,
+          platform: null,
+          appVersion: null,
         };
       }
 
-      const state = trackingStateByVehicleId.get(String(vehicle._id));
+      const state = trackingStateByVehicleId.get(vehicleId);
+      const binding = bindingByVehicleId.get(vehicleId);
+      const metadata = (binding?.metadata || {}) as Record<string, any>;
       const lastReceivedAt = state?.lastReceivedAt ? new Date(state.lastReceivedAt) : null;
+      const lastRecordedAt = state?.lastRecordedAt ? new Date(state.lastRecordedAt) : null;
       const offline = isTrackingStateOffline(lastReceivedAt);
       const status = resolveTrackingConnectivityStatus(state?.speed, lastReceivedAt);
 
       return {
-        id: String(vehicle._id),
-        busNumber: vehicle.plateNumber || vehicle.name || createVehicleLabel(String(vehicle._id)),
+        id: vehicleId,
+        provider,
+        providerLabel: getProviderLabel(provider),
+        vehicleName,
+        plateNumber,
+        busNumber,
         driverName,
-        route: 'غير محدد',
+        route: routeName,
+        routeId,
         status: offline ? 'offline' : status,
-        lastUpdate: offline ? 'غير متصل' : 'منذ لحظات',
+        lastUpdate: offline ? 'غير متصل' : 'تم التحديث مؤخراً',
+        lastReceivedAt: lastReceivedAt ? lastReceivedAt.toISOString() : null,
+        lastRecordedAt: lastRecordedAt ? lastRecordedAt.toISOString() : null,
         passengers: 0,
         capacity: 40,
         speed: Number(state?.speed || 0),
         heading: Number(state?.heading || 0),
+        accuracy: state?.accuracy != null ? Number(state.accuracy) : null,
         coordinates:
           state?.lastLocation &&
           Number.isFinite(Number(state.lastLocation.lat)) &&
@@ -169,6 +250,10 @@ export class LiveTrackingService {
             : null,
         imei,
         engineStatus: !offline && status === 'moving',
+        trackingExternalId: binding?.externalId ? String(binding.externalId) : null,
+        deviceName: typeof metadata.deviceName === 'string' ? metadata.deviceName : null,
+        platform: typeof metadata.platform === 'string' ? metadata.platform : null,
+        appVersion: typeof metadata.appVersion === 'string' ? metadata.appVersion : null,
       };
     });
   }

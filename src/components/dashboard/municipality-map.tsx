@@ -52,14 +52,27 @@ type AtharMarker = {
 
 type LiveVehicle = {
   id: string;
+  provider: "athar" | "mobile_app" | "traccar";
+  providerLabel: string;
+  vehicleName: string;
+  plateNumber: string | null;
   busNumber: string;
   driverName: string;
+  route: string;
+  routeId: string | null;
   status: "moving" | "stopped" | "offline";
   lastUpdate: string;
+  lastReceivedAt: string | null;
+  lastRecordedAt: string | null;
   speed: number;
   heading: number;
+  accuracy: number | null;
   coordinates: [number, number] | null;
   imei?: string;
+  trackingExternalId?: string | null;
+  deviceName?: string | null;
+  platform?: string | null;
+  appVersion?: string | null;
 };
 
 type MapZone = {
@@ -216,6 +229,60 @@ const statusLabel: Record<LiveVehicle["status"], string> = {
   offline: "غير متصلة",
 };
 
+const liveProviderFilterLabels: Record<LiveVehicle["provider"] | "all", string> = {
+  all: "كل المصادر",
+  athar: "أثر",
+  mobile_app: "GPS الموبايل",
+  traccar: "تراكار",
+};
+
+const liveStatusFilterLabels: Record<LiveVehicle["status"] | "all", string> = {
+  all: "كل الحالات",
+  moving: "تعمل",
+  stopped: "متوقفة",
+  offline: "غير متصلة",
+};
+
+function getLiveProviderColor(provider: LiveVehicle["provider"]): string {
+  if (provider === "mobile_app") return "#0891b2";
+  if (provider === "traccar") return "#7c3aed";
+  return "#2563eb";
+}
+
+function getLiveVehicleSymbol(provider: LiveVehicle["provider"]): string {
+  if (provider === "mobile_app") return "📱";
+  if (provider === "traccar") return "🛰️";
+  return "🚚";
+}
+
+function getLiveVehicleIcon(vehicle: LiveVehicle, label?: string) {
+  const providerColor = getLiveProviderColor(vehicle.provider);
+  const statusColor = vehicle.status === "moving" ? "#16a34a" : vehicle.status === "stopped" ? "#f59e0b" : "#64748b";
+  const labelHtml = label ? `<div style="${LABEL_STYLE}">${escapeHtml(label)}</div>` : "";
+  return L.divIcon({
+    className: "",
+    html: `<div style="position:relative;overflow:visible;width:32px;height:32px;">
+      ${labelHtml}
+      <div style="
+        width:32px;height:32px;border-radius:999px;background:${providerColor};
+        display:flex;align-items:center;justify-content:center;
+        border:2px solid #fff;box-shadow:0 0 0 2px rgba(255,255,255,.2),0 10px 22px rgba(15,23,42,.3);
+        position:relative;
+      ">
+        <span style="
+          position:absolute;top:-10px;left:50%;transform:translateX(-50%) rotate(${Number(vehicle.heading) || 0}deg);
+          color:#dc2626;font-size:14px;line-height:1;
+        ">▲</span>
+        <span style="font-size:14px;line-height:1">${getLiveVehicleSymbol(vehicle.provider)}</span>
+        <span style="position:absolute;bottom:-3px;right:-3px;width:11px;height:11px;border-radius:999px;background:${statusColor};border:2px solid #fff;"></span>
+      </div>
+    </div>`,
+    iconSize: [32, 32],
+    iconAnchor: [16, 16],
+    popupAnchor: [0, -12],
+  });
+}
+
 function isPointInsidePolygon(lat: number, lng: number, polygon: Array<{ lat: number; lng: number }>): boolean {
   let inside = false;
   for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
@@ -320,6 +387,9 @@ export function MunicipalityMap({
   const [lastOpenedPanel, setLastOpenedPanel] = useState<Exclude<RightPanelType, null>>("system-points");
   const [showVehicleNamesOnMap, setShowVehicleNamesOnMap] = useState(true);
   const [atharCarsSearchQuery, setAtharCarsSearchQuery] = useState("");
+  const [liveVehiclesSearchQuery, setLiveVehiclesSearchQuery] = useState("");
+  const [liveProviderFilter, setLiveProviderFilter] = useState<LiveVehicle["provider"] | "all">("all");
+  const [liveStatusFilter, setLiveStatusFilter] = useState<LiveVehicle["status"] | "all">("all");
   const [eventsSearchQuery, setEventsSearchQuery] = useState("");
   const [pointTypeFilter, setPointTypeFilter] = useState<string | null>(null);
   const [pointPanelSearch, setPointPanelSearch] = useState("");
@@ -340,20 +410,46 @@ export function MunicipalityMap({
     if (!zonesVisible) setSelectedZone(null);
   }, [activeTab, showZonesWithPoints, zonesVisible]);
 
-  const visibleLiveVehicles = useMemo(
+  const liveVehicleInventory = useMemo(
     () => liveVehicles.filter((v) => Array.isArray(v.coordinates) && v.coordinates.length === 2),
     [liveVehicles]
   );
 
+  const visibleLiveVehicles = useMemo(() => {
+    return liveVehicleInventory.filter(
+      (vehicle) =>
+        (liveProviderFilter === "all" || vehicle.provider === liveProviderFilter) &&
+        (liveStatusFilter === "all" || vehicle.status === liveStatusFilter)
+    );
+  }, [liveVehicleInventory, liveProviderFilter, liveStatusFilter]);
+
+  const liveProviderCounts = useMemo(
+    () => ({
+      athar: liveVehicleInventory.filter((vehicle) => vehicle.provider === "athar").length,
+      mobile_app: liveVehicleInventory.filter((vehicle) => vehicle.provider === "mobile_app").length,
+      traccar: liveVehicleInventory.filter((vehicle) => vehicle.provider === "traccar").length,
+    }),
+    [liveVehicleInventory]
+  );
+
+  const liveStatusCounts = useMemo(
+    () => ({
+      moving: liveVehicleInventory.filter((vehicle) => vehicle.status === "moving").length,
+      stopped: liveVehicleInventory.filter((vehicle) => vehicle.status === "stopped").length,
+      offline: liveVehicleInventory.filter((vehicle) => vehicle.status === "offline").length,
+    }),
+    [liveVehicleInventory]
+  );
+
   const vehicleZoneMap = useMemo(() => {
     const map = new Map<string, string>();
-    for (const vehicle of visibleLiveVehicles) {
+    for (const vehicle of liveVehicleInventory) {
       const [lat, lng] = vehicle.coordinates as [number, number];
       const zone = zones.find((z) => z.vertices?.length >= 3 && isPointInsidePolygon(lat, lng, z.vertices));
       map.set(vehicle.id, zone?.name || "خارج المناطق");
     }
     return map;
-  }, [visibleLiveVehicles, zones]);
+  }, [liveVehicleInventory, zones]);
 
   const objectByImei = useMemo(() => {
     const map = new Map<string, AtharObject>();
@@ -421,6 +517,23 @@ export function MunicipalityMap({
         (event.imei || "").toLowerCase().includes(q)
     );
   }, [events, eventsSearchQuery]);
+
+  const filteredLiveVehicles = useMemo(() => {
+    const q = liveVehiclesSearchQuery.trim().toLowerCase();
+    if (!q) return visibleLiveVehicles;
+    return visibleLiveVehicles.filter(
+      (vehicle) =>
+        (vehicle.vehicleName || "").toLowerCase().includes(q) ||
+        (vehicle.busNumber || "").toLowerCase().includes(q) ||
+        (vehicle.plateNumber || "").toLowerCase().includes(q) ||
+        (vehicle.driverName || "").toLowerCase().includes(q) ||
+        (vehicle.providerLabel || "").toLowerCase().includes(q) ||
+        (vehicle.route || "").toLowerCase().includes(q) ||
+        (vehicle.deviceName || "").toLowerCase().includes(q) ||
+        (vehicle.trackingExternalId || "").toLowerCase().includes(q) ||
+        (vehicle.imei || "").toLowerCase().includes(q)
+    );
+  }, [liveVehiclesSearchQuery, visibleLiveVehicles]);
 
   useEffect(() => {
     if (focusPointId && points.length > 0) {
@@ -511,7 +624,15 @@ export function MunicipalityMap({
       setLastOpenedPanel(panel);
       return panel;
     });
-    onTabChange(panel === "athar-live" ? "objects" : "points");
+    if (panel === "athar-live") {
+      onTabChange("objects");
+      return;
+    }
+    if (panel === "live") {
+      onTabChange("live");
+      return;
+    }
+    onTabChange("points");
   }, [onTabChange]);
 
   const focusOnPoint = useCallback((point: MapPoint) => {
@@ -544,6 +665,21 @@ export function MunicipalityMap({
     }, 100);
   }, [onTabChange, showPanel]);
 
+  const focusOnLiveVehicle = useCallback((vehicle: LiveVehicle | null) => {
+    if (!vehicle || !Array.isArray(vehicle.coordinates) || vehicle.coordinates.length !== 2) return;
+    showPanel("live");
+    onTabChange("live");
+    if (mapRef.current) {
+      mapRef.current.flyTo(vehicle.coordinates, 17, { duration: 0.6 });
+    }
+  }, [onTabChange, showPanel]);
+
+  const focusOnAllLiveVehicles = useCallback(() => {
+    if (!mapRef.current || filteredLiveVehicles.length === 0) return;
+    const bounds = L.latLngBounds(filteredLiveVehicles.map((vehicle) => vehicle.coordinates as [number, number]));
+    mapRef.current.fitBounds(bounds, { padding: [36, 36], maxZoom: 16 });
+  }, [filteredLiveVehicles]);
+
   useEffect(() => {
     if (!trackingObjectId || !mapRef.current) return;
     const obj = atharObjects.find((o) => String(o.id) === String(trackingObjectId));
@@ -565,6 +701,9 @@ export function MunicipalityMap({
     if (municipality) {
       return [municipality.centerLat, municipality.centerLng] as [number, number];
     }
+    if (activeTab === "live" && filteredLiveVehicles.length > 0) {
+      return filteredLiveVehicles[0].coordinates as [number, number];
+    }
     if (activeTab === "live" && visibleLiveVehicles.length > 0) {
       return visibleLiveVehicles[0].coordinates as [number, number];
     }
@@ -580,40 +719,49 @@ export function MunicipalityMap({
       if (objectWithCoords) return [Number(objectWithCoords.lat), Number(objectWithCoords.lng)] as [number, number];
     }
     return defaultCenter;
-  }, [municipality, activeTab, visibleLiveVehicles, points, atharMarkers, zones, atharObjects]);
+  }, [municipality, activeTab, filteredLiveVehicles, visibleLiveVehicles, points, atharMarkers, zones, atharObjects]);
 
   const mapKey = `map-${municipality?.name ?? "default"}`;
   const initialCenter = center;
 
   const liveMarkersLayer = useMemo(() => {
     if (activeTab !== "live") return null;
-    return visibleLiveVehicles.map((vehicle) => {
+    return filteredLiveVehicles.map((vehicle) => {
       const matchedObject = vehicle.imei ? objectByImei.get(vehicle.imei) : null;
       return (
         <Marker
           key={`${vehicle.id}-${showVehicleNamesOnMap ? "label" : "nolabel"}`}
           position={vehicle.coordinates as [number, number]}
-          icon={getBusIcon(vehicle.status, vehicle.heading, showVehicleNamesOnMap ? vehicle.busNumber : undefined)}
+          icon={getLiveVehicleIcon(vehicle, showVehicleNamesOnMap ? vehicle.busNumber : undefined)}
         >
           <Popup>
             <div className="text-right space-y-1 max-w-[300px]">
-              <div className="font-semibold">{vehicle.busNumber}</div>
+              <div className="font-semibold">{vehicle.vehicleName || vehicle.busNumber}</div>
+              {vehicle.plateNumber && <div className="text-xs text-muted-foreground">اللوحة: {vehicle.plateNumber}</div>}
+              <div className="text-xs text-muted-foreground">المصدر: {vehicle.providerLabel}</div>
               <div className="text-xs text-muted-foreground">السائق: {vehicle.driverName}</div>
+              <div className="text-xs text-muted-foreground">المسار: {vehicle.route || "-"}</div>
               <div className="text-xs text-muted-foreground">الحالة: {statusLabel[vehicle.status]}</div>
               <div className="text-xs text-muted-foreground">السرعة: {vehicle.speed} كم/س</div>
               <div className="text-xs text-muted-foreground">الاتجاه: {Math.round(vehicle.heading || 0)}°</div>
-              <div className="text-xs text-muted-foreground">
-                المنطقة: {vehicleZoneMap.get(vehicle.id) || "غير محددة"}
-              </div>
+              {vehicle.accuracy != null && <div className="text-xs text-muted-foreground">الدقة: {vehicle.accuracy} م</div>}
+              <div className="text-xs text-muted-foreground">المنطقة: {vehicleZoneMap.get(vehicle.id) || "غير معروفة"}</div>
+              <div className="text-xs text-muted-foreground">آخر تحديث: {vehicle.lastUpdate}</div>
+              {vehicle.lastRecordedAt && <div className="text-xs text-muted-foreground">وقت التسجيل: {vehicle.lastRecordedAt}</div>}
+              {vehicle.lastReceivedAt && <div className="text-xs text-muted-foreground">وقت الاستقبال: {vehicle.lastReceivedAt}</div>}
+              {vehicle.trackingExternalId && <div className="text-xs text-muted-foreground">معرّف التتبع: {vehicle.trackingExternalId}</div>}
+              {vehicle.deviceName && <div className="text-xs text-muted-foreground">الجهاز: {vehicle.deviceName}</div>}
+              {vehicle.platform && <div className="text-xs text-muted-foreground">المنصة: {vehicle.platform}</div>}
+              {vehicle.appVersion && <div className="text-xs text-muted-foreground">إصدار التطبيق: {vehicle.appVersion}</div>}
               {vehicle.imei && <div className="text-xs text-muted-foreground">IMEI: {vehicle.imei}</div>}
               {matchedObject && (
                 <>
-                  <div className="mt-2 border-t pt-2 text-xs font-medium">تفاصيل السيارة من أثر</div>
+                  <div className="mt-2 border-t pt-2 text-xs font-medium">تفاصيل أثر الخام</div>
                   <div className="text-xs text-muted-foreground">الاسم: {matchedObject.name || "-"}</div>
                   <div className="text-xs text-muted-foreground">اللوحة: {matchedObject.plateNumber || "-"}</div>
                   <div className="text-xs text-muted-foreground">الجهاز: {matchedObject.device || "-"}</div>
                   <div className="text-xs text-muted-foreground">الموديل: {matchedObject.model || "-"}</div>
-                  <div className="text-xs text-muted-foreground">وقت الجهاز: {matchedObject.dtTracker || "-"}</div>
+                  <div className="text-xs text-muted-foreground">وقت جهاز التتبع: {matchedObject.dtTracker || "-"}</div>
                   <div className="text-xs text-muted-foreground">وقت الخادم: {matchedObject.dtServer || "-"}</div>
                 </>
               )}
@@ -622,7 +770,7 @@ export function MunicipalityMap({
         </Marker>
       );
     });
-  }, [activeTab, visibleLiveVehicles, objectByImei, vehicleZoneMap, showVehicleNamesOnMap]);
+  }, [activeTab, filteredLiveVehicles, objectByImei, vehicleZoneMap, showVehicleNamesOnMap]);
 
   const pointsMarkersLayer = useMemo(() => {
     if (activeTab !== "points") return null;
@@ -655,7 +803,7 @@ export function MunicipalityMap({
         </Marker>
       );
     });
-  }, [activeTab, points, pointTypeFilter, showVehicleNamesOnMap, layersVisibleLimit, focusOnPoint]);
+  }, [activeTab, points, pointTypeFilter, showVehicleNamesOnMap, focusOnPoint]);
 
   const atharMarkersLayer = useMemo(() => {
     if (activeTab !== "points") return null;
@@ -681,7 +829,7 @@ export function MunicipalityMap({
         </Marker>
       );
     });
-  }, [activeTab, atharMarkers, showVehicleNamesOnMap, layersVisibleLimit]);
+  }, [activeTab, atharMarkers, showVehicleNamesOnMap]);
 
   const renderMap = (heightClass: string, attachRef = false) => (
     <div className={`${heightClass} w-full overflow-hidden rounded-2xl border bg-background relative`}>
@@ -695,7 +843,7 @@ export function MunicipalityMap({
             onClick={() => togglePanel("athar-live")}
           >
             <CarFront className="h-3.5 w-3.5" />
-            التتبع الحي من أثر
+            أجهزة أثر الخام
           </Button>
           <Button
             type="button"
@@ -706,6 +854,16 @@ export function MunicipalityMap({
           >
             <MapPin className="h-3.5 w-3.5" />
             نقاط النظام مع المناطق المرتبطة فيها
+          </Button>
+          <Button
+            type="button"
+            variant={rightPanel === "live" ? "default" : "secondary"}
+            size="sm"
+            className="gap-2 text-xs"
+            onClick={() => togglePanel("live")}
+          >
+            <BusFront className="h-3.5 w-3.5" />
+            التتبع الحي الموحد
           </Button>
           <Button
             type="button"
@@ -836,7 +994,7 @@ export function MunicipalityMap({
       <TabsList className="grid w-full grid-cols-4">
         <TabsTrigger value="live" className="gap-1.5">
           <BusFront className="h-4 w-4" />
-          التتبع الحي
+          التتبع الموحد
         </TabsTrigger>
         <TabsTrigger value="points" className="gap-1.5">
           <MapPin className="h-4 w-4" />
@@ -860,7 +1018,7 @@ export function MunicipalityMap({
 
   const openRightPanel = (panel: RightPanelType) => {
     setRightPanel((p) => (p === panel ? null : panel));
-    if (panel === "cars") onTabChange("objects");
+    if (panel === "cars" || panel === "athar-live") onTabChange("objects");
   };
 
   return (
@@ -886,8 +1044,9 @@ export function MunicipalityMap({
           <aside className="flex h-[820px] w-[360px] max-w-[40vw] flex-shrink-0 flex-col border-l bg-background" dir="rtl">
             <div className="flex items-center justify-between border-b px-3 py-2">
               <span className="text-right text-sm font-medium">
-                {rightPanel === "athar-live" && "التتبع الحي من أثر"}
+                {rightPanel === "athar-live" && "أجهزة أثر الخام"}
                 {rightPanel === "system-points" && "نقاط النظام مع المناطق المرتبطة فيها"}
+                {rightPanel === "live" && "التتبع الحي الموحد"}
                 {rightPanel === "events" && eventsLabel}
               </span>
               <Button variant="ghost" size="icon" onClick={() => setRightPanel(null)} title="إغلاق">
@@ -1118,6 +1277,228 @@ export function MunicipalityMap({
                 </>
               )}
 
+              {rightPanel === "live" && (
+                <div className="space-y-3 text-sm">
+                  <div className="rounded-xl border bg-muted/20 p-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <div className="font-medium">مركز التتبع الحي الموحد</div>
+                        <div className="mt-1 text-xs text-muted-foreground">شاشة موحدة تعرض أثر وGPS الموبايل على نفس الخريطة.</div>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-8 px-3 text-xs"
+                        onClick={focusOnAllLiveVehicles}
+                        disabled={filteredLiveVehicles.length === 0}
+                      >
+                        تركيز النتائج
+                      </Button>
+                    </div>
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      إجمالي مباشر: {liveVehicleInventory.length} • بعد الفلاتر: {visibleLiveVehicles.length}
+                      {liveVehiclesSearchQuery.trim() && ` • نتائج البحث: ${filteredLiveVehicles.length}`}
+                    </div>
+                    <div className="mt-2 text-xs text-muted-foreground">
+                      أثر: {liveProviderCounts.athar} • GPS الموبايل: {liveProviderCounts.mobile_app} • تراكار: {liveProviderCounts.traccar}
+                    </div>
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      تعمل: {liveStatusCounts.moving} • متوقفة: {liveStatusCounts.stopped} • غير متصلة: {liveStatusCounts.offline}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 rounded-xl border p-3">
+                    <div className="text-xs font-medium text-muted-foreground">فلتر المصدر</div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {(["all", "athar", "mobile_app", "traccar"] as const).map((provider) => (
+                        <button
+                          key={provider}
+                          type="button"
+                          onClick={() => setLiveProviderFilter(provider)}
+                          className={`rounded-full border px-2.5 py-1 text-[11px] transition-colors ${
+                            liveProviderFilter === provider ? "font-semibold shadow-sm" : "text-muted-foreground hover:bg-muted"
+                          }`}
+                          style={
+                            liveProviderFilter === provider
+                              ? provider === "all"
+                                ? { borderColor: "#0f172a", backgroundColor: "rgba(15, 23, 42, 0.06)" }
+                                : { borderColor: getLiveProviderColor(provider), backgroundColor: `${getLiveProviderColor(provider)}18`, color: getLiveProviderColor(provider) }
+                              : undefined
+                          }
+                        >
+                          {liveProviderFilterLabels[provider]} ({provider === "all" ? liveVehicleInventory.length : liveProviderCounts[provider]})
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 rounded-xl border p-3">
+                    <div className="text-xs font-medium text-muted-foreground">فلتر الحالة</div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {(["all", "moving", "stopped", "offline"] as const).map((status) => (
+                        <button
+                          key={status}
+                          type="button"
+                          onClick={() => setLiveStatusFilter(status)}
+                          className={`rounded-full border px-2.5 py-1 text-[11px] transition-colors ${
+                            liveStatusFilter === status
+                              ? status === "moving"
+                                ? "border-emerald-500 bg-emerald-500/10 text-emerald-700"
+                                : status === "stopped"
+                                  ? "border-amber-500 bg-amber-500/10 text-amber-700"
+                                  : status === "offline"
+                                    ? "border-slate-500 bg-slate-500/10 text-slate-700"
+                                    : "border-primary bg-primary/10 text-primary"
+                              : "text-muted-foreground hover:bg-muted"
+                          }`}
+                        >
+                          {liveStatusFilterLabels[status]} ({status === "all" ? liveVehicleInventory.length : liveStatusCounts[status]})
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="relative">
+                    <Search className="absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      type="search"
+                      placeholder="ابحث بالمركبة أو المسار أو السائق أو المصدر أو IMEI أو الجهاز..."
+                      value={liveVehiclesSearchQuery}
+                      onChange={(e) => setLiveVehiclesSearchQuery(e.target.value)}
+                      className="h-8 pr-8 text-xs"
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2 rounded-xl border border-dashed px-3 py-2 text-[11px] text-muted-foreground">
+                    <span>إظهار أسماء المركبات على الخريطة</span>
+                    <button
+                      type="button"
+                      onClick={() => setShowVehicleNamesOnMap((current) => !current)}
+                      className={`rounded-full border px-2.5 py-1 font-medium transition-colors ${
+                        showVehicleNamesOnMap ? "border-primary bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted"
+                      }`}
+                    >
+                      {showVehicleNamesOnMap ? "مفعّل" : "مخفي"}
+                    </button>
+                  </div>
+
+                  <div className="max-h-[540px] space-y-2 overflow-y-auto">
+                    {filteredLiveVehicles.map((vehicle) => (
+                      <button
+                        key={`live-vehicle-${vehicle.id}`}
+                        type="button"
+                        onClick={() => focusOnLiveVehicle(vehicle)}
+                        className="w-full rounded-xl border px-3 py-3 text-right transition-colors hover:bg-muted/50"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                              vehicle.status === "moving"
+                                ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
+                                : vehicle.status === "stopped"
+                                  ? "bg-amber-500/15 text-amber-700 dark:text-amber-400"
+                                  : "bg-slate-500/15 text-slate-600 dark:text-slate-300"
+                            }`}
+                          >
+                            {statusLabel[vehicle.status]}
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <span
+                              className="inline-block h-2.5 w-2.5 rounded-full"
+                              style={{ backgroundColor: getLiveProviderColor(vehicle.provider) }}
+                            />
+                            <span className="rounded-full border px-2 py-0.5 text-[10px] text-muted-foreground">{vehicle.providerLabel}</span>
+                            <span className="font-semibold">{vehicle.vehicleName || vehicle.busNumber}</span>
+                          </div>
+                        </div>
+                        <div className="mt-3 overflow-hidden rounded-lg border border-border/70 bg-background/30">
+                          <div className="flex items-center justify-between px-3 py-2 text-[11px]">
+                            <span className="text-muted-foreground">المسار</span>
+                            <span>{vehicle.route || "مسار غير معين"}</span>
+                          </div>
+                          <div className="flex items-center justify-between border-t border-border/70 px-3 py-2 text-[11px]">
+                            <span className="text-muted-foreground">السائق</span>
+                            <span>{vehicle.driverName || "بدون سائق"}</span>
+                          </div>
+                          <div className="flex items-center justify-between border-t border-border/70 px-3 py-2 text-[11px]">
+                            <span className="text-muted-foreground">السرعة</span>
+                            <span>{vehicle.speed} كم/س</span>
+                          </div>
+                          <div className="flex items-center justify-between border-t border-border/70 px-3 py-2 text-[11px]">
+                            <span className="text-muted-foreground">آخر تحديث</span>
+                            <span>{vehicle.lastUpdate}</span>
+                          </div>
+                          {vehicle.plateNumber && (
+                            <div className="flex items-center justify-between border-t border-border/70 px-3 py-2 text-[11px]">
+                              <span className="text-muted-foreground">اللوحة</span>
+                              <span>{vehicle.plateNumber}</span>
+                            </div>
+                          )}
+                          <div className="flex items-center justify-between border-t border-border/70 px-3 py-2 text-[11px]">
+                            <span className="text-muted-foreground">المنطقة الحالية</span>
+                            <span>{vehicleZoneMap.get(vehicle.id) || "غير معروفة"}</span>
+                          </div>
+                          {vehicle.accuracy != null && (
+                            <div className="flex items-center justify-between border-t border-border/70 px-3 py-2 text-[11px]">
+                              <span className="text-muted-foreground">الدقة</span>
+                              <span>{vehicle.accuracy} م</span>
+                            </div>
+                          )}
+                          {vehicle.lastRecordedAt && (
+                            <div className="flex items-center justify-between border-t border-border/70 px-3 py-2 text-[11px]">
+                              <span className="text-muted-foreground">وقت التسجيل</span>
+                              <span>{vehicle.lastRecordedAt}</span>
+                            </div>
+                          )}
+                          {vehicle.lastReceivedAt && (
+                            <div className="flex items-center justify-between border-t border-border/70 px-3 py-2 text-[11px]">
+                              <span className="text-muted-foreground">وقت الاستقبال</span>
+                              <span>{vehicle.lastReceivedAt}</span>
+                            </div>
+                          )}
+                          {vehicle.trackingExternalId && (
+                            <div className="flex items-center justify-between border-t border-border/70 px-3 py-2 text-[11px]">
+                              <span className="text-muted-foreground">معرّف التتبع</span>
+                              <span>{vehicle.trackingExternalId}</span>
+                            </div>
+                          )}
+                          {vehicle.deviceName && (
+                            <div className="flex items-center justify-between border-t border-border/70 px-3 py-2 text-[11px]">
+                              <span className="text-muted-foreground">الجهاز</span>
+                              <span>{vehicle.deviceName}</span>
+                            </div>
+                          )}
+                          {vehicle.platform && (
+                            <div className="flex items-center justify-between border-t border-border/70 px-3 py-2 text-[11px]">
+                              <span className="text-muted-foreground">المنصة</span>
+                              <span>{vehicle.platform}</span>
+                            </div>
+                          )}
+                          {vehicle.appVersion && (
+                            <div className="flex items-center justify-between border-t border-border/70 px-3 py-2 text-[11px]">
+                              <span className="text-muted-foreground">إصدار التطبيق</span>
+                              <span>{vehicle.appVersion}</span>
+                            </div>
+                          )}
+                          {vehicle.imei && (
+                            <div className="flex items-center justify-between border-t border-border/70 px-3 py-2 text-[11px]">
+                              <span className="text-muted-foreground">IMEI</span>
+                              <span>{vehicle.imei}</span>
+                            </div>
+                          )}
+                        </div>
+                      </button>
+                    ))}
+                    {filteredLiveVehicles.length === 0 && (
+                      <div className="rounded-lg border border-dashed px-3 py-4 text-center text-xs text-muted-foreground">
+                        لا توجد مركبات تطابق الفلاتر الحالية.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {rightPanel === "events" && (
                 <>
                   {eventDetailsForPoint && focusPointId && (
@@ -1224,7 +1605,7 @@ export function MunicipalityMap({
             onClick={() => {
               const panelToOpen = lastOpenedPanel || "system-points";
               showPanel(panelToOpen);
-              onTabChange(panelToOpen === "athar-live" ? "objects" : "points");
+              onTabChange(panelToOpen === "athar-live" ? "objects" : panelToOpen === "live" ? "live" : "points");
             }}
             title="فتح لوحة التفاصيل"
             className="absolute right-0 top-1/2 z-[400] flex h-20 w-10 -translate-y-1/2 flex-col items-center justify-center rounded-l-lg border border-r-0 border-border bg-muted/90 shadow-sm transition-colors hover:bg-muted"
@@ -1262,7 +1643,7 @@ export function MunicipalityMap({
           <aside className="w-80 flex-shrink-0 border-r border-l flex flex-col bg-background overflow-hidden max-h-[820px]">
             <div className="flex items-center justify-between border-b px-3 py-2">
               <span className="text-sm font-medium text-right">
-                {rightPanel === "cars" && "إجمالي سيارات أثر"}
+                {rightPanel === "cars" && "أجهزة أثر الخام"}
                 {rightPanel === "events" && eventsLabel}
                 {rightPanel === "live" && "إحصائيات التتبع الحي"}
                 {rightPanel === "layers" && "النقاط والمناطق والسيارات"}
@@ -1374,6 +1755,153 @@ export function MunicipalityMap({
                   )}
                 </>
               )}
+              {rightPanel === "live" && (
+                <div className="space-y-3 text-sm">
+                  <div className="rounded-xl border bg-muted/20 p-3">
+                    <div className="font-medium">مركز التتبع الحي الموحد</div>
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      إجمالي مباشر: {liveVehicleInventory.length} • بعد الفلاتر: {visibleLiveVehicles.length}
+                      {liveVehiclesSearchQuery.trim() && ` • نتائج البحث: ${filteredLiveVehicles.length}`}
+                    </div>
+                    <div className="mt-2 text-xs text-muted-foreground">
+                      أثر: {liveProviderCounts.athar} • GPS الموبايل: {liveProviderCounts.mobile_app} • تراكار: {liveProviderCounts.traccar}
+                    </div>
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      تعمل: {liveStatusCounts.moving} • متوقفة: {liveStatusCounts.stopped} • غير متصلة: {liveStatusCounts.offline}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 rounded-xl border p-3">
+                    <div className="text-xs font-medium text-muted-foreground">فلتر المصدر</div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {(["all", "athar", "mobile_app", "traccar"] as const).map((provider) => (
+                        <button
+                          key={provider}
+                          type="button"
+                          onClick={() => setLiveProviderFilter(provider)}
+                          className={`rounded-full border px-2.5 py-1 text-[11px] transition-colors ${
+                            liveProviderFilter === provider ? "font-semibold shadow-sm" : "text-muted-foreground hover:bg-muted"
+                          }`}
+                          style={
+                            liveProviderFilter === provider
+                              ? provider === "all"
+                                ? { borderColor: "#0f172a", backgroundColor: "rgba(15, 23, 42, 0.06)" }
+                                : { borderColor: getLiveProviderColor(provider), backgroundColor: `${getLiveProviderColor(provider)}18`, color: getLiveProviderColor(provider) }
+                              : undefined
+                          }
+                        >
+                          {liveProviderFilterLabels[provider]} ({provider === "all" ? liveVehicleInventory.length : liveProviderCounts[provider]})
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 rounded-xl border p-3">
+                    <div className="text-xs font-medium text-muted-foreground">فلتر الحالة</div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {(["all", "moving", "stopped", "offline"] as const).map((status) => (
+                        <button
+                          key={status}
+                          type="button"
+                          onClick={() => setLiveStatusFilter(status)}
+                          className={`rounded-full border px-2.5 py-1 text-[11px] transition-colors ${
+                            liveStatusFilter === status
+                              ? status === "moving"
+                                ? "border-emerald-500 bg-emerald-500/10 text-emerald-700"
+                                : status === "stopped"
+                                  ? "border-amber-500 bg-amber-500/10 text-amber-700"
+                                  : status === "offline"
+                                    ? "border-slate-500 bg-slate-500/10 text-slate-700"
+                                    : "border-primary bg-primary/10 text-primary"
+                              : "text-muted-foreground hover:bg-muted"
+                          }`}
+                        >
+                          {liveStatusFilterLabels[status]} ({status === "all" ? liveVehicleInventory.length : liveStatusCounts[status]})
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="relative">
+                    <Search className="absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      type="search"
+                      placeholder="ابحث بالمركبة أو المسار أو السائق أو المصدر أو IMEI أو الجهاز..."
+                      value={liveVehiclesSearchQuery}
+                      onChange={(e) => setLiveVehiclesSearchQuery(e.target.value)}
+                      className="h-8 pr-8 text-xs"
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2 rounded-xl border border-dashed px-3 py-2 text-[11px] text-muted-foreground">
+                    <span>إظهار أسماء المركبات على الخريطة</span>
+                    <button
+                      type="button"
+                      onClick={() => setShowVehicleNamesOnMap((current) => !current)}
+                      className={`rounded-full border px-2.5 py-1 font-medium transition-colors ${
+                        showVehicleNamesOnMap ? "border-primary bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted"
+                      }`}
+                    >
+                      {showVehicleNamesOnMap ? "مفعّل" : "مخفي"}
+                    </button>
+                  </div>
+
+                  <div className="max-h-[540px] space-y-2 overflow-y-auto">
+                    {filteredLiveVehicles.map((vehicle) => (
+                      <button
+                        key={`live-vehicle-${vehicle.id}`}
+                        type="button"
+                        onClick={() => focusOnLiveVehicle(vehicle)}
+                        className="w-full rounded-xl border px-3 py-3 text-right transition-colors hover:bg-muted/50"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                              vehicle.status === "moving"
+                                ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
+                                : vehicle.status === "stopped"
+                                  ? "bg-amber-500/15 text-amber-700 dark:text-amber-400"
+                                  : "bg-slate-500/15 text-slate-600 dark:text-slate-300"
+                            }`}
+                          >
+                            {statusLabel[vehicle.status]}
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <span
+                              className="inline-block h-2.5 w-2.5 rounded-full"
+                              style={{ backgroundColor: getLiveProviderColor(vehicle.provider) }}
+                            />
+                            <span className="rounded-full border px-2 py-0.5 text-[10px] text-muted-foreground">{vehicle.providerLabel}</span>
+                            <span className="font-semibold">{vehicle.vehicleName || vehicle.busNumber}</span>
+                          </div>
+                        </div>
+                        <div className="mt-2 text-[11px] text-muted-foreground">
+                          {vehicle.route || "مسار غير معين"} • {vehicle.driverName || "بدون سائق"}
+                        </div>
+                        <div className="mt-1 text-[11px] text-muted-foreground">
+                          {vehicle.speed} كم/س • {vehicle.lastUpdate}
+                        </div>
+                        {vehicle.plateNumber && <div className="mt-1 text-[11px] text-muted-foreground">اللوحة: {vehicle.plateNumber}</div>}
+                        <div className="mt-1 text-[11px] text-muted-foreground">المنطقة الحالية: {vehicleZoneMap.get(vehicle.id) || "غير معروفة"}</div>
+                        {vehicle.accuracy != null && <div className="mt-1 text-[11px] text-muted-foreground">الدقة: {vehicle.accuracy} م</div>}
+                        {vehicle.lastRecordedAt && <div className="mt-1 text-[11px] text-muted-foreground">وقت التسجيل: {vehicle.lastRecordedAt}</div>}
+                        {vehicle.lastReceivedAt && <div className="mt-1 text-[11px] text-muted-foreground">وقت الاستقبال: {vehicle.lastReceivedAt}</div>}
+                        {vehicle.trackingExternalId && <div className="mt-1 text-[11px] text-muted-foreground">معرّف التتبع: {vehicle.trackingExternalId}</div>}
+                        {vehicle.deviceName && <div className="mt-1 text-[11px] text-muted-foreground">الجهاز: {vehicle.deviceName}</div>}
+                        {vehicle.platform && <div className="mt-1 text-[11px] text-muted-foreground">المنصة: {vehicle.platform}</div>}
+                        {vehicle.appVersion && <div className="mt-1 text-[11px] text-muted-foreground">إصدار التطبيق: {vehicle.appVersion}</div>}
+                        {vehicle.imei && <div className="mt-1 text-[11px] text-muted-foreground">IMEI: {vehicle.imei}</div>}
+                      </button>
+                    ))}
+                    {filteredLiveVehicles.length === 0 && (
+                      <div className="rounded-lg border border-dashed px-3 py-4 text-center text-xs text-muted-foreground">
+                        لا توجد مركبات تطابق الفلاتر الحالية.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {rightPanel === "events" && (
                 <>
                   <div className="mb-2">
@@ -1649,10 +2177,10 @@ export function MunicipalityMap({
           </button>
           <button
             type="button"
-            title="إجمالي سيارات أثر"
-            onClick={() => openRightPanel("cars")}
+            title="أجهزة أثر الخام"
+            onClick={() => openRightPanel("athar-live")}
             className={`flex items-center justify-center h-10 w-10 mx-auto rounded-lg transition-colors ${
-              rightPanel === "cars" ? "bg-primary text-primary-foreground" : "hover:bg-muted"
+              rightPanel === "athar-live" ? "bg-primary text-primary-foreground" : "hover:bg-muted"
             }`}
           >
             <CarFront className="h-5 w-5" />
@@ -1669,7 +2197,7 @@ export function MunicipalityMap({
           </button>
           <button
             type="button"
-            title="إحصائيات التتبع الحي"
+            title="لوحة التتبع الحي الموحد"
             onClick={() => openRightPanel("live")}
             className={`flex items-center justify-center h-10 w-10 mx-auto rounded-lg transition-colors ${
               rightPanel === "live" ? "bg-primary text-primary-foreground" : "hover:bg-muted"
@@ -1706,7 +2234,7 @@ export function MunicipalityMap({
                 <div className="text-right">
                   <DialogTitle className="text-lg">الخريطة التفاعلية</DialogTitle>
                   <div className="text-xs text-muted-foreground mt-1">
-                    {activeTab === "live" && `مركبات مباشرة: ${visibleLiveVehicles.length}`}
+                    {activeTab === "live" && `مركبات مباشرة: ${filteredLiveVehicles.length}`}
                     {activeTab === "points" && `نقاط: ${points.length} • نقاط أثر: ${atharMarkers.length}`}
                     {activeTab === "zones" && `مناطق أثر: ${zones.length}`}
                     {activeTab === "objects" && `سيارات أثر: ${atharObjects.length}`}
@@ -1730,5 +2258,3 @@ export function MunicipalityMap({
     </div>
   );
 }
-
-

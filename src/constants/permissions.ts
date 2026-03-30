@@ -235,7 +235,6 @@ export const defaultRoles = {
       'forms_read',
       'form_submissions_read',
       'form_submissions_create',
-      'point_classifications_read',
     ],
   },
   branchAdmin: {

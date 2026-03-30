@@ -53,14 +53,27 @@ type Point = {
 
 type LiveVehicle = {
   id: string;
+  provider: "athar" | "mobile_app" | "traccar";
+  providerLabel: string;
+  vehicleName: string;
+  plateNumber: string | null;
   busNumber: string;
   driverName: string;
+  route: string;
+  routeId: string | null;
   status: "moving" | "stopped" | "offline";
   lastUpdate: string;
+  lastReceivedAt: string | null;
+  lastRecordedAt: string | null;
   speed: number;
   heading: number;
+  accuracy: number | null;
   coordinates: [number, number] | null;
   imei?: string;
+  trackingExternalId?: string | null;
+  deviceName?: string | null;
+  platform?: string | null;
+  appVersion?: string | null;
 };
 
 type AtharZone = {

@@ -258,7 +258,11 @@ export function DashboardNav({ isAdmin: initialIsAdmin, user: initialUser }: Das
           ]))
       )
     }
-    if ((item as any).lineSupervisorCanSee && (userIsOrgAdmin || userIsAdmin)) return true
+    if (
+      (item as any).lineSupervisorCanSee &&
+      (userIsOrgAdmin || userIsAdmin || isBranchAdmin(session?.user?.role as any))
+    )
+      return true
     if (item.permissions?.length) {
       return hasAnyPermission(session?.user?.role as any, item.permissions)
     }

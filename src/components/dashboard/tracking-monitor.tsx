@@ -127,7 +127,7 @@ type OverviewResponse = {
 
 function getProviderLabel(provider: TrackingProvider) {
   if (provider === "mobile_app") return "تطبيق الموبايل"
-  if (provider === "traccar") return "Traccar"
+  if (provider === "traccar") return "تراكار"
   return "أثر"
 }
 
@@ -324,7 +324,7 @@ export function TrackingMonitor() {
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <p className="text-sm text-muted-foreground">
-                مراقبة الحالة الحية، ربط الأجهزة، ودفعات التتبع الواردة من أثر وتطبيق الموبايل، مع جاهزية للتوسع لاحقًا إلى Traccar.
+                مراقبة الحالة الحية، ربط الأجهزة، ودفعات التتبع الواردة من أثر وتطبيق الموبايل، مع جاهزية للتوسع لاحقًا إلى تراكار.
               </p>
             </div>
             <Button variant="outline" onClick={() => void loadOverview(true)} disabled={loading || refreshing}>
@@ -600,7 +600,7 @@ export function TrackingMonitor() {
                             <th className="p-2">{labels.branchLabel || "الفرع"}</th>
                             <th className="p-2">أثر</th>
                             <th className="p-2">تطبيق الموبايل</th>
-                            <th className="p-2">Traccar</th>
+                            <th className="p-2">تراكار</th>
                           </tr>
                         </thead>
                         <tbody>

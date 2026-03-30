@@ -1,9 +1,11 @@
+import Link from "next/link"
 import { getServerSession } from "next-auth"
 import { redirect } from "next/navigation"
-import { authOptions } from "@/lib/auth"
-import { hasPermission, isAdmin } from "@/lib/permissions"
-import { permissionActions, permissionResources } from "@/constants/permissions"
 import { TrackingMonitor } from "@/components/dashboard/tracking-monitor"
+import { Button } from "@/components/ui/button"
+import { authOptions } from "@/lib/auth"
+import { permissionActions, permissionResources } from "@/constants/permissions"
+import { hasPermission, isAdmin } from "@/lib/permissions"
 
 export default async function TrackingPage() {
   const session = await getServerSession(authOptions)
@@ -19,11 +21,16 @@ export default async function TrackingPage() {
 
   return (
     <div className="text-right">
-      <div className="mb-6 lg:mb-8">
-        <h1 className="text-2xl font-bold lg:text-3xl">مراقبة التتبع</h1>
-        <p className="mt-2 text-muted-foreground">
-          متابعة الحالة الحية للمركبات، ربوط الأجهزة، وسجل الدفعات الواردة من مزودات التتبع المختلفة.
-        </p>
+      <div className="mb-6 flex flex-col gap-4 lg:mb-8 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold lg:text-3xl">لوحة مراقبة التتبع</h1>
+          <p className="mt-2 text-muted-foreground">
+            راقب الحالة الحية للمركبات، وربوط التتبع، وآخر الدفعات الواردة من المزوّدات المدعومة.
+          </p>
+        </div>
+        <Button asChild variant="outline">
+          <Link href="/tracking-simulator">فتح محاكي الموبايل</Link>
+        </Button>
       </div>
       <TrackingMonitor />
     </div>

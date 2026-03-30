@@ -72,14 +72,16 @@ export async function getDashboardMapData(branchId: string): Promise<DashboardMa
       const [points, vehicles, atharService] = await Promise.all([
         pointService.getAll(branchId),
         vehicleService.getAll(branchId),
-        AtharService.forBranch(branchId),
+        AtharService.forBranch(branchId).catch(() => null),
       ]);
 
-      const [markers, zonesRaw, objectsRaw] = await Promise.all([
-        atharService.getMarkers(),
-        atharService.getZones(),
-        atharService.getObjects(),
-      ]);
+      const [markers, zonesRaw, objectsRaw] = atharService
+        ? await Promise.all([
+            atharService.getMarkers().catch(() => []),
+            atharService.getZones().catch(() => []),
+            atharService.getObjects().catch(() => []),
+          ])
+        : [[], [], []];
 
       return {
         points: (points as any[]).map(

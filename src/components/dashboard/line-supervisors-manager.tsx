@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import toast from "react-hot-toast"
 import { useLabels } from "@/hooks/use-labels"
 import { apiClient } from "@/lib/api/client"
@@ -43,6 +43,7 @@ type LineSupervisorUser = {
   _id: string
   name: string
   email: string
+  phone?: string
   role?: { name: string; nameAr?: string }
   branchId?: string | { _id: string; name?: string; nameAr?: string } | null
   trackingVehicleId?: string | VehicleOption | null
@@ -64,6 +65,8 @@ interface LineSupervisorsManagerProps {
   initialUsers: LineSupervisorUser[]
   branches: Branch[]
   vehicles: VehicleOption[]
+  /** When set (e.g. مدير فرع)، يقتصر العرض على هذا الفرع دون اختيار من القائمة. */
+  sessionBranchId?: string | null
 }
 
 function resolveBranchLabel(branch?: string | { _id: string; name?: string; nameAr?: string } | null): string {
@@ -121,13 +124,40 @@ export function LineSupervisorsManager({
   initialUsers,
   branches,
   vehicles,
+  sessionBranchId = null,
 }: LineSupervisorsManagerProps) {
   const { labels } = useLabels()
   const [users, setUsers] = useState<LineSupervisorUser[]>(initialUsers)
+  const needsOrgBranchPicker = !sessionBranchId && branches.length > 0
+  const [branchFilterId, setBranchFilterId] = useState(() => sessionBranchId || "")
   const [formOpen, setFormOpen] = useState(false)
   const [editingUser, setEditingUser] = useState<LineSupervisorUser | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [form, setForm] = useState<FormState>(createEmptyForm)
+
+  useEffect(() => {
+    setBranchFilterId(sessionBranchId || "")
+  }, [sessionBranchId])
+
+  const effectiveListBranchId = sessionBranchId || branchFilterId
+
+  const displayUsers = useMemo(() => {
+    if (needsOrgBranchPicker && !branchFilterId) {
+      return []
+    }
+    if (!effectiveListBranchId) {
+      return users
+    }
+    return users.filter((u) => resolveBranchId(u.branchId) === effectiveListBranchId)
+  }, [users, needsOrgBranchPicker, branchFilterId, effectiveListBranchId])
+
+  const scopedBranchLabel = useMemo(() => {
+    if (!sessionBranchId) return ""
+    const b = branches.find((x) => String(x._id) === String(sessionBranchId))
+    return b?.nameAr || b?.name || ""
+  }, [branches, sessionBranchId])
+
+  const canUseCreate = !needsOrgBranchPicker || !!branchFilterId
 
   const decorateUser = useCallback((user: any): LineSupervisorUser => {
     const branch = branches.find((item) => String(item._id) === String(user.branchId))
@@ -165,9 +195,14 @@ export function LineSupervisorsManager({
   }, [vehicles, form.branchId])
 
   const openCreate = useCallback(() => {
-    resetForm()
+    setEditingUser(null)
+    const preBranch = effectiveListBranchId || branchFilterId
+    setForm({
+      ...createEmptyForm(),
+      branchId: preBranch || "",
+    })
     setFormOpen(true)
-  }, [resetForm])
+  }, [effectiveListBranchId, branchFilterId])
 
   const openEdit = useCallback((user: LineSupervisorUser) => {
     setEditingUser(user)
@@ -251,23 +286,67 @@ export function LineSupervisorsManager({
     <>
       <Card className="text-right">
         <CardHeader>
-          <div className="flex items-center justify-between flex-row-reverse">
-            <CardTitle className="text-right">قائمة {labels.lineSupervisorLabel} ({users.length})</CardTitle>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:flex-row-reverse">
+            <div className="space-y-1">
+              <CardTitle className="text-right">
+                قائمة {labels.lineSupervisorLabel} ({displayUsers.length}
+                {users.length !== displayUsers.length ? ` / ${users.length}` : ""})
+              </CardTitle>
+              {sessionBranchId && scopedBranchLabel ? (
+                <p className="text-sm text-muted-foreground">
+                  الفرع الحالي: {scopedBranchLabel}
+                </p>
+              ) : null}
+            </div>
             <ActionButton
               action="create"
               onClick={openCreate}
               customLabel={`إضافة ${labels.lineSupervisorLabel}`}
+              disabled={!canUseCreate}
             />
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
+          {needsOrgBranchPicker ? (
+            <div className="flex flex-wrap items-center gap-3 rounded-lg border border-dashed bg-muted/20 p-4">
+              <span className="text-sm text-muted-foreground">
+                لعرض {labels.lineSupervisorLabel} ومعلوماتهم على مستوى المؤسسة، اختر {labels.branchLabel || "الفرع"}:
+              </span>
+              <Select
+                value={branchFilterId || "__none__"}
+                onValueChange={(v) => setBranchFilterId(v === "__none__" ? "" : v)}
+              >
+                <SelectTrigger className="w-[min(100%,280px)] text-right">
+                  <SelectValue placeholder={`— اختر ${labels.branchLabel || "الفرع"} —`} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">— لم يُحدد بعد —</SelectItem>
+                  {branches.map((branch) => (
+                    <SelectItem key={branch._id} value={branch._id}>
+                      {branch.nameAr || branch.name || branch._id}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : null}
+
+          {needsOrgBranchPicker && !branchFilterId ? (
+            <p className="rounded-lg border bg-muted/10 p-4 text-sm text-muted-foreground text-center">
+              يرجى اختيار {labels.branchLabel || "الفرع"} أعلاه لعرض الجدول وإضافة {labels.lineSupervisorLabel} الجدد.
+            </p>
+          ) : null}
+
           <div className="rounded-lg border overflow-hidden">
             <table className="w-full text-sm text-right">
               <thead className="bg-muted/50 border-b">
                 <tr>
                   <th className="p-3 font-medium">الاسم</th>
                   <th className="p-3 font-medium">البريد الإلكتروني</th>
-                  <th className="p-3 font-medium">{labels.branchLabel || "الفرع"}</th>
+                  <th className="p-3 font-medium">الهاتف</th>
+                  {sessionBranchId ? null : (
+                    <th className="p-3 font-medium">{labels.branchLabel || "الفرع"}</th>
+                  )}
                   <th className="p-3 font-medium">{labels.vehicleLabel || "المركبة"}</th>
                   <th className="p-3 font-medium text-center">الحالة</th>
                   <th className="p-3 font-medium">تاريخ الإضافة</th>
@@ -275,18 +354,28 @@ export function LineSupervisorsManager({
                 </tr>
               </thead>
               <tbody>
-                {users.length === 0 ? (
+                {displayUsers.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="p-6 text-center text-muted-foreground">
-                      لا يوجد {labels.lineSupervisorLabel} بعد. اضغط &quot;إضافة {labels.lineSupervisorLabel}&quot; للبدء.
+                    <td
+                      colSpan={sessionBranchId ? 7 : 8}
+                      className="p-6 text-center text-muted-foreground"
+                    >
+                      {needsOrgBranchPicker && !branchFilterId
+                        ? `اختر ${labels.branchLabel || "الفرع"} لعرض ${labels.lineSupervisorLabel}.`
+                        : users.length === 0
+                          ? `لا يوجد ${labels.lineSupervisorLabel} بعد. اضغط «إضافة» للبدء.`
+                          : `لا يوجد ${labels.lineSupervisorLabel} في ${labels.branchLabel || "هذا الفرع"}.`}
                     </td>
                   </tr>
                 ) : (
-                  users.map((user) => (
+                  displayUsers.map((user) => (
                     <tr key={user._id} className="border-b last:border-0 hover:bg-muted/30">
                       <td className="p-3">{user.name}</td>
                       <td className="p-3">{user.email}</td>
-                      <td className="p-3">{resolveBranchLabel(user.branchId)}</td>
+                      <td className="p-3 text-muted-foreground">{user.phone?.trim() || "—"}</td>
+                      {sessionBranchId ? null : (
+                        <td className="p-3">{resolveBranchLabel(user.branchId)}</td>
+                      )}
                       <td className="p-3">{resolveVehicleLabel(user.trackingVehicleId, vehicles)}</td>
                       <td className="p-3 text-center">
                         <span
