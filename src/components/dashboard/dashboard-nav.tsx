@@ -110,6 +110,13 @@ export function DashboardNav({ isAdmin: initialIsAdmin, user: initialUser }: Das
       },
       {
         group: "branchOps" as const,
+        title: "مراقبة التتبع",
+        href: "/dashboard/tracking",
+        icon: Activity,
+        permissions: [{ resource: permissionResources.VEHICLES, action: permissionActions.READ }],
+      },
+      {
+        group: "branchOps" as const,
         title: labels.driverLabel || "السائقون",
         href: "/dashboard/drivers",
         icon: Users,

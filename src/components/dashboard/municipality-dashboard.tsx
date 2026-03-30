@@ -935,7 +935,7 @@ export function MunicipalityDashboard({
               <div className="grid gap-4 lg:grid-cols-2">
                 <div className="rounded-lg border bg-card p-4 text-right">
                   <div className="flex items-center justify-end gap-1 mb-1">
-                    <Info className="h-3.5 w-3.5 text-muted-foreground" title="عدد النقاط التي تمت زيارتها يومياً." />
+                    <Info className="h-3.5 w-3.5 text-muted-foreground" />
                     <h3 className="text-sm font-semibold">{labels.pointLabel} المنجزة يومياً</h3>
                   </div>
                   <div className="h-52">
@@ -953,7 +953,7 @@ export function MunicipalityDashboard({
 
                 <div className="rounded-lg border bg-card p-4 text-right">
                   <div className="flex items-center justify-end gap-1 mb-1">
-                    <Info className="h-3.5 w-3.5 text-muted-foreground" title="إجمالي أحداث الدخول والخروج يومياً." />
+                    <Info className="h-3.5 w-3.5 text-muted-foreground" />
                     <h3 className="text-sm font-semibold">الأحداث اليومية</h3>
                   </div>
                   <div className="h-52">
@@ -973,7 +973,7 @@ export function MunicipalityDashboard({
               <div className="grid gap-4 lg:grid-cols-2">
                 <div className="rounded-lg border bg-card p-4 text-right">
                   <div className="flex items-center justify-end gap-1 mb-1">
-                    <Info className="h-3.5 w-3.5 text-muted-foreground" title="متوسط مدة بقاء المركبة داخل النقطة." />
+                    <Info className="h-3.5 w-3.5 text-muted-foreground" />
                     <h3 className="text-sm font-semibold">متوسط وقت الخدمة (دقائق)</h3>
                   </div>
                   <div className="h-52">
@@ -991,7 +991,7 @@ export function MunicipalityDashboard({
 
                 <div className="rounded-lg border bg-card p-4 text-right">
                   <div className="flex items-center justify-end gap-1 mb-1">
-                    <Info className="h-3.5 w-3.5 text-muted-foreground" title="مقارنة شهرية للنقاط المخدومة." />
+                    <Info className="h-3.5 w-3.5 text-muted-foreground" />
                     <h3 className="text-sm font-semibold">{labels.pointLabel} الشهرية</h3>
                   </div>
                   <div className="h-52">
@@ -1346,4 +1346,5 @@ export function MunicipalityDashboard({
     </div>
   );
 }
+
 

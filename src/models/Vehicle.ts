@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document, Model } from 'mongoose';
+import { trackingProviders, type TrackingProvider } from '@/lib/tracking/types';
 
 export type VehicleFuelType = 'gasoline' | 'diesel';
 
@@ -6,7 +7,8 @@ export interface IVehicle extends Document {
   branchId: mongoose.Types.ObjectId;
   name: string;
   plateNumber?: string;
-  imei: string;
+  imei?: string | null;
+  trackingProvider: TrackingProvider;
   fuelType?: VehicleFuelType;
   fuelPricePerKm?: number;
   atharObjectId?: string;
@@ -37,8 +39,14 @@ const VehicleSchema: Schema = new Schema(
     },
     imei: {
       type: String,
-      required: true,
       trim: true,
+      default: null,
+    },
+    trackingProvider: {
+      type: String,
+      enum: trackingProviders,
+      default: 'athar',
+      index: true,
     },
     fuelType: {
       type: String,
@@ -74,7 +82,15 @@ const VehicleSchema: Schema = new Schema(
   }
 );
 
-VehicleSchema.index({ branchId: 1, imei: 1 }, { unique: true });
+VehicleSchema.index(
+  { branchId: 1, imei: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      imei: { $exists: true, $type: 'string', $ne: '' },
+    },
+  }
+);
 VehicleSchema.index({ branchId: 1, name: 1 });
 
 let Vehicle: Model<IVehicle>;

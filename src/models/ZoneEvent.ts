@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document, Model } from 'mongoose';
+import { trackingProviders, type TrackingProvider } from '@/lib/tracking/types';
 
 export type ZoneEventType = 'zone_in' | 'zone_out';
 
@@ -9,6 +10,8 @@ export interface IZoneEvent extends Document {
   pointId?: mongoose.Types.ObjectId;
   zoneId?: string;
   imei?: string;
+  provider?: TrackingProvider;
+  providerEventId?: string;
   atharEventId?: string;
   name?: string;
   driverName?: string;
@@ -57,6 +60,18 @@ const ZoneEventSchema: Schema = new Schema(
       index: true,
     },
     imei: {
+      type: String,
+      trim: true,
+      default: null,
+      index: true,
+    },
+    provider: {
+      type: String,
+      enum: trackingProviders,
+      default: 'athar',
+      index: true,
+    },
+    providerEventId: {
       type: String,
       trim: true,
       default: null,
@@ -112,6 +127,7 @@ const ZoneEventSchema: Schema = new Schema(
 );
 
 ZoneEventSchema.index({ branchId: 1, atharEventId: 1 });
+ZoneEventSchema.index({ branchId: 1, provider: 1, providerEventId: 1 });
 ZoneEventSchema.index({ branchId: 1, zoneId: 1, imei: 1, eventTimestamp: 1 });
 ZoneEventSchema.index({ branchId: 1, eventTimestamp: -1 });
 

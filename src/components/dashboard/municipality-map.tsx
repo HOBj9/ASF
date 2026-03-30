@@ -1076,7 +1076,7 @@ export function MunicipalityMap({
                       </div>
                     )}
                     {points.length > 0 && pointTypeFilter && points.filter((p) => p.type === pointTypeFilter).length === 0 && (
-                      <div className="py-3 text-center text-xs text-muted-foreground">لا توجد نقاط من نوع "{pointTypeLabels[pointTypeFilter] || pointTypeFilter}".</div>
+                      <div className="py-3 text-center text-xs text-muted-foreground">لا توجد نقاط من نوع &quot;{pointTypeLabels[pointTypeFilter] || pointTypeFilter}&quot;.</div>
                     )}
                   </div>
                   {selectedPoint ? (
@@ -1730,3 +1730,5 @@ export function MunicipalityMap({
     </div>
   );
 }
+
+

@@ -9,6 +9,7 @@ declare module "next-auth" {
       avatar?: string | null;
       branchId?: string | null;
       organizationId?: string | null;
+      trackingVehicleId?: string | null;
       isActive?: boolean;
       originalAdminId?: string;
       originalAdminName?: string;
@@ -24,6 +25,7 @@ declare module "next-auth/jwt" {
     avatar?: string | null;
     branchId?: string | null;
     organizationId?: string | null;
+    trackingVehicleId?: string | null;
     isActive?: boolean;
     originalAdminId?: string;
     originalAdminName?: string;

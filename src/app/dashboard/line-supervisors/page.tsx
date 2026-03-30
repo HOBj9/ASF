@@ -33,6 +33,14 @@ export default async function LineSupervisorsPage() {
   const lineSupervisorRole = await Role.findOne({ name: "line_supervisor" }).select("_id").lean()
   const Branch = (await import("@/models/Branch")).default
   const branches = await Branch.find({ organizationId }).select("name nameAr _id").sort({ name: 1 }).lean()
+  const Vehicle = (await import("@/models/Vehicle")).default
+  const branchIds = branches.map((branch: any) => branch._id)
+  const vehicles = branchIds.length
+    ? await Vehicle.find({ branchId: { $in: branchIds }, isActive: true })
+        .select("name plateNumber branchId trackingProvider")
+        .sort({ name: 1 })
+        .lean()
+    : []
   const initialUsers = lineSupervisorRole
     ? await User.find({
         organizationId,
@@ -40,6 +48,7 @@ export default async function LineSupervisorsPage() {
       })
         .populate("role", "name nameAr")
         .populate("branchId", "name nameAr")
+        .populate("trackingVehicleId", "name plateNumber branchId trackingProvider")
         .sort({ createdAt: -1 })
         .lean()
     : []
@@ -54,6 +63,7 @@ export default async function LineSupervisorsPage() {
         organizationId={organizationId}
         initialUsers={JSON.parse(JSON.stringify(initialUsers))}
         branches={JSON.parse(JSON.stringify(branches))}
+        vehicles={JSON.parse(JSON.stringify(vehicles))}
       />
     </div>
   )

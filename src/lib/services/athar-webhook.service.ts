@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import connectDB from '@/lib/mongodb';
 import IncomingAtharEvent from '@/models/IncomingAtharEvent';
+import TrackingIngressMessage from '@/models/TrackingIngressMessage';
 import Branch from '@/models/Branch';
 import Vehicle from '@/models/Vehicle';
 import Driver from '@/models/Driver';
@@ -11,6 +12,8 @@ import { getZonedDateString } from '@/lib/utils/timezone.util';
 import { getZoneEventFeedItemById } from '@/lib/services/zone-event-feed.service';
 import { publishZoneEventUpdate } from '@/lib/services/zone-event-stream-bus.service';
 import { extractNumericZoneId, resolveAtharPoint } from '@/lib/utils/athar-point.util';
+import { TrackingEventProcessorService } from '@/lib/services/tracking-event-processor.service';
+import { resolveAtharProviderConfig } from '@/lib/trackingcore/provider-config';
 
 type WebhookMethod = 'GET' | 'POST';
 type ZoneEventType = 'zone_in' | 'zone_out';
@@ -55,6 +58,7 @@ interface BranchImeisCacheEntry {
 
 const imeiBranchCache = new Map<string, ImeiBranchCacheEntry>();
 const branchImeisCache = new Map<string, BranchImeisCacheEntry>();
+const trackingEventProcessor = new TrackingEventProcessorService();
 
 function pickFirstString(...values: Array<unknown>): string | null {
   for (const value of values) {
@@ -135,15 +139,14 @@ function normalizeAtharObjects(payload: any): any[] {
 }
 
 async function fetchAtharObjectsByBranchId(branchId: string): Promise<any[]> {
-  const branch = await Branch.findById(branchId).select('atharKey').lean();
-  const atharKey = typeof branch?.atharKey === 'string' ? branch.atharKey.trim() : '';
-  if (!atharKey) return [];
+  const resolvedConfig = await resolveAtharProviderConfig(branchId);
+  if (!resolvedConfig?.apiKey) return [];
 
-  const url = new URL(process.env.ATHAR_BASE_URL || 'https://admin.alather.net/api/api.php');
+  const url = new URL(resolvedConfig.baseUrl);
   url.searchParams.set('cmd', 'USER_GET_OBJECTS');
-  url.searchParams.set('api', process.env.ATHAR_API_TYPE || 'user');
-  url.searchParams.set('ver', process.env.ATHAR_VERSION || '1.0');
-  url.searchParams.set('key', atharKey);
+  url.searchParams.set('api', resolvedConfig.api);
+  url.searchParams.set('ver', resolvedConfig.version);
+  url.searchParams.set('key', resolvedConfig.apiKey);
 
   const response = await fetch(url.toString(), {
     method: 'GET',
@@ -317,6 +320,18 @@ async function updateIncomingRecord(incomingId: string, updates: Record<string, 
   }
 }
 
+async function updateTrackingIngressRecord(
+  trackingIngressId: string | null,
+  updates: Record<string, any>
+): Promise<void> {
+  if (!trackingIngressId) return;
+  try {
+    await TrackingIngressMessage.findByIdAndUpdate(trackingIngressId, updates).exec();
+  } catch (error) {
+    console.error('[Athar Webhook] failed to update tracking ingress record:', error);
+  }
+}
+
 export async function handleAtharWebhookRequest(
   request: Request,
   method: WebhookMethod
@@ -324,6 +339,7 @@ export async function handleAtharWebhookRequest(
   await connectDB();
 
   let incomingRecordId: string | null = null;
+  let trackingIngressId: string | null = null;
 
   try {
     const parsed = await parseWebhookPayload(request, method);
@@ -352,10 +368,41 @@ export async function handleAtharWebhookRequest(
     });
     incomingRecordId = String(incomingRecord._id);
 
+    const providerMessageId =
+      parsed.eventId ||
+      `${method}:${parsed.imei || 'unknown'}:${parsed.type || 'unknown'}:${parsed.zoneIdNormalized || parsed.zoneName || 'unknown'}:${parsed.timestampRaw || 'now'}`;
+    try {
+      const trackingIngressRecord = await TrackingIngressMessage.create({
+        provider: 'athar',
+        providerMessageId,
+        rawPayload: parsed.rawPayload,
+        receivedAt: new Date(),
+        status: 'received',
+      });
+      trackingIngressId = String(trackingIngressRecord._id);
+    } catch (error: any) {
+      if (error?.code === 11000) {
+        const existingIngress = await TrackingIngressMessage.findOne({
+          provider: 'athar',
+          providerMessageId,
+        })
+          .select('_id')
+          .lean();
+        trackingIngressId = existingIngress?._id ? String(existingIngress._id) : null;
+      } else {
+        throw error;
+      }
+    }
+
     const configuredSecret = process.env.ATHAR_WEBHOOK_SECRET || '';
     if (configuredSecret && parsed.secret !== configuredSecret) {
       await updateIncomingRecord(incomingRecordId, {
         processingStatus: 'rejected',
+        errorMessage: 'unauthorized',
+      });
+      await updateTrackingIngressRecord(trackingIngressId, {
+        status: 'rejected',
+        processedAt: new Date(),
         errorMessage: 'unauthorized',
       });
       return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
@@ -366,12 +413,22 @@ export async function handleAtharWebhookRequest(
         processingStatus: 'rejected',
         errorMessage: 'missing required fields',
       });
+      await updateTrackingIngressRecord(trackingIngressId, {
+        status: 'rejected',
+        processedAt: new Date(),
+        errorMessage: 'missing required fields',
+      });
       return NextResponse.json({ error: 'بيانات ناقصة' }, { status: 400 });
     }
 
     if (parsed.type !== 'zone_in' && parsed.type !== 'zone_out') {
       await updateIncomingRecord(incomingRecordId, {
         processingStatus: 'rejected',
+        errorMessage: 'unsupported event type',
+      });
+      await updateTrackingIngressRecord(trackingIngressId, {
+        status: 'rejected',
+        processedAt: new Date(),
         errorMessage: 'unsupported event type',
       });
       return NextResponse.json({ error: 'نوع حدث غير مدعوم' }, { status: 400 });
@@ -397,6 +454,12 @@ export async function handleAtharWebhookRequest(
           processingStatus: 'duplicate',
           branchId: duplicate.branchId,
           zoneEventId: duplicate._id,
+          errorMessage: null,
+        });
+        await updateTrackingIngressRecord(trackingIngressId, {
+          branchId: duplicate.branchId,
+          status: 'duplicate',
+          processedAt: new Date(),
           errorMessage: null,
         });
         return NextResponse.json({ success: true, duplicate: true });
@@ -438,6 +501,22 @@ export async function handleAtharWebhookRequest(
       }).lean();
     }
 
+    if (vehicle && (vehicle.trackingProvider || 'athar') !== 'athar') {
+      await updateIncomingRecord(incomingRecordId, {
+        processingStatus: 'rejected',
+        branchId: vehicle.branchId,
+        errorMessage: 'vehicle provider is not athar',
+      });
+      await updateTrackingIngressRecord(trackingIngressId, {
+        branchId: vehicle.branchId,
+        vehicleId: vehicle._id,
+        status: 'rejected',
+        processedAt: new Date(),
+        errorMessage: 'vehicle provider is not athar',
+      });
+      return NextResponse.json({ success: true, ignored: true });
+    }
+
     if (!point && branchId) {
       point = await resolveAtharPoint({
         branchId,
@@ -469,9 +548,64 @@ export async function handleAtharWebhookRequest(
         processingStatus: 'rejected',
         errorMessage: 'branch not found',
       });
+      await updateTrackingIngressRecord(trackingIngressId, {
+        status: 'rejected',
+        processedAt: new Date(),
+        errorMessage: 'branch not found',
+      });
       return NextResponse.json({ error: 'لم يتم العثور على الفرع' }, { status: 404 });
     }
 
+    {
+      const processedEventTimestamp = parseFlexibleTimestamp(parsed.timestampRaw) || new Date();
+      let processedDriver: any = null;
+
+      if (vehicle?.driverId) {
+        processedDriver = await Driver.findById(vehicle.driverId).select('name').lean();
+      }
+
+      const processedPointName =
+        point?.nameAr ||
+        point?.name ||
+        normalizeZoneLabel(parsed.zoneName) ||
+        normalizeZoneLabel(parsed.zoneIdNormalized) ||
+        normalizeZoneLabel(extractNumericZoneId(parsed.desc)) ||
+        'Ù†Ù‚Ø·Ø© ØºÙŠØ± Ù…Ø¹Ø±ÙˆÙØ©';
+      const processedEventName = `${processedPointName} - ${zoneEventType === 'zone_in' ? 'Ø¯Ø®ÙˆÙ„' : 'Ø®Ø±ÙˆØ¬'}`;
+
+      const processedZoneEvent = await trackingEventProcessor.processZoneTransition({
+        branchId,
+        provider: 'athar',
+        providerEventId: parsed.eventId || null,
+        type: zoneEventType,
+        eventTimestamp: processedEventTimestamp,
+        vehicle,
+        point,
+        zoneId: resolvedZoneId,
+        imei: parsed.imei,
+        rawPayload: parsed.rawPayload,
+        eventName: processedEventName,
+        driverName: processedDriver?.name || null,
+      });
+
+      await updateIncomingRecord(incomingRecordId, {
+        processingStatus: 'processed',
+        branchId,
+        zoneEventId: processedZoneEvent._id,
+        errorMessage: null,
+      });
+      await updateTrackingIngressRecord(trackingIngressId, {
+        branchId,
+        vehicleId: vehicle?._id || null,
+        status: 'processed',
+        processedAt: new Date(),
+        errorMessage: null,
+      });
+
+      return NextResponse.json({ success: true, duplicate: false });
+    }
+
+    /*
     const eventTimestamp = parseFlexibleTimestamp(parsed.timestampRaw) || new Date();
     let driver: any = null;
 
@@ -662,6 +796,7 @@ export async function handleAtharWebhookRequest(
     });
 
     return NextResponse.json({ success: true, duplicate: false });
+    */
   } catch (error: any) {
     console.error('[Athar Webhook] processing error:', error);
     if (incomingRecordId) {
@@ -670,6 +805,11 @@ export async function handleAtharWebhookRequest(
         errorMessage: error?.message || 'internal error',
       });
     }
+    await updateTrackingIngressRecord(trackingIngressId, {
+      status: 'error',
+      processedAt: new Date(),
+      errorMessage: error?.message || 'internal error',
+    });
     return NextResponse.json(
       { error: error?.message || 'Internal server error' },
       { status: 500 }

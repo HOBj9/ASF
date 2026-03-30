@@ -1,8 +1,10 @@
 import connectDB from '@/lib/mongodb';
 import Vehicle from '@/models/Vehicle';
 import Driver from '@/models/Driver';
-import Branch from '@/models/Branch';
+import TrackingVehicleState from '@/models/TrackingVehicleState';
 import { AtharService } from '@/lib/services/athar.service';
+import { isTrackingStateOffline, resolveTrackingConnectivityStatus } from '@/lib/trackingcore/connectivity';
+import { resolveAtharProviderConfig } from '@/lib/trackingcore/provider-config';
 
 export type VehicleLiveLocationItem = {
   id: string;
@@ -25,21 +27,17 @@ function createVehicleLabel(vehicleId: string): string {
 }
 
 export class LiveTrackingService {
-  private async resolveAtharService(branchId: string): Promise<AtharService> {
-    await connectDB();
-    const branch = await Branch.findById(branchId).select('atharKey').lean();
-    const apiKey =
-      branch?.atharKey || process.env.ATHAR_API_KEY || process.env.ATHAR_API_KEY1 || '';
-
-    if (!apiKey) {
-      throw new Error('مفتاح أثر غير مهيأ لهذا الفرع');
+  private async resolveAtharService(branchId: string): Promise<AtharService | null> {
+    const resolvedConfig = await resolveAtharProviderConfig(branchId);
+    if (!resolvedConfig?.apiKey) {
+      return null;
     }
 
     return new AtharService({
-      baseUrl: process.env.ATHAR_BASE_URL || 'https://admin.alather.net/api/api.php',
-      apiKey,
-      api: process.env.ATHAR_API || process.env.ATHAR_API_TYPE || 'user',
-      version: process.env.ATHAR_VERSION || '1.0',
+      baseUrl: resolvedConfig.baseUrl,
+      apiKey: resolvedConfig.apiKey,
+      api: resolvedConfig.api,
+      version: resolvedConfig.version,
     });
   }
 
@@ -48,17 +46,16 @@ export class LiveTrackingService {
 
     const vehicles = await Vehicle.find({
       branchId,
-      imei: { $ne: null },
       isActive: true,
     })
-      .select('name plateNumber imei driverId')
+      .select('name plateNumber imei driverId trackingProvider')
       .lean();
 
     if (!vehicles.length) return [];
 
     const driverIds = vehicles
-      .map((v) => (v.driverId ? String(v.driverId) : null))
-      .filter((v): v is string => !!v);
+      .map((vehicle) => (vehicle.driverId ? String(vehicle.driverId) : null))
+      .filter((value): value is string => Boolean(value));
 
     const driverMap = new Map<string, string>();
     if (driverIds.length) {
@@ -68,54 +65,110 @@ export class LiveTrackingService {
       }
     }
 
-    const imeis = vehicles
-      .map((v) => String(v.imei || '').trim())
-      .filter(Boolean);
+    const atharVehicles = vehicles.filter(
+      (vehicle) => (vehicle.trackingProvider || 'athar') === 'athar' && String(vehicle.imei || '').trim()
+    );
+    const managedStateVehicles = vehicles.filter(
+      (vehicle) => (vehicle.trackingProvider || 'athar') !== 'athar'
+    );
 
-    const athar = await this.resolveAtharService(branchId);
-    const locationsByImei = await athar.getObjectLocations(imeis);
+    const [atharService, trackingStates] = await Promise.all([
+      atharVehicles.length ? this.resolveAtharService(branchId) : Promise.resolve(null),
+      managedStateVehicles.length
+        ? TrackingVehicleState.find({
+            branchId,
+            vehicleId: { $in: managedStateVehicles.map((vehicle) => vehicle._id) },
+          })
+            .lean()
+            .exec()
+        : Promise.resolve([]),
+    ]);
+
+    const locationsByImei =
+      atharService && atharVehicles.length
+        ? await atharService.getObjectLocations(
+            atharVehicles.map((vehicle) => String(vehicle.imei || '').trim()).filter(Boolean)
+          )
+        : {};
+    const trackingStateByVehicleId = new Map(
+      trackingStates.map((state) => [String(state.vehicleId), state])
+    );
 
     return vehicles.map((vehicle) => {
-      const imei = String(vehicle.imei || '').trim();
-      const info = locationsByImei[imei];
-      const hasCoordinates =
-        info && info.lat !== null && info.lng !== null && Number.isFinite(info.lat) && Number.isFinite(info.lng);
       const driverName =
         (vehicle.driverId ? driverMap.get(String(vehicle.driverId)) : null) || 'غير محدد';
+      const imei = String(vehicle.imei || '').trim() || undefined;
+      const trackingProvider = vehicle.trackingProvider || 'athar';
 
-      if (hasCoordinates) {
-        const status: VehicleLiveLocationItem['status'] = info.engineStatus ? 'moving' : 'stopped';
+      if (trackingProvider === 'athar') {
+        const info = imei ? locationsByImei[imei] : null;
+        const hasCoordinates =
+          info &&
+          info.lat !== null &&
+          info.lng !== null &&
+          Number.isFinite(info.lat) &&
+          Number.isFinite(info.lng);
+
+        if (hasCoordinates) {
+          const status: VehicleLiveLocationItem['status'] = info.engineStatus ? 'moving' : 'stopped';
+          return {
+            id: String(vehicle._id),
+            busNumber: vehicle.plateNumber || vehicle.name || createVehicleLabel(String(vehicle._id)),
+            driverName,
+            route: 'غير محدد',
+            status,
+            lastUpdate: 'منذ لحظات',
+            passengers: 0,
+            capacity: 40,
+            speed: Number(info.speed || 0),
+            heading: Number(info.heading ?? 0),
+            coordinates: [Number(info.lat), Number(info.lng)],
+            imei,
+            engineStatus: !!info.engineStatus,
+          };
+        }
+
         return {
           id: String(vehicle._id),
           busNumber: vehicle.plateNumber || vehicle.name || createVehicleLabel(String(vehicle._id)),
           driverName,
           route: 'غير محدد',
-          status,
-          lastUpdate: 'منذ لحظات',
+          status: 'offline',
+          lastUpdate: 'غير متصل',
           passengers: 0,
           capacity: 40,
-          speed: Number(info.speed || 0),
-          heading: Number(info.heading ?? 0),
-          coordinates: [Number(info.lat), Number(info.lng)],
+          speed: 0,
+          heading: 0,
+          coordinates: null,
           imei,
-          engineStatus: !!info.engineStatus,
+          engineStatus: false,
         };
       }
+
+      const state = trackingStateByVehicleId.get(String(vehicle._id));
+      const lastReceivedAt = state?.lastReceivedAt ? new Date(state.lastReceivedAt) : null;
+      const offline = isTrackingStateOffline(lastReceivedAt);
+      const status = resolveTrackingConnectivityStatus(state?.speed, lastReceivedAt);
 
       return {
         id: String(vehicle._id),
         busNumber: vehicle.plateNumber || vehicle.name || createVehicleLabel(String(vehicle._id)),
         driverName,
         route: 'غير محدد',
-        status: 'offline',
-        lastUpdate: 'غير متصل',
+        status: offline ? 'offline' : status,
+        lastUpdate: offline ? 'غير متصل' : 'منذ لحظات',
         passengers: 0,
         capacity: 40,
-        speed: 0,
-        heading: 0,
-        coordinates: null,
+        speed: Number(state?.speed || 0),
+        heading: Number(state?.heading || 0),
+        coordinates:
+          state?.lastLocation &&
+          Number.isFinite(Number(state.lastLocation.lat)) &&
+          Number.isFinite(Number(state.lastLocation.lng))
+            ? [Number(state.lastLocation.lat), Number(state.lastLocation.lng)]
+            : null,
         imei,
-        engineStatus: false,
+        engineStatus: !offline && status === 'moving',
       };
     });
   }

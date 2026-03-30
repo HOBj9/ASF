@@ -189,6 +189,13 @@ export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarP
     },
     {
       group: "branchOps" as const,
+      title: "مراقبة التتبع",
+      href: "/dashboard/tracking",
+      icon: Activity,
+      permissions: [{ resource: permissionResources.VEHICLES, action: permissionActions.READ }],
+    },
+    {
+      group: "branchOps" as const,
       title: labels.driverLabel || "السائقون",
       href: "/dashboard/drivers",
       icon: Users,

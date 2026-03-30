@@ -32,7 +32,8 @@ type Vehicle = {
   _id: string
   name: string
   plateNumber?: string
-  imei: string
+  imei?: string | null
+  trackingProvider?: "athar" | "mobile_app" | "traccar"
   fuelType?: "gasoline" | "diesel"
   fuelPricePerKm?: number
   driverId?: string
@@ -53,10 +54,23 @@ type Branch = {
   fuelPricePerKmDiesel?: number
 }
 
+function getTrackingProviderLabel(provider?: Vehicle["trackingProvider"]) {
+  switch (provider) {
+    case "mobile_app":
+      return "تطبيق الموبايل"
+    case "traccar":
+      return "Traccar"
+    case "athar":
+    default:
+      return "أثر"
+  }
+}
+
 const emptyForm: Partial<Vehicle> = {
   name: "",
   plateNumber: "",
   imei: "",
+  trackingProvider: "athar",
   fuelType: "gasoline",
   fuelPricePerKm: undefined,
   driverId: "",
@@ -80,6 +94,7 @@ export function VehiclesManager() {
   const [statusFilter, setStatusFilter] = useState("all")
   const [driverFilter, setDriverFilter] = useState("all")
   const [routeFilter, setRouteFilter] = useState("all")
+  const [providerFilter, setProviderFilter] = useState("all")
   const [page, setPage] = useState(1)
 
   const [open, setOpen] = useState(false)
@@ -218,17 +233,18 @@ export function VehiclesManager() {
 
       if (routeFilter === "with" && !item.routeId) return false
       if (routeFilter === "without" && item.routeId) return false
+      if (providerFilter !== "all" && (item.trackingProvider || "athar") !== providerFilter) return false
 
       if (!q) return true
 
       const driverName = drivers.find((d) => d._id === item.driverId)?.name || ""
       const routeName = routes.find((r) => r._id === item.routeId)?.name || ""
 
-      return `${item.name} ${item.plateNumber || ""} ${item.imei} ${driverName} ${routeName}`
+      return `${item.name} ${item.plateNumber || ""} ${item.imei || ""} ${getTrackingProviderLabel(item.trackingProvider)} ${driverName} ${routeName}`
         .toLowerCase()
         .includes(q)
     })
-  }, [items, search, statusFilter, driverFilter, routeFilter, drivers, routes])
+  }, [items, search, statusFilter, driverFilter, routeFilter, providerFilter, drivers, routes])
 
   const totalPages = Math.max(1, Math.ceil(filteredItems.length / PAGE_SIZE))
   const paginatedItems = useMemo(() => {
@@ -281,7 +297,7 @@ export function VehiclesManager() {
 
   useEffect(() => {
     setPage(1)
-  }, [search, statusFilter, driverFilter, routeFilter])
+  }, [search, statusFilter, driverFilter, routeFilter, providerFilter])
 
   useEffect(() => {
     if (page > totalPages) setPage(totalPages)
@@ -298,6 +314,8 @@ export function VehiclesManager() {
     setForm({
       ...item,
       plateNumber: item.plateNumber || "",
+      imei: item.imei || "",
+      trackingProvider: item.trackingProvider || "athar",
       fuelType: item.fuelType || "gasoline",
       fuelPricePerKm: item.fuelPricePerKm,
       driverId: item.driverId || "",
@@ -309,14 +327,20 @@ export function VehiclesManager() {
   const submit = async () => {
     const payload: Partial<Vehicle> & { branchId?: string } = {
       ...form,
+      trackingProvider: form.trackingProvider || "athar",
       fuelType: form.fuelType === "diesel" ? "diesel" : "gasoline",
       driverId: form.driverId === "none" ? "" : form.driverId,
       routeId: form.routeId === "none" ? "" : form.routeId,
       fuelPricePerKm: form.fuelPricePerKm != null ? Number(form.fuelPricePerKm) : undefined,
     }
 
-    if (!payload.name || !payload.imei) {
-      toast.error("الاسم ورقم IMEI مطلوبان")
+    if (!payload.name) {
+      toast.error("الاسم مطلوب")
+      return
+    }
+
+    if ((payload.trackingProvider || "athar") === "athar" && !String(payload.imei || "").trim()) {
+      toast.error("رقم IMEI مطلوب للمركبات التي تعمل عبر أثر")
       return
     }
 
@@ -385,8 +409,15 @@ export function VehiclesManager() {
     }
 
     try {
-      await apiClient.patch(`/vehicles/${assigning._id}`, { routeId: assignRouteId })
-      toast.success(`تم ربط ${labels.vehicleLabel} بـ ${labels.routeLabel} وإنشاء أحداث Athar`)
+      await apiClient.patch(`/vehicles/${assigning._id}`, {
+        routeId: assignRouteId,
+        branchId: resolvedBranchId || undefined,
+      })
+      toast.success(
+        (assigning.trackingProvider || "athar") === "athar"
+          ? `تم ربط ${labels.vehicleLabel} بـ ${labels.routeLabel} وتجهيز أحداث أثر`
+          : `تم ربط ${labels.vehicleLabel} بـ ${labels.routeLabel}`
+      )
       setAssignOpen(false)
       setAssigning(null)
       setAssignRouteId("")
@@ -399,7 +430,8 @@ export function VehiclesManager() {
   const remove = async (item: Vehicle) => {
     if (!confirm(`حذف ${labels.vehicleLabel} ${item.name}؟`)) return
     try {
-      await apiClient.delete(`/vehicles/${item._id}`)
+      const branchQuery = resolvedBranchId ? `?branchId=${resolvedBranchId}` : ""
+      await apiClient.delete(`/vehicles/${item._id}${branchQuery}`)
       setItems((prev) => prev.filter((i) => i._id !== item._id))
       toast.success(`تم حذف ${labels.vehicleLabel}`)
       await load(resolvedBranchId || null)
@@ -412,7 +444,8 @@ export function VehiclesManager() {
     () => [
       { key: "name", label: `اسم ${labels.vehicleLabel}`, value: (row) => row.name },
       { key: "plate", label: "رقم اللوحة", value: (row) => row.plateNumber || "-" },
-      { key: "imei", label: "رقم IMEI", value: (row) => row.imei },
+      { key: "provider", label: "مزود التتبع", value: (row) => getTrackingProviderLabel(row.trackingProvider) },
+      { key: "imei", label: "رقم IMEI", value: (row) => row.imei || "-" },
       { key: "fuelType", label: "نوع الوقود", value: (row) => (row.fuelType === "diesel" ? "مازوت" : "بنزين") },
       {
         key: "driver",
@@ -491,7 +524,7 @@ export function VehiclesManager() {
           </TabsList>
 
           <TabsContent value="local" className="space-y-3">
-        <div className="grid gap-3 md:grid-cols-4">
+        <div className="grid gap-3 md:grid-cols-5">
           <Input
             placeholder={`بحث في ${labels.vehicleLabel}...`}
             value={search}
@@ -530,6 +563,18 @@ export function VehiclesManager() {
               <SelectItem value="without">بدون مسار</SelectItem>
             </SelectContent>
           </Select>
+
+          <Select value={providerFilter} onValueChange={setProviderFilter}>
+            <SelectTrigger className="text-right">
+              <SelectValue placeholder="مزود التتبع" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">كل المزودات</SelectItem>
+              <SelectItem value="athar">أثر</SelectItem>
+              <SelectItem value="mobile_app">تطبيق الموبايل</SelectItem>
+              <SelectItem value="traccar">Traccar</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
         {loading ? (
@@ -541,6 +586,7 @@ export function VehiclesManager() {
                 <tr className="border-b text-right">
                   <th className="p-2">اسم {labels.vehicleLabel}</th>
                   <th className="p-2">رقم اللوحة</th>
+                  <th className="p-2">مزود التتبع</th>
                   <th className="p-2">رقم IMEI</th>
                   <th className="p-2">نوع الوقود</th>
                   <th className="p-2">{labels.driverLabel}</th>
@@ -554,7 +600,8 @@ export function VehiclesManager() {
                   <tr key={item._id} className="border-b">
                     <td className="p-2">{item.name}</td>
                     <td className="p-2">{item.plateNumber || "-"}</td>
-                    <td className="p-2">{item.imei}</td>
+                    <td className="p-2">{getTrackingProviderLabel(item.trackingProvider)}</td>
+                    <td className="p-2">{item.imei || "-"}</td>
                     <td className="p-2">{item.fuelType === "diesel" ? "مازوت" : "بنزين"}</td>
                     <td className="p-2">{drivers.find((d) => d._id === item.driverId)?.name || "-"}</td>
                     <td className="p-2">{routes.find((r) => r._id === item.routeId)?.name || "-"}</td>
@@ -569,7 +616,7 @@ export function VehiclesManager() {
 
                 {paginatedItems.length === 0 && (
                   <tr>
-                    <td className="p-4 text-center text-muted-foreground" colSpan={8}>
+                    <td className="p-4 text-center text-muted-foreground" colSpan={9}>
                       لا توجد نتائج
                     </td>
                   </tr>
@@ -673,7 +720,23 @@ export function VehiclesManager() {
               <Input value={form.plateNumber || ""} onChange={(e) => setForm({ ...form, plateNumber: e.target.value })} />
             </div>
             <div>
-              <Label>رقم IMEI</Label>
+              <Label>مزود التتبع</Label>
+              <Select
+                value={form.trackingProvider || "athar"}
+                onValueChange={(value: "athar" | "mobile_app" | "traccar") => setForm({ ...form, trackingProvider: value })}
+              >
+                <SelectTrigger className="text-right">
+                  <SelectValue placeholder="اختر مزود التتبع" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="athar">أثر</SelectItem>
+                  <SelectItem value="mobile_app">تطبيق الموبايل</SelectItem>
+                  <SelectItem value="traccar">Traccar</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>{(form.trackingProvider || "athar") === "athar" ? "رقم IMEI" : "رقم IMEI (اختياري)"}</Label>
               <Input value={form.imei || ""} onChange={(e) => setForm({ ...form, imei: e.target.value })} />
             </div>
             <div>
@@ -835,7 +898,9 @@ export function VehiclesManager() {
               </>
             )}
             <p className="text-xs text-muted-foreground">
-              عند الربط سيتم إنشاء أحداث الدخول والخروج على Athar لكل نقاط المسار المرتبطة بمناطق.
+              {(assigning?.trackingProvider || "athar") === "athar"
+                ? "عند الربط سيتم تجهيز أحداث الدخول والخروج على أثر لكل نقاط المسار المرتبطة بمناطق."
+                : "عند الربط سيتم حفظ المسار على المركبة، بينما ستصدر أحداث الدخول والخروج لاحقًا من مزود التتبع النشط."}
             </p>
           </div>
 

@@ -8,6 +8,7 @@ export interface IUser extends Document {
   role: mongoose.Types.ObjectId;
   organizationId?: mongoose.Types.ObjectId;
   branchId?: mongoose.Types.ObjectId;
+  trackingVehicleId?: mongoose.Types.ObjectId | null;
   avatar?: string;
   businessName?: string;
   isActive: boolean;
@@ -53,6 +54,12 @@ const UserSchema: Schema = new Schema(
     branchId: {
       type: Schema.Types.ObjectId,
       ref: 'Branch',
+      default: null,
+      index: true,
+    },
+    trackingVehicleId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Vehicle',
       default: null,
       index: true,
     },

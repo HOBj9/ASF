@@ -110,6 +110,7 @@ export interface User {
   }
   organizationId?: string
   branchId?: string
+  trackingVehicleId?: string
   isActive: boolean
   avatar?: string
   createdAt: string
@@ -232,7 +233,8 @@ export interface Vehicle {
   branchId: string
   name: string
   plateNumber?: string
-  imei: string
+  imei?: string | null
+  trackingProvider?: "athar" | "mobile_app" | "traccar"
   atharObjectId?: string
   driverId?: string
   routeId?: string

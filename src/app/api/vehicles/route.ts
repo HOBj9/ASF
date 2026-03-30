@@ -33,10 +33,17 @@ export async function POST(request: Request) {
     const body = await request.json();
     const branchId = resolveBranchId(session, body.branchId);
 
-    const { name, plateNumber, imei, fuelType, fuelPricePerKm, atharObjectId, driverId, routeId, isActive } = body;
-    if (!name || !imei) {
+    const { name, plateNumber, imei, trackingProvider, fuelType, fuelPricePerKm, atharObjectId, driverId, routeId, isActive } = body;
+    if (!name) {
       return NextResponse.json(
-        { error: 'الاسم ورقم IMEI مطلوبان' },
+        { error: 'الاسم مطلوب' },
+        { status: 400 }
+      );
+    }
+
+    if ((trackingProvider || 'athar') === 'athar' && !String(imei || '').trim()) {
+      return NextResponse.json(
+        { error: 'رقم IMEI مطلوب للمركبات التي تعمل عبر أثر' },
         { status: 400 }
       );
     }
@@ -46,6 +53,7 @@ export async function POST(request: Request) {
       name,
       plateNumber,
       imei,
+      trackingProvider,
       fuelType: fuelType === 'diesel' ? 'diesel' : 'gasoline',
       fuelPricePerKm: fuelPricePerKm != null && fuelPricePerKm !== '' ? Number(fuelPricePerKm) : undefined,
       atharObjectId,
