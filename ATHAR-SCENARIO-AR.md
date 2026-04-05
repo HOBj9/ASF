@@ -264,7 +264,7 @@ curl "https://admin.alather.net/api/api.php?api=user&ver=1.0&key=37829AB4B4412B2
 
 **الرابط الكامل (مثال):**
 ```
-https://wms.alather.net/api/athar/webhook/incoming?username=swan.co&name=215356+-+%D8%A7%D9%8A%D8%B3%D9%88%D8%B2%D9%88&imei=354778343256320&type=zone_out&desc=zone_out_insights+%2816%29&sensor_data=&zone_name=16&event_id=38154&lat=33.556883&lng=36.3227&speed=0&altitude=0&angle=0&dt_server=2026-03-04+10%3A34%3A46&dt_tracker=2026-03-04+10%3A45%3A07&tr_model=%D8%A7%D9%8A%D8%B3%D9%88%D8%B2%D9%88&vin=%D8%AF%D9%85%D8%B4%D9%82&plate_number=215356&sim_number=0992067182&driver_name=&trailer_name=&odometer=38759&eng_hours=0&template_message=&template_subject=
+https://asf.alather.net/api/athar/webhook/incoming?username=swan.co&name=215356+-+%D8%A7%D9%8A%D8%B3%D9%88%D8%B2%D9%88&imei=354778343256320&type=zone_out&desc=zone_out_insights+%2816%29&sensor_data=&zone_name=16&event_id=38154&lat=33.556883&lng=36.3227&speed=0&altitude=0&angle=0&dt_server=2026-03-04+10%3A34%3A46&dt_tracker=2026-03-04+10%3A45%3A07&tr_model=%D8%A7%D9%8A%D8%B3%D9%88%D8%B2%D9%88&vin=%D8%AF%D9%85%D8%B4%D9%82&plate_number=215356&sim_number=0992067182&driver_name=&trailer_name=&odometer=38759&eng_hours=0&template_message=&template_subject=
 ```
 
 ### معاملات Query (البيانات المرسلة)
@@ -337,10 +337,10 @@ https://wms.alather.net/api/athar/webhook/incoming?username=swan.co&name=215356+
   "accept": "*/*",
   "accept-encoding": "gzip, deflate",
   "connection": "upgrade",
-  "host": "wms.alather.net",
+  "host": "asf.alather.net",
   "user-agent": "Python/3.10 aiohttp/3.10.5",
   "x-forwarded-for": "185.84.236.36",
-  "x-forwarded-host": "wms.alather.net",
+  "x-forwarded-host": "asf.alather.net",
   "x-forwarded-port": "3036",
   "x-forwarded-proto": "https",
   "x-real-ip": "185.84.236.36"

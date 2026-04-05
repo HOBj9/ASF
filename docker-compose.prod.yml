@@ -24,12 +24,27 @@ services:
       - "3036:3036"
     environment:
       MONGODB_URI: mongodb://admin:admin123@mongodb:27017/waste-management-system?authSource=admin
-      NEXTAUTH_URL: ${NEXTAUTH_URL:-http://wms.alather.net}
+      NEXTAUTH_URL: ${NEXTAUTH_URL:-https://asf.alather.net}
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-your-secret-key-change-in-production}
     depends_on:
       - mongodb
     networks:
       - app-network
+
+  # تشغيل سكربتات (مزامنة صلاحيات، seed، fresh) داخل Docker
+  # استخدم: docker compose -f docker-compose.prod.yml run --rm tools npm run sync:permissions
+  tools:
+    build:
+      context: .
+      dockerfile: Dockerfile.tools
+    environment:
+      MONGODB_URI: mongodb://admin:admin123@mongodb:27017/waste-management-system?authSource=admin
+    depends_on:
+      - mongodb
+    networks:
+      - app-network
+    profiles:
+      - tools
 
 volumes:
   mongodb_data:

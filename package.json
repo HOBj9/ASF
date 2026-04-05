@@ -15,7 +15,8 @@
     "seed:js": "node scripts/seed.js",
     "fresh": "ts-node --project tsconfig.seed.json scripts/fresh.ts",
     "repair:visits": "ts-node --project tsconfig.seed.json scripts/repair-visit-log.ts",
-    "sync:permissions": "ts-node --project tsconfig.seed.json scripts/sync-permissions.ts"
+    "sync:permissions": "ts-node --project tsconfig.seed.json scripts/sync-permissions.ts",
+    "fix:index:route-schedule-vehicles": "ts-node --project tsconfig.seed.json scripts/fix-route-schedule-vehicle-index.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.3.4",

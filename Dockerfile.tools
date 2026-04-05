@@ -1,0 +1,12 @@
+# Image for running scripts (sync-permissions, seed, fresh, etc.) against prod MongoDB
+FROM node:20-alpine
+RUN apk add --no-cache libc6-compat
+WORKDIR /app
+
+COPY package.json package-lock.json* ./
+RUN npm install
+
+COPY . .
+
+# Default: run sync-permissions (override with: docker compose run --rm tools npm run <script>)
+CMD ["npm", "run", "sync:permissions"]
