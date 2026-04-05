@@ -11,6 +11,8 @@ import { hashTrackingToken, generateTrackingToken } from '@/lib/trackingcore/mob
 import { distanceMeters } from '@/lib/trackingcore/geofence';
 import { resolveTrackingConnectivityStatus } from '@/lib/trackingcore/connectivity';
 import { TrackingEventProcessorService } from '@/lib/services/tracking-event-processor.service';
+import { trackingEventDefinitionService } from '@/lib/services/tracking-event-definition.service';
+import type { TrackingProvider, ZoneEventProvider } from '@/lib/tracking/types';
 
 const MAX_BATCH_SAMPLES = 300;
 
@@ -38,6 +40,13 @@ export interface MobileTrackingBatchInput {
   samples: MobileTrackingSampleInput[];
 }
 
+export interface DirectMobileTrackingBatchInput extends MobileTrackingBatchInput {
+  deviceId?: string | null;
+  deviceName?: string | null;
+  platform?: string | null;
+  appVersion?: string | null;
+}
+
 type PointShape = {
   _id: string;
   name?: string | null;
@@ -47,6 +56,10 @@ type PointShape = {
   lat: number;
   lng: number;
   radiusMeters: number;
+};
+
+type DefinitionPointShape = PointShape & {
+  definitionIdsByEventType?: Partial<Record<'zone_in' | 'zone_out', string>>;
 };
 
 function normalizeExternalId(userId: string, deviceId?: string | null): string {
@@ -83,8 +96,244 @@ function ensureValidBatch(input: MobileTrackingBatchInput): MobileTrackingBatchI
   return input;
 }
 
+function normalizeTrackingProvider(provider?: TrackingProvider | null): TrackingProvider {
+  return provider === 'mobile_app' || provider === 'traccar' ? provider : 'athar';
+}
+
+function normalizeAcceptedProviders(vehicle: {
+  trackingProvider?: TrackingProvider | null;
+  acceptedTrackingProviders?: TrackingProvider[] | null;
+}): TrackingProvider[] {
+  if (Array.isArray(vehicle.acceptedTrackingProviders) && vehicle.acceptedTrackingProviders.length > 0) {
+    return Array.from(
+      new Set(vehicle.acceptedTrackingProviders.map((provider) => normalizeTrackingProvider(provider)))
+    );
+  }
+  return [normalizeTrackingProvider(vehicle.trackingProvider)];
+}
+
+function normalizeZoneEventProvider(vehicle: {
+  trackingProvider?: TrackingProvider | null;
+  zoneEventProvider?: ZoneEventProvider | null;
+}): ZoneEventProvider {
+  if (vehicle.zoneEventProvider === 'mobile_app' || vehicle.zoneEventProvider === 'athar') {
+    return vehicle.zoneEventProvider;
+  }
+  return normalizeTrackingProvider(vehicle.trackingProvider) === 'mobile_app' ? 'mobile_app' : 'athar';
+}
+
+function toDefinitionPointShape(point: any): PointShape | null {
+  if (!point?._id || point.lat == null || point.lng == null) {
+    return null;
+  }
+  return {
+    _id: String(point._id),
+    name: point.name || null,
+    nameAr: point.nameAr || null,
+    nameEn: point.nameEn || null,
+    zoneId: point.zoneId || null,
+    lat: Number(point.lat),
+    lng: Number(point.lng),
+    radiusMeters: Number(point.radiusMeters || 0),
+  };
+}
+
 export class MobileTrackingService {
   private readonly eventProcessor = new TrackingEventProcessorService();
+
+  private formatBinding(binding: any) {
+    if (!binding) return null;
+
+    return {
+      _id: String(binding._id),
+      branchId: String(binding.branchId),
+      vehicleId: String(binding.vehicleId),
+      provider: binding.provider,
+      externalId: binding.externalId || null,
+      userId: binding.userId ? String(binding.userId) : null,
+      capabilities: Array.isArray(binding.capabilities) ? binding.capabilities : [],
+      isPrimary: Boolean(binding.isPrimary),
+      isActive: Boolean(binding.isActive),
+      lastSeenAt: binding.lastSeenAt || null,
+      metadata: binding.metadata || null,
+      createdAt: binding.createdAt || null,
+      updatedAt: binding.updatedAt || null,
+    };
+  }
+
+  private formatVehicle(vehicle: any) {
+    if (!vehicle) return null;
+
+    const acceptedProviders = normalizeAcceptedProviders(vehicle);
+
+    return {
+      _id: String(vehicle._id),
+      name: vehicle.name,
+      plateNumber: vehicle.plateNumber || null,
+      trackingProvider: vehicle.trackingProvider || 'athar',
+      acceptedTrackingProviders: acceptedProviders.includes('mobile_app')
+        ? acceptedProviders
+        : [...acceptedProviders, 'mobile_app'],
+      zoneEventProvider: normalizeZoneEventProvider(vehicle),
+    };
+  }
+
+  private formatVehicleState(state: any) {
+    if (!state) return null;
+
+    return {
+      bindingId: state.bindingId ? String(state.bindingId) : null,
+      provider: state.provider || 'mobile_app',
+      connectivityStatus: state.connectivityStatus || 'offline',
+      lastProcessedAt: state.lastProcessedAt || null,
+      lastRecordedAt: state.lastRecordedAt || null,
+      lastReceivedAt: state.lastReceivedAt || null,
+      lastLocation: state.lastLocation || null,
+      speed: typeof state.speed === 'number' ? state.speed : 0,
+      heading: typeof state.heading === 'number' ? state.heading : 0,
+      accuracy: state.accuracy ?? null,
+      insidePointIds: Array.isArray(state.insidePointIds)
+        ? state.insidePointIds.map((value: any) => String(value))
+        : [],
+    };
+  }
+
+  private async ensureDirectBinding(input: MobileTrackingActivateInput) {
+    await connectDB();
+
+    const user = await User.findById(input.userId)
+      .select('branchId trackingVehicleId isActive')
+      .lean();
+
+    if (!user || user.isActive === false) {
+      throw new Error('User is not eligible for mobile tracking');
+    }
+    if (!user.branchId) {
+      throw new Error('No branch is assigned to this user');
+    }
+    if (!user.trackingVehicleId) {
+      throw new Error('A vehicle must be assigned to the line supervisor before sending tracking');
+    }
+
+    const branchId = String(user.branchId);
+    const vehicleId = String(user.trackingVehicleId);
+    const vehicle = await Vehicle.findOne({ _id: vehicleId, branchId, isActive: true }).lean();
+    if (!vehicle) {
+      throw new Error('Assigned vehicle does not exist or is inactive');
+    }
+
+    const acceptedProviders = normalizeAcceptedProviders(vehicle);
+    if (!acceptedProviders.includes('mobile_app')) {
+      await Vehicle.findByIdAndUpdate(vehicleId, {
+        $set: {
+          acceptedTrackingProviders: [...acceptedProviders, 'mobile_app'],
+        },
+      }).exec();
+    }
+
+    const externalId = normalizeExternalId(input.userId, input.deviceId);
+    const metadata = {
+      deviceId: input.deviceId || null,
+      deviceName: input.deviceName || null,
+      platform: input.platform || null,
+      appVersion: input.appVersion || null,
+      activatedAt: new Date(),
+    };
+
+    let binding = await TrackingBinding.findOne({
+      provider: 'mobile_app',
+      isActive: true,
+      $or: [{ userId: input.userId }, { vehicleId }],
+    })
+      .sort({ isPrimary: -1, updatedAt: -1 })
+      .lean();
+
+    if (binding?._id) {
+      binding = await TrackingBinding.findByIdAndUpdate(
+        binding._id,
+        {
+          $set: {
+            branchId,
+            vehicleId,
+            userId: input.userId,
+            externalId,
+            capabilities: ['gps_batch_ingest'],
+            isPrimary: true,
+            isActive: true,
+            metadata,
+          },
+        },
+        {
+          new: true,
+        }
+      ).lean();
+    } else {
+      binding = await TrackingBinding.findOneAndUpdate(
+        {
+          branchId,
+          provider: 'mobile_app',
+          externalId,
+        },
+        {
+          $set: {
+            vehicleId,
+            userId: input.userId,
+            capabilities: ['gps_batch_ingest'],
+            isPrimary: true,
+            isActive: true,
+            tokenHash: null,
+            metadata,
+            lastSeenAt: null,
+          },
+        },
+        {
+          upsert: true,
+          new: true,
+          setDefaultsOnInsert: true,
+        }
+      ).lean();
+    }
+
+    if (binding?._id) {
+      await TrackingBinding.updateMany(
+        {
+          vehicleId,
+          _id: { $ne: binding._id },
+        },
+        {
+          $set: {
+            isPrimary: false,
+          },
+        }
+      ).exec();
+
+      await TrackingVehicleState.findOneAndUpdate(
+        { vehicleId },
+        {
+          $set: {
+            branchId,
+            vehicleId,
+            bindingId: binding._id,
+            provider: 'mobile_app',
+            connectivityStatus: 'offline',
+          },
+          $setOnInsert: {
+            insidePointIds: [],
+          },
+        },
+        {
+          upsert: true,
+          new: true,
+          setDefaultsOnInsert: true,
+        }
+      ).exec();
+    }
+
+    return {
+      binding,
+      vehicle,
+    };
+  }
 
   async activate(input: MobileTrackingActivateInput) {
     await connectDB();
@@ -108,6 +357,15 @@ export class MobileTrackingService {
     const vehicle = await Vehicle.findOne({ _id: vehicleId, branchId, isActive: true }).lean();
     if (!vehicle) {
       throw new Error('Assigned vehicle does not exist or is inactive');
+    }
+
+    const acceptedProviders = normalizeAcceptedProviders(vehicle);
+    if (!acceptedProviders.includes('mobile_app')) {
+      await Vehicle.findByIdAndUpdate(vehicleId, {
+        $set: {
+          acceptedTrackingProviders: [...acceptedProviders, 'mobile_app'],
+        },
+      }).exec();
     }
 
     const token = generateTrackingToken();
@@ -168,10 +426,6 @@ export class MobileTrackingService {
       }
     ).lean();
 
-    await Vehicle.findByIdAndUpdate(vehicleId, {
-      trackingProvider: 'mobile_app',
-    }).exec();
-
     if (binding?._id) {
       await TrackingVehicleState.findOneAndUpdate(
         { vehicleId },
@@ -197,30 +451,27 @@ export class MobileTrackingService {
 
     return {
       trackingToken: token,
-      binding: binding
-        ? {
-            _id: String(binding._id),
-            branchId: String(binding.branchId),
-            vehicleId: String(binding.vehicleId),
-            provider: binding.provider,
-            externalId: binding.externalId || null,
-            userId: binding.userId ? String(binding.userId) : null,
-            capabilities: Array.isArray(binding.capabilities) ? binding.capabilities : [],
-            isPrimary: Boolean(binding.isPrimary),
-            isActive: Boolean(binding.isActive),
-            lastSeenAt: binding.lastSeenAt || null,
-            metadata: binding.metadata || null,
-            createdAt: binding.createdAt || null,
-            updatedAt: binding.updatedAt || null,
-          }
-        : null,
-      vehicle: {
-        _id: String(vehicle._id),
-        name: vehicle.name,
-        plateNumber: vehicle.plateNumber || null,
-        trackingProvider: 'mobile_app',
-      },
+      binding: this.formatBinding(binding),
+      vehicle: this.formatVehicle(vehicle),
     };
+  }
+
+  async ingestForUser(userId: string, payload: DirectMobileTrackingBatchInput) {
+    ensureValidBatch(payload);
+
+    const { binding } = await this.ensureDirectBinding({
+      userId,
+      deviceId: payload.deviceId || null,
+      deviceName: payload.deviceName || null,
+      platform: payload.platform || null,
+      appVersion: payload.appVersion || null,
+    });
+
+    if (!binding) {
+      throw new Error('Unable to create or resolve a mobile tracking binding');
+    }
+
+    return this.ingestWithBinding(binding, payload);
   }
 
   async ingestByToken(token: string, payload: MobileTrackingBatchInput) {
@@ -247,6 +498,12 @@ export class MobileTrackingService {
       error.status = 401;
       throw error;
     }
+
+    return this.ingestWithBinding(binding, payload);
+  }
+
+  private async ingestWithBinding(binding: any, payload: MobileTrackingBatchInput) {
+    ensureValidBatch(payload);
 
     const providerMessageId = String(payload.batchId).trim();
     const receivedAt = new Date();
@@ -292,23 +549,73 @@ export class MobileTrackingService {
         throw new Error('Vehicle does not exist or is inactive');
       }
 
-      if ((vehicle.trackingProvider || 'athar') !== 'mobile_app') {
-        await this.updateIngressStatus(ingress._id, 'rejected', 'Vehicle is not configured for mobile_app tracking');
-        throw new Error('Vehicle is not configured for mobile_app tracking');
+      const acceptedProviders = normalizeAcceptedProviders(vehicle);
+      if (!acceptedProviders.includes('mobile_app')) {
+        await this.updateIngressStatus(
+          ingress._id,
+          'rejected',
+          'Vehicle is not accepting mobile_app tracking'
+        );
+        throw new Error('Vehicle is not accepting mobile_app tracking');
       }
 
-      const points = await Point.find({
-        branchId: binding.branchId,
-        isActive: true,
-      })
-        .select('_id name nameAr nameEn zoneId lat lng radiusMeters')
-        .lean();
-
-      const vehicleId = String(binding.vehicleId);
+      const zoneEventProvider = normalizeZoneEventProvider(vehicle);
+      const zoneEventsEnabled = zoneEventProvider === 'mobile_app';
       const branchId = String(binding.branchId);
+      const vehicleId = String(binding.vehicleId);
+
+      const legacyFallbackEnabled = zoneEventsEnabled
+        ? await trackingEventDefinitionService.isLegacyFallbackEnabled(branchId, 'mobile_app')
+        : false;
+      const activeDefinitions = zoneEventsEnabled
+        ? await trackingEventDefinitionService.resolveActiveDefinitionsForVehicleProvider({
+            branchId,
+            vehicleId,
+            providerTarget: 'mobile_app',
+          })
+        : [];
+
+      const pointsFromDefinitions = new Map<string, DefinitionPointShape>();
+      for (const definition of activeDefinitions as any[]) {
+        const point = toDefinitionPointShape(definition.pointId);
+        if (!point) continue;
+        const existingPoint = pointsFromDefinitions.get(point._id);
+        if (existingPoint) {
+          existingPoint.definitionIdsByEventType = {
+            ...existingPoint.definitionIdsByEventType,
+            [definition.eventType]: String(definition._id),
+          };
+          continue;
+        }
+        pointsFromDefinitions.set(point._id, {
+          ...point,
+          definitionIdsByEventType: {
+            [definition.eventType]: String(definition._id),
+          },
+        });
+      }
+
+      const shouldUseLegacyPoints = zoneEventsEnabled && pointsFromDefinitions.size === 0 && legacyFallbackEnabled;
+      const legacyPoints = shouldUseLegacyPoints
+        ? ((await Point.find({
+            branchId: binding.branchId,
+            isActive: true,
+          })
+            .select('_id name nameAr nameEn zoneId lat lng radiusMeters')
+            .lean()) as any[])
+            .map((point) => toDefinitionPointShape(point))
+            .filter((point): point is PointShape => Boolean(point))
+        : [];
+      const points: DefinitionPointShape[] = shouldUseLegacyPoints
+        ? legacyPoints
+        : Array.from(pointsFromDefinitions.values());
+
+      const allowedPointIds = new Set(points.map((point) => String(point._id)));
       const stateDoc = await TrackingVehicleState.findOne({ vehicleId }).lean();
       let currentInsidePointIds = new Set(
-        (stateDoc?.insidePointIds || []).map((value: any) => String(value))
+        (stateDoc?.insidePointIds || [])
+          .map((value: any) => String(value))
+          .filter((value: string) => allowedPointIds.has(value))
       );
       let lastProcessedAt = stateDoc?.lastProcessedAt ? new Date(stateDoc.lastProcessedAt) : null;
       let lastRecordedAt = stateDoc?.lastRecordedAt ? new Date(stateDoc.lastRecordedAt) : null;
@@ -363,14 +670,19 @@ export class MobileTrackingService {
           continue;
         }
 
-        currentInsidePointIds = await this.processSampleTransitions({
-          branchId,
-          vehicle,
-          points: points as any[],
-          sample,
-          currentInsidePointIds,
-          ingressId: String(ingress._id),
-        });
+        if (zoneEventsEnabled && points.length > 0) {
+          currentInsidePointIds = await this.processSampleTransitions({
+            branchId,
+            vehicle,
+            points,
+            sample,
+            currentInsidePointIds,
+            ingressId: String(ingress._id),
+            legacyFallbackEnabled: shouldUseLegacyPoints,
+          });
+        } else {
+          currentInsidePointIds = new Set();
+        }
 
         acceptedSamples += 1;
         lastProcessedAt = sample.recordedAt;
@@ -431,6 +743,9 @@ export class MobileTrackingService {
         ingressId: String(ingress._id),
         acceptedSamples,
         lateSamples,
+        zoneEventsEnabled,
+        definitionsCount: activeDefinitions.length,
+        legacyFallbackUsed: shouldUseLegacyPoints,
       };
     } catch (error: any) {
       await this.updateIngressStatus(ingress._id, 'error', error?.message || 'internal error');
@@ -468,6 +783,119 @@ export class MobileTrackingService {
     return { success: true };
   }
 
+  async getStatusForUser(userId: string) {
+    await connectDB();
+
+    const user = await User.findById(userId)
+      .populate({ path: 'role', select: 'name' })
+      .select('name email role organizationId branchId trackingVehicleId isActive')
+      .lean();
+
+    if (!user || user.isActive === false) {
+      throw new Error('User is not eligible for mobile tracking');
+    }
+
+    const branchId = user.branchId ? String(user.branchId) : null;
+    const vehicleId = user.trackingVehicleId ? String(user.trackingVehicleId) : null;
+    const vehicle = branchId && vehicleId
+      ? await Vehicle.findOne({ _id: vehicleId, branchId }).lean()
+      : null;
+    const binding = vehicleId
+      ? await TrackingBinding.findOne({
+          provider: 'mobile_app',
+          vehicleId,
+          userId,
+          isActive: true,
+        })
+          .sort({ isPrimary: -1, updatedAt: -1 })
+          .lean()
+      : null;
+    const state = vehicleId
+      ? await TrackingVehicleState.findOne({ vehicleId }).lean()
+      : null;
+
+    return {
+      user: {
+        id: String(user._id),
+        name: user.name,
+        email: user.email,
+        role:
+          typeof user.role === 'string'
+            ? user.role
+            : typeof (user.role as any)?.name === 'string'
+              ? (user.role as any).name
+              : 'line_supervisor',
+        organizationId: user.organizationId ? String(user.organizationId) : null,
+        branchId,
+        trackingVehicleId: vehicleId,
+      },
+      tracking: {
+        canActivate: Boolean(branchId && vehicleId),
+        currentBinding: this.formatBinding(binding),
+        vehicle: this.formatVehicle(vehicle),
+        vehicleState: this.formatVehicleState(state),
+      },
+    };
+  }
+
+  async deactivateForUser(userId: string, deviceId?: string | null) {
+    await connectDB();
+
+    const normalizedDeviceId = String(deviceId || '').trim();
+    const query: Record<string, unknown> = {
+      provider: 'mobile_app',
+      userId,
+      isActive: true,
+    };
+
+    if (normalizedDeviceId) {
+      query['metadata.deviceId'] = normalizedDeviceId;
+    }
+
+    const bindings = await TrackingBinding.find(query)
+      .select('_id branchId vehicleId')
+      .lean();
+
+    if (bindings.length === 0) {
+      return {
+        success: true,
+        deactivatedCount: 0,
+      };
+    }
+
+    const bindingIds = bindings.map((binding) => binding._id);
+    const branchIds = Array.from(new Set(bindings.map((binding) => String(binding.branchId))));
+
+    await TrackingBinding.updateMany(
+      { _id: { $in: bindingIds } },
+      {
+        $set: {
+          isActive: false,
+          isPrimary: false,
+          tokenHash: null,
+        },
+      }
+    ).exec();
+
+    await TrackingVehicleState.updateMany(
+      {
+        bindingId: { $in: bindingIds },
+      },
+      {
+        $set: {
+          connectivityStatus: 'offline',
+        },
+      }
+    ).exec();
+
+    branchIds.forEach((branchId) => invalidateVehicleSnapshot(branchId));
+
+    return {
+      success: true,
+      deactivatedCount: bindings.length,
+    };
+  }
+
   private async updateIngressStatus(
     ingressId: string,
     status: 'processed' | 'ignored_late' | 'rejected' | 'error',
@@ -483,7 +911,7 @@ export class MobileTrackingService {
   private async processSampleTransitions(input: {
     branchId: string;
     vehicle: any;
-    points: PointShape[];
+    points: DefinitionPointShape[];
     sample: {
       recordedAt: Date;
       lat: number;
@@ -495,10 +923,11 @@ export class MobileTrackingService {
     };
     currentInsidePointIds: Set<string>;
     ingressId: string;
+    legacyFallbackEnabled: boolean;
   }): Promise<Set<string>> {
     const nextInsidePointIds = new Set<string>();
-    const exitPoints: PointShape[] = [];
-    const entryPoints: PointShape[] = [];
+    const exitPoints: DefinitionPointShape[] = [];
+    const entryPoints: DefinitionPointShape[] = [];
 
     for (const point of input.points) {
       const pointId = String(point._id);
@@ -523,6 +952,13 @@ export class MobileTrackingService {
     }
 
     for (const point of exitPoints) {
+      const definitionId = input.legacyFallbackEnabled
+        ? null
+        : point.definitionIdsByEventType?.zone_out || null;
+      if (!input.legacyFallbackEnabled && !definitionId) {
+        continue;
+      }
+
       await this.eventProcessor.processZoneTransition({
         branchId: input.branchId,
         provider: 'mobile_app',
@@ -532,6 +968,7 @@ export class MobileTrackingService {
         point,
         zoneId: point.zoneId || String(point._id),
         providerEventId: `${input.ingressId}:${String(point._id)}:out:${input.sample.recordedAt.toISOString()}`,
+        definitionId,
         rawPayload: {
           source: 'mobile_app',
           pointId: String(point._id),
@@ -547,6 +984,13 @@ export class MobileTrackingService {
     }
 
     for (const point of entryPoints) {
+      const definitionId = input.legacyFallbackEnabled
+        ? null
+        : point.definitionIdsByEventType?.zone_in || null;
+      if (!input.legacyFallbackEnabled && !definitionId) {
+        continue;
+      }
+
       await this.eventProcessor.processZoneTransition({
         branchId: input.branchId,
         provider: 'mobile_app',
@@ -556,6 +1000,7 @@ export class MobileTrackingService {
         point,
         zoneId: point.zoneId || String(point._id),
         providerEventId: `${input.ingressId}:${String(point._id)}:in:${input.sample.recordedAt.toISOString()}`,
+        definitionId,
         rawPayload: {
           source: 'mobile_app',
           pointId: String(point._id),
@@ -573,3 +1018,4 @@ export class MobileTrackingService {
     return nextInsidePointIds;
   }
 }
+

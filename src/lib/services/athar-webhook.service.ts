@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+﻿import { NextResponse } from 'next/server';
 import connectDB from '@/lib/mongodb';
 import IncomingAtharEvent from '@/models/IncomingAtharEvent';
 import TrackingIngressMessage from '@/models/TrackingIngressMessage';
@@ -6,14 +6,11 @@ import Branch from '@/models/Branch';
 import Vehicle from '@/models/Vehicle';
 import Driver from '@/models/Driver';
 import ZoneEvent from '@/models/ZoneEvent';
-import PointVisit from '@/models/PointVisit';
-import PointCompletion from '@/models/PointCompletion';
-import { getZonedDateString } from '@/lib/utils/timezone.util';
-import { getZoneEventFeedItemById } from '@/lib/services/zone-event-feed.service';
-import { publishZoneEventUpdate } from '@/lib/services/zone-event-stream-bus.service';
 import { extractNumericZoneId, resolveAtharPoint } from '@/lib/utils/athar-point.util';
 import { TrackingEventProcessorService } from '@/lib/services/tracking-event-processor.service';
 import { resolveAtharProviderConfig } from '@/lib/trackingcore/provider-config';
+import { trackingEventDefinitionService } from '@/lib/services/tracking-event-definition.service';
+import type { TrackingProvider, ZoneEventProvider } from '@/lib/tracking/types';
 
 type WebhookMethod = 'GET' | 'POST';
 type ZoneEventType = 'zone_in' | 'zone_out';
@@ -59,6 +56,32 @@ interface BranchImeisCacheEntry {
 const imeiBranchCache = new Map<string, ImeiBranchCacheEntry>();
 const branchImeisCache = new Map<string, BranchImeisCacheEntry>();
 const trackingEventProcessor = new TrackingEventProcessorService();
+
+function normalizeTrackingProvider(provider?: TrackingProvider | null): TrackingProvider {
+  return provider === 'mobile_app' || provider === 'traccar' ? provider : 'athar';
+}
+
+function normalizeAcceptedProviders(vehicle: {
+  trackingProvider?: TrackingProvider | null;
+  acceptedTrackingProviders?: TrackingProvider[] | null;
+}): TrackingProvider[] {
+  if (Array.isArray(vehicle.acceptedTrackingProviders) && vehicle.acceptedTrackingProviders.length > 0) {
+    return Array.from(
+      new Set(vehicle.acceptedTrackingProviders.map((provider) => normalizeTrackingProvider(provider)))
+    );
+  }
+  return [normalizeTrackingProvider(vehicle.trackingProvider)];
+}
+
+function normalizeZoneEventProvider(vehicle: {
+  trackingProvider?: TrackingProvider | null;
+  zoneEventProvider?: ZoneEventProvider | null;
+}): ZoneEventProvider {
+  if (vehicle.zoneEventProvider === 'mobile_app' || vehicle.zoneEventProvider === 'athar') {
+    return vehicle.zoneEventProvider;
+  }
+  return normalizeTrackingProvider(vehicle.trackingProvider) === 'mobile_app' ? 'mobile_app' : 'athar';
+}
 
 function pickFirstString(...values: Array<unknown>): string | null {
   for (const value of values) {
@@ -332,6 +355,29 @@ async function updateTrackingIngressRecord(
   }
 }
 
+async function rejectAtharEvent(input: {
+  incomingRecordId: string;
+  trackingIngressId: string | null;
+  branchId?: string | null;
+  vehicleId?: string | null;
+  message: string;
+  status?: number;
+}) {
+  await updateIncomingRecord(input.incomingRecordId, {
+    processingStatus: 'rejected',
+    branchId: input.branchId || null,
+    errorMessage: input.message,
+  });
+  await updateTrackingIngressRecord(input.trackingIngressId, {
+    branchId: input.branchId || null,
+    vehicleId: input.vehicleId || null,
+    status: 'rejected',
+    processedAt: new Date(),
+    errorMessage: input.message,
+  });
+  return NextResponse.json({ success: true, ignored: true, reason: input.message }, { status: input.status || 200 });
+}
+
 export async function handleAtharWebhookRequest(
   request: Request,
   method: WebhookMethod
@@ -501,22 +547,6 @@ export async function handleAtharWebhookRequest(
       }).lean();
     }
 
-    if (vehicle && (vehicle.trackingProvider || 'athar') !== 'athar') {
-      await updateIncomingRecord(incomingRecordId, {
-        processingStatus: 'rejected',
-        branchId: vehicle.branchId,
-        errorMessage: 'vehicle provider is not athar',
-      });
-      await updateTrackingIngressRecord(trackingIngressId, {
-        branchId: vehicle.branchId,
-        vehicleId: vehicle._id,
-        status: 'rejected',
-        processedAt: new Date(),
-        errorMessage: 'vehicle provider is not athar',
-      });
-      return NextResponse.json({ success: true, ignored: true });
-    }
-
     if (!point && branchId) {
       point = await resolveAtharPoint({
         branchId,
@@ -533,16 +563,6 @@ export async function handleAtharWebhookRequest(
       extractNumericZoneId(parsed.desc) ||
       null;
 
-    if (!point) {
-      console.log('[Athar Webhook] Point not found for incoming event:', {
-        branchId,
-        zoneIdRaw: parsed.zoneIdRaw,
-        zoneIdNormalized: parsed.zoneIdNormalized,
-        zoneName: parsed.zoneName,
-        desc: parsed.desc,
-      });
-    }
-
     if (!branchId) {
       await updateIncomingRecord(incomingRecordId, {
         processingStatus: 'rejected',
@@ -556,247 +576,109 @@ export async function handleAtharWebhookRequest(
       return NextResponse.json({ error: 'لم يتم العثور على الفرع' }, { status: 404 });
     }
 
-    {
-      const processedEventTimestamp = parseFlexibleTimestamp(parsed.timestampRaw) || new Date();
-      let processedDriver: any = null;
-
-      if (vehicle?.driverId) {
-        processedDriver = await Driver.findById(vehicle.driverId).select('name').lean();
-      }
-
-      const processedPointName =
-        point?.nameAr ||
-        point?.name ||
-        normalizeZoneLabel(parsed.zoneName) ||
-        normalizeZoneLabel(parsed.zoneIdNormalized) ||
-        normalizeZoneLabel(extractNumericZoneId(parsed.desc)) ||
-        'Ù†Ù‚Ø·Ø© ØºÙŠØ± Ù…Ø¹Ø±ÙˆÙØ©';
-      const processedEventName = `${processedPointName} - ${zoneEventType === 'zone_in' ? 'Ø¯Ø®ÙˆÙ„' : 'Ø®Ø±ÙˆØ¬'}`;
-
-      const processedZoneEvent = await trackingEventProcessor.processZoneTransition({
+    if (!vehicle) {
+      return rejectAtharEvent({
+        incomingRecordId,
+        trackingIngressId,
         branchId,
-        provider: 'athar',
-        providerEventId: parsed.eventId || null,
-        type: zoneEventType,
-        eventTimestamp: processedEventTimestamp,
-        vehicle,
-        point,
-        zoneId: resolvedZoneId,
-        imei: parsed.imei,
-        rawPayload: parsed.rawPayload,
-        eventName: processedEventName,
-        driverName: processedDriver?.name || null,
+        message: 'vehicle_not_found',
       });
-
-      await updateIncomingRecord(incomingRecordId, {
-        processingStatus: 'processed',
-        branchId,
-        zoneEventId: processedZoneEvent._id,
-        errorMessage: null,
-      });
-      await updateTrackingIngressRecord(trackingIngressId, {
-        branchId,
-        vehicleId: vehicle?._id || null,
-        status: 'processed',
-        processedAt: new Date(),
-        errorMessage: null,
-      });
-
-      return NextResponse.json({ success: true, duplicate: false });
     }
 
-    /*
-    const eventTimestamp = parseFlexibleTimestamp(parsed.timestampRaw) || new Date();
-    let driver: any = null;
+    const acceptedProviders = normalizeAcceptedProviders(vehicle);
+    if (!acceptedProviders.includes('athar')) {
+      return rejectAtharEvent({
+        incomingRecordId,
+        trackingIngressId,
+        branchId,
+        vehicleId: String(vehicle._id),
+        message: 'vehicle_not_accepting_athar',
+      });
+    }
+
+    if (normalizeZoneEventProvider(vehicle) !== 'athar') {
+      return rejectAtharEvent({
+        incomingRecordId,
+        trackingIngressId,
+        branchId,
+        vehicleId: String(vehicle._id),
+        message: 'vehicle_zone_event_provider_mismatch',
+      });
+    }
+
+    const legacyFallbackEnabled = await trackingEventDefinitionService.isLegacyFallbackEnabled(branchId, 'athar');
+    const matchingDefinition = point?._id
+      ? await trackingEventDefinitionService.findMatchingActiveDefinition({
+          branchId,
+          vehicleId: String(vehicle._id),
+          pointId: String(point._id),
+          providerTarget: 'athar',
+          eventType: zoneEventType,
+        })
+      : null;
+
+    if (!matchingDefinition && !legacyFallbackEnabled) {
+      return rejectAtharEvent({
+        incomingRecordId,
+        trackingIngressId,
+        branchId,
+        vehicleId: String(vehicle._id),
+        message: 'rejected_local_policy',
+      });
+    }
+
+    const processedEventTimestamp = parseFlexibleTimestamp(parsed.timestampRaw) || new Date();
+    let processedDriver: any = null;
 
     if (vehicle?.driverId) {
-      driver = await Driver.findById(vehicle.driverId).select('name').lean();
+      processedDriver = await Driver.findById(vehicle.driverId).select('name').lean();
     }
 
-    const pointName =
+    const processedPointName =
       point?.nameAr ||
       point?.name ||
       normalizeZoneLabel(parsed.zoneName) ||
       normalizeZoneLabel(parsed.zoneIdNormalized) ||
       normalizeZoneLabel(extractNumericZoneId(parsed.desc)) ||
       'نقطة غير معروفة';
-    const eventName = `${pointName} - ${zoneEventType === 'zone_in' ? 'دخول' : 'خروج'}`;
+    const processedEventName = `${processedPointName} - ${zoneEventType === 'zone_in' ? 'دخول' : 'خروج'}`;
 
-    let zoneEvent: any = await ZoneEvent.create({
+    const processedZoneEvent = await trackingEventProcessor.processZoneTransition({
       branchId,
-      vehicleId: vehicle?._id || null,
-      driverId: vehicle?.driverId || null,
-      pointId: point?._id || null,
+      provider: 'athar',
+      providerEventId: parsed.eventId || null,
+      definitionId: matchingDefinition?._id ? String(matchingDefinition._id) : null,
+      type: zoneEventType,
+      eventTimestamp: processedEventTimestamp,
+      vehicle,
+      point,
       zoneId: resolvedZoneId,
       imei: parsed.imei,
-      atharEventId: parsed.eventId || null,
-      name: eventName,
-      driverName: driver?.name || null,
-      type: zoneEventType,
-      eventTimestamp,
       rawPayload: parsed.rawPayload,
+      eventName: processedEventName,
+      driverName: processedDriver?.name || null,
     });
-
-    if (zoneEventType === 'zone_in' && point?._id && vehicle?._id) {
-      const existingVisit = await PointVisit.findOne({
-        branchId,
-        vehicleId: vehicle._id,
-        pointId: point._id,
-        status: 'open',
-      }).lean();
-
-      if (existingVisit) {
-        await ZoneEvent.findByIdAndUpdate(zoneEvent._id, { isRepeatedEntry: true });
-        const durationSeconds = Math.max(
-          0,
-          Math.floor((eventTimestamp.getTime() - new Date(existingVisit.entryTime).getTime()) / 1000)
-        );
-        await PointVisit.findByIdAndUpdate(existingVisit._id, {
-          exitEventId: zoneEvent._id,
-          exitTime: eventTimestamp,
-          durationSeconds,
-          status: 'closed',
-          visitKind: 'repeated',
-        });
-      }
-      await PointVisit.create({
-        branchId,
-        vehicleId: vehicle._id,
-        pointId: point._id,
-        zoneId: resolvedZoneId,
-        entryEventId: zoneEvent._id,
-        entryTime: eventTimestamp,
-        status: 'open',
-      });
-    }
-
-    if (zoneEventType === 'zone_out' && point?._id && vehicle?._id) {
-      const openVisit = await PointVisit.findOne({
-        branchId,
-        vehicleId: vehicle._id,
-        pointId: point._id,
-        status: 'open',
-      })
-        .sort({ entryTime: -1 })
-        .exec();
-
-      if (openVisit) {
-        const durationSeconds = Math.max(
-          0,
-          Math.floor((eventTimestamp.getTime() - openVisit.entryTime.getTime()) / 1000)
-        );
-
-        openVisit.exitEventId = zoneEvent._id;
-        openVisit.exitTime = eventTimestamp;
-        openVisit.durationSeconds = durationSeconds;
-        openVisit.status = 'closed';
-
-        const branch = await Branch.findById(branchId).select('timezone').lean();
-        const timeZone = branch?.timezone || 'Asia/Riyadh';
-        const completionDate = getZonedDateString(timeZone, eventTimestamp);
-        const existingCompletion = await PointCompletion.findOne({
-          branchId,
-          pointId: point._id,
-          completionDate,
-        }).lean();
-        if (!existingCompletion) {
-          await PointCompletion.create({
-            branchId,
-            pointId: point._id,
-            completionDate,
-            pointVisitId: openVisit._id,
-            completedAt: eventTimestamp,
-          });
-          openVisit.visitKind = 'first';
-        } else {
-          openVisit.visitKind = 'repeated';
-        }
-        await openVisit.save();
-      } else {
-        // لا توجد زيارة مفتوحة: البحث عن zone_in مطابق وإنشاء زيارة استرجاعية
-        const zoneIdsToMatch = [
-          resolvedZoneId,
-          parsed.zoneIdNormalized,
-          extractNumericZoneId(parsed.zoneIdRaw),
-          extractNumericZoneId(parsed.zoneName),
-          extractNumericZoneId(parsed.desc),
-        ].filter((value, index, array): value is string => Boolean(value) && array.indexOf(value) === index);
-        const matchingEntry = await ZoneEvent.findOne({
-          branchId,
-          $or: [{ vehicleId: vehicle._id }, { imei: parsed.imei }],
-          type: 'zone_in',
-          zoneId: { $in: zoneIdsToMatch },
-          eventTimestamp: { $lt: eventTimestamp },
-          _id: { $ne: zoneEvent._id },
-        })
-          .sort({ eventTimestamp: -1 })
-          .lean();
-
-        const alreadyUsed =
-          matchingEntry &&
-          (await PointVisit.exists({ entryEventId: matchingEntry._id }));
-
-        if (matchingEntry && !alreadyUsed) {
-          const entryTime = matchingEntry.eventTimestamp
-            ? new Date(matchingEntry.eventTimestamp)
-            : eventTimestamp;
-          const durationSeconds = Math.max(
-            0,
-            Math.floor((eventTimestamp.getTime() - entryTime.getTime()) / 1000)
-          );
-          const newVisit = await PointVisit.create({
-            branchId,
-            vehicleId: vehicle._id,
-            pointId: point._id,
-            zoneId: resolvedZoneId,
-            entryEventId: matchingEntry._id,
-            exitEventId: zoneEvent._id,
-            entryTime,
-            exitTime: eventTimestamp,
-            durationSeconds,
-            status: 'closed',
-          });
-
-          const branch = await Branch.findById(branchId).select('timezone').lean();
-          const timeZone = branch?.timezone || 'Asia/Riyadh';
-          const completionDate = getZonedDateString(timeZone, eventTimestamp);
-          const existingCompletion = await PointCompletion.findOne({
-            branchId,
-            pointId: point._id,
-            completionDate,
-          }).lean();
-          if (!existingCompletion) {
-            await PointCompletion.create({
-              branchId,
-              pointId: point._id,
-              completionDate,
-              pointVisitId: newVisit._id,
-              completedAt: eventTimestamp,
-            });
-            await PointVisit.findByIdAndUpdate(newVisit._id, { visitKind: 'first' });
-          } else {
-            await PointVisit.findByIdAndUpdate(newVisit._id, { visitKind: 'repeated' });
-          }
-        } else {
-          await ZoneEvent.findByIdAndUpdate(zoneEvent._id, { isOrphanExit: true });
-        }
-      }
-    }
-
-    const streamItem = await getZoneEventFeedItemById(branchId, String(zoneEvent._id));
-    if (streamItem) {
-      publishZoneEventUpdate(branchId, streamItem);
-    }
 
     await updateIncomingRecord(incomingRecordId, {
       processingStatus: 'processed',
       branchId,
-      zoneEventId: zoneEvent._id,
+      zoneEventId: processedZoneEvent._id,
+      errorMessage: null,
+    });
+    await updateTrackingIngressRecord(trackingIngressId, {
+      branchId,
+      vehicleId: vehicle?._id || null,
+      status: 'processed',
+      processedAt: new Date(),
       errorMessage: null,
     });
 
-    return NextResponse.json({ success: true, duplicate: false });
-    */
+    return NextResponse.json({
+      success: true,
+      duplicate: false,
+      definitionMatched: Boolean(matchingDefinition),
+      legacyFallbackUsed: !matchingDefinition && legacyFallbackEnabled,
+    });
   } catch (error: any) {
     console.error('[Athar Webhook] processing error:', error);
     if (incomingRecordId) {

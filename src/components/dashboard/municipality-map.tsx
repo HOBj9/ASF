@@ -4,12 +4,12 @@ import "leaflet/dist/leaflet.css";
 import "@/lib/leaflet-patch";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { MapContainer, TileLayer, Marker, Popup, Polygon } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup, Polygon, Polyline } from "react-leaflet";
 import MarkerClusterGroup from "react-leaflet-cluster";
 import "react-leaflet-cluster/lib/assets/MarkerCluster.css";
 import "react-leaflet-cluster/lib/assets/MarkerCluster.Default.css";
 import L from "leaflet";
-import { Maximize2, BusFront, MapPin, Hexagon, CarFront, X, BarChart2, CalendarDays, Layers, PanelRightOpen, PanelRightClose, Search } from "lucide-react";
+import { Maximize2, BusFront, MapPin, Hexagon, CarFront, X, BarChart2, CalendarDays, Layers, PanelRightOpen, PanelRightClose, Search, Play, Pause, SkipBack, SkipForward } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -116,6 +116,7 @@ type RouteSummary = {
 };
 
 type MunicipalityInfo = {
+  _id?: string;
   name: string;
   addressText?: string;
   centerLat: number;
@@ -304,6 +305,19 @@ function normalizeZoneId(zoneId?: string | null): string {
   return value.match(/^(\d+)/)?.[1] ?? value;
 }
 
+function formatDateTimeLocalInput(date: Date): string {
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function createDefaultHistoryFromInput(): string {
+  return formatDateTimeLocalInput(new Date(Date.now() - 6 * 60 * 60 * 1000));
+}
+
+function createDefaultHistoryToInput(): string {
+  return formatDateTimeLocalInput(new Date());
+}
+
 export type MapTab = "live" | "points" | "zones" | "objects";
 
 export type EventDetailsForPoint = {
@@ -326,6 +340,40 @@ export type MapEventItem = {
   driverName?: string;
   displayText?: string;
   pointId?: string;
+};
+
+type VehicleHistoryTrackPoint = {
+  provider: LiveVehicle["provider"];
+  source: "tracking_sample" | "athar_route";
+  recordedAt: string;
+  lat: number;
+  lng: number;
+  speed: number | null;
+  heading: number | null;
+  accuracy: number | null;
+  altitude: number | null;
+};
+
+type VehicleHistoryTrack = {
+  vehicle: {
+    id: string;
+    name: string;
+    plateNumber: string | null;
+    provider: LiveVehicle["provider"];
+    providerLabel: string;
+    routeId: string | null;
+    routeName: string | null;
+    imei: string | null;
+    trackingExternalId: string | null;
+  };
+  summary: {
+    pointsCount: number;
+    startedAt: string | null;
+    endedAt: string | null;
+    source: "tracking_sample" | "athar_route";
+    savedToSystem: boolean;
+  };
+  points: VehicleHistoryTrackPoint[];
 };
 
 type RightPanelType = "athar-live" | "system-points" | "events" | "cars" | "live" | "layers" | null;
@@ -390,6 +438,16 @@ export function MunicipalityMap({
   const [liveVehiclesSearchQuery, setLiveVehiclesSearchQuery] = useState("");
   const [liveProviderFilter, setLiveProviderFilter] = useState<LiveVehicle["provider"] | "all">("all");
   const [liveStatusFilter, setLiveStatusFilter] = useState<LiveVehicle["status"] | "all">("all");
+  const [historyVehicleId, setHistoryVehicleId] = useState<string | null>(null);
+  const [historyFrom, setHistoryFrom] = useState(() => createDefaultHistoryFromInput());
+  const [historyTo, setHistoryTo] = useState(() => createDefaultHistoryToInput());
+  const [historyTrack, setHistoryTrack] = useState<VehicleHistoryTrack | null>(null);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [liveDisplayMode, setLiveDisplayMode] = useState<"fleet" | "history">("fleet");
+  const [historyPlaybackIndex, setHistoryPlaybackIndex] = useState(0);
+  const [historyPlaybackPlaying, setHistoryPlaybackPlaying] = useState(false);
+  const [historyPlaybackSpeedMs, setHistoryPlaybackSpeedMs] = useState(800);
   const [eventsSearchQuery, setEventsSearchQuery] = useState("");
   const [pointTypeFilter, setPointTypeFilter] = useState<string | null>(null);
   const [pointPanelSearch, setPointPanelSearch] = useState("");
@@ -409,6 +467,15 @@ export function MunicipalityMap({
   useEffect(() => {
     if (!zonesVisible) setSelectedZone(null);
   }, [activeTab, showZonesWithPoints, zonesVisible]);
+
+  useEffect(() => {
+    setHistoryTrack(null);
+    setHistoryVehicleId(null);
+    setHistoryError(null);
+    setLiveDisplayMode("fleet");
+    setHistoryPlaybackIndex(0);
+    setHistoryPlaybackPlaying(false);
+  }, [municipality?._id]);
 
   const liveVehicleInventory = useMemo(
     () => liveVehicles.filter((v) => Array.isArray(v.coordinates) && v.coordinates.length === 2),
@@ -535,6 +602,20 @@ export function MunicipalityMap({
     );
   }, [liveVehiclesSearchQuery, visibleLiveVehicles]);
 
+  const activeHistoryVehicle = useMemo(() => {
+    const candidateId = historyTrack?.vehicle.id || historyVehicleId;
+    if (!candidateId) return null;
+    return liveVehicleInventory.find((vehicle) => vehicle.id === candidateId) || null;
+  }, [historyTrack, historyVehicleId, liveVehicleInventory]);
+
+  const currentPlaybackPoint = useMemo(() => {
+    if (!historyTrack?.points?.length) return null;
+    const safeIndex = Math.max(0, Math.min(historyPlaybackIndex, historyTrack.points.length - 1));
+    return historyTrack.points[safeIndex] || null;
+  }, [historyPlaybackIndex, historyTrack]);
+
+  const isHistoryViewMode = activeTab === "live" && liveDisplayMode === "history" && !!historyTrack?.points?.length;
+
   useEffect(() => {
     if (focusPointId && points.length > 0) {
       const point = points.find((p) => String(p._id) === String(focusPointId));
@@ -559,6 +640,10 @@ export function MunicipalityMap({
     if (activeTab !== "objects") {
       setTrackingObjectId(null);
     }
+    if (activeTab !== "live") {
+      setLiveDisplayMode("fleet");
+      setHistoryPlaybackPlaying(false);
+    }
     if (activeTab !== "points") {
       setSelectedPoint(null);
       setPointTypeFilter(null);
@@ -566,6 +651,11 @@ export function MunicipalityMap({
     }
     setLayersVisibleLimit(MAP_LAYER_BATCH_SIZE);
   }, [activeTab]);
+
+  useEffect(() => {
+    setLiveDisplayMode("fleet");
+    setHistoryPlaybackPlaying(false);
+  }, [liveProviderFilter, liveStatusFilter, liveVehiclesSearchQuery]);
 
   const maxLayerCountForTab = useMemo(() => {
     if (activeTab === "points") return Math.max(points.length, atharMarkers.length);
@@ -667,6 +757,8 @@ export function MunicipalityMap({
 
   const focusOnLiveVehicle = useCallback((vehicle: LiveVehicle | null) => {
     if (!vehicle || !Array.isArray(vehicle.coordinates) || vehicle.coordinates.length !== 2) return;
+    setLiveDisplayMode("fleet");
+    setHistoryPlaybackPlaying(false);
     showPanel("live");
     onTabChange("live");
     if (mapRef.current) {
@@ -676,9 +768,92 @@ export function MunicipalityMap({
 
   const focusOnAllLiveVehicles = useCallback(() => {
     if (!mapRef.current || filteredLiveVehicles.length === 0) return;
+    setLiveDisplayMode("fleet");
+    setHistoryPlaybackPlaying(false);
     const bounds = L.latLngBounds(filteredLiveVehicles.map((vehicle) => vehicle.coordinates as [number, number]));
     mapRef.current.fitBounds(bounds, { padding: [36, 36], maxZoom: 16 });
   }, [filteredLiveVehicles]);
+
+  const jumpToHistoryPoint = useCallback((index: number) => {
+    if (!historyTrack?.points?.length) return;
+    const safeIndex = Math.max(0, Math.min(index, historyTrack.points.length - 1));
+    const point = historyTrack.points[safeIndex];
+    setHistoryPlaybackPlaying(false);
+    setHistoryPlaybackIndex(safeIndex);
+    if (mapRef.current) {
+      mapRef.current.flyTo([point.lat, point.lng], 17, { duration: 0.5 });
+    }
+  }, [historyTrack]);
+
+  const clearHistoryTrack = useCallback(() => {
+    setHistoryTrack(null);
+    setHistoryVehicleId(null);
+    setHistoryError(null);
+    setLiveDisplayMode("fleet");
+    setHistoryPlaybackIndex(0);
+    setHistoryPlaybackPlaying(false);
+  }, []);
+
+  const loadVehicleHistory = useCallback(async (vehicle: LiveVehicle) => {
+    if (!municipality?._id) {
+      setHistoryError("تعذر تحديد الفرع لتحميل سجل الحركة.");
+      return;
+    }
+
+    const fromDate = new Date(historyFrom);
+    const toDate = new Date(historyTo);
+    if (Number.isNaN(fromDate.getTime()) || Number.isNaN(toDate.getTime())) {
+      setHistoryError("الرجاء إدخال فترة زمنية صحيحة.");
+      return;
+    }
+
+    if (fromDate.getTime() > toDate.getTime()) {
+      setHistoryError("وقت البداية يجب أن يسبق وقت النهاية.");
+      return;
+    }
+
+    setHistoryLoading(true);
+    setHistoryError(null);
+    setHistoryVehicleId(vehicle.id);
+
+    try {
+      const searchParams = new URLSearchParams({
+        branchId: municipality._id,
+        from: fromDate.toISOString(),
+        to: toDate.toISOString(),
+        limit: "1500",
+      });
+      const response = await fetch(`/api/vehicles/${encodeURIComponent(vehicle.id)}/history?${searchParams.toString()}`);
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload?.error || "تعذر تحميل سجل الحركة.");
+      }
+
+      const nextHistory = payload?.history as VehicleHistoryTrack | undefined;
+      if (!nextHistory?.points?.length) {
+        setHistoryTrack(null);
+        setLiveDisplayMode("fleet");
+        setHistoryPlaybackIndex(0);
+        setHistoryPlaybackPlaying(false);
+        setHistoryError("لا توجد نقاط محفوظة ضمن الفترة الزمنية المحددة.");
+      } else {
+        setHistoryTrack(nextHistory);
+        setLiveDisplayMode("history");
+        setHistoryPlaybackIndex(0);
+        setHistoryPlaybackPlaying(false);
+        onTabChange("live");
+        showPanel("live");
+      }
+    } catch (error: any) {
+      setHistoryTrack(null);
+      setLiveDisplayMode("fleet");
+      setHistoryPlaybackIndex(0);
+      setHistoryPlaybackPlaying(false);
+      setHistoryError(error?.message || "تعذر تحميل سجل الحركة.");
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, [historyFrom, historyTo, municipality?._id, onTabChange, showPanel]);
 
   useEffect(() => {
     if (!trackingObjectId || !mapRef.current) return;
@@ -696,6 +871,43 @@ export function MunicipalityMap({
       mapRef.current.panTo([lat, lng], { animate: true });
     }
   }, [trackingObjectId, atharObjects]);
+
+  useEffect(() => {
+    if (!mapRef.current || !isHistoryViewMode || !historyTrack?.points?.length) return;
+    const bounds = L.latLngBounds(
+      historyTrack.points.map((point) => [point.lat, point.lng] as [number, number])
+    );
+    mapRef.current.fitBounds(bounds, {
+      padding: [40, 40],
+      maxZoom: 17,
+    });
+  }, [historyTrack, isHistoryViewMode]);
+
+  useEffect(() => {
+    if (!isHistoryViewMode || !historyPlaybackPlaying || !historyTrack?.points?.length) return;
+    if (historyPlaybackIndex >= historyTrack.points.length - 1) {
+      setHistoryPlaybackPlaying(false);
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      setHistoryPlaybackIndex((current) => {
+        if (!historyTrack?.points?.length) return 0;
+        const next = Math.min(current + 1, historyTrack.points.length - 1);
+        if (next >= historyTrack.points.length - 1) {
+          setHistoryPlaybackPlaying(false);
+        }
+        return next;
+      });
+    }, historyPlaybackSpeedMs);
+
+      return () => window.clearTimeout(timer);
+  }, [historyPlaybackIndex, historyPlaybackPlaying, historyPlaybackSpeedMs, historyTrack, isHistoryViewMode]);
+
+  useEffect(() => {
+    if (!mapRef.current || !isHistoryViewMode || !currentPlaybackPoint || !historyPlaybackPlaying) return;
+    mapRef.current.panTo([currentPlaybackPoint.lat, currentPlaybackPoint.lng], { animate: true });
+  }, [currentPlaybackPoint, historyPlaybackPlaying, isHistoryViewMode]);
 
   const center = useMemo(() => {
     if (municipality) {
@@ -727,6 +939,7 @@ export function MunicipalityMap({
   const liveMarkersLayer = useMemo(() => {
     if (activeTab !== "live") return null;
     return filteredLiveVehicles.map((vehicle) => {
+      if (isHistoryViewMode && historyTrack?.vehicle.id === vehicle.id) return null;
       const matchedObject = vehicle.imei ? objectByImei.get(vehicle.imei) : null;
       return (
         <Marker
@@ -740,7 +953,7 @@ export function MunicipalityMap({
               {vehicle.plateNumber && <div className="text-xs text-muted-foreground">اللوحة: {vehicle.plateNumber}</div>}
               <div className="text-xs text-muted-foreground">المصدر: {vehicle.providerLabel}</div>
               <div className="text-xs text-muted-foreground">السائق: {vehicle.driverName}</div>
-              <div className="text-xs text-muted-foreground">المسار: {vehicle.route || "-"}</div>
+              <div className="text-xs text-muted-foreground">المسار التشغيلي: {vehicle.route || "-"}</div>
               <div className="text-xs text-muted-foreground">الحالة: {statusLabel[vehicle.status]}</div>
               <div className="text-xs text-muted-foreground">السرعة: {vehicle.speed} كم/س</div>
               <div className="text-xs text-muted-foreground">الاتجاه: {Math.round(vehicle.heading || 0)}°</div>
@@ -770,7 +983,123 @@ export function MunicipalityMap({
         </Marker>
       );
     });
-  }, [activeTab, filteredLiveVehicles, objectByImei, vehicleZoneMap, showVehicleNamesOnMap]);
+  }, [activeTab, filteredLiveVehicles, historyTrack?.vehicle.id, isHistoryViewMode, objectByImei, vehicleZoneMap, showVehicleNamesOnMap]);
+
+  const historyPathLayer = useMemo(() => {
+    if (!isHistoryViewMode || !historyTrack?.points?.length) return null;
+    const positions = historyTrack.points.map((point) => [point.lat, point.lng] as [number, number]);
+    const playedPositions = historyTrack.points
+      .slice(0, Math.max(1, historyPlaybackIndex + 1))
+      .map((point) => [point.lat, point.lng] as [number, number]);
+    const startPoint = historyTrack.points[0];
+    const endPoint = historyTrack.points[historyTrack.points.length - 1];
+    const currentPoint = currentPlaybackPoint;
+    const historyTrackColor = "#16a34a";
+
+    return (
+      <>
+        <Polyline
+          positions={positions}
+          pathOptions={{
+            color: "#052e16",
+            weight: 10,
+            opacity: 0.18,
+            lineCap: "round",
+            lineJoin: "round",
+          }}
+        />
+        <Polyline
+          positions={positions}
+          pathOptions={{
+            color: historyTrackColor,
+            weight: 6,
+            opacity: 0.92,
+            lineCap: "round",
+            lineJoin: "round",
+          }}
+        />
+        <Polyline
+          positions={playedPositions}
+          pathOptions={{
+            color: "#22c55e",
+            weight: 8,
+            opacity: 0.96,
+            lineCap: "round",
+            lineJoin: "round",
+          }}
+        />
+        {startPoint ? (
+          <Marker
+            position={[startPoint.lat, startPoint.lng]}
+            icon={getDefaultPointIcon("بداية")}
+            zIndexOffset={1100}
+          >
+            <Popup>
+              <div className="text-right">
+                <div className="font-semibold">بداية سجل الحركة</div>
+                <div className="text-xs text-muted-foreground">{startPoint.recordedAt}</div>
+              </div>
+            </Popup>
+          </Marker>
+        ) : null}
+        {currentPoint ? (
+          <Marker
+            position={[currentPoint.lat, currentPoint.lng]}
+            icon={getLiveVehicleIcon(
+              {
+                id: historyTrack.vehicle.id,
+                provider: historyTrack.vehicle.provider,
+                providerLabel: historyTrack.vehicle.providerLabel,
+                vehicleName: historyTrack.vehicle.name,
+                plateNumber: historyTrack.vehicle.plateNumber,
+                busNumber: historyTrack.vehicle.plateNumber || historyTrack.vehicle.name,
+                driverName: "",
+                route: historyTrack.vehicle.routeName || "",
+                routeId: historyTrack.vehicle.routeId,
+                status: "moving",
+                lastUpdate: currentPoint.recordedAt,
+                lastReceivedAt: currentPoint.recordedAt,
+                lastRecordedAt: currentPoint.recordedAt,
+                speed: currentPoint.speed || 0,
+                heading: currentPoint.heading || 0,
+                accuracy: currentPoint.accuracy,
+                coordinates: [currentPoint.lat, currentPoint.lng],
+                imei: historyTrack.vehicle.imei || undefined,
+                trackingExternalId: historyTrack.vehicle.trackingExternalId,
+                deviceName: null,
+                platform: null,
+                appVersion: null,
+              },
+              "موضع الحركة"
+            )}
+            zIndexOffset={1300}
+          >
+            <Popup>
+              <div className="text-right">
+                <div className="font-semibold">موضع الحركة الحالي</div>
+                <div className="text-xs text-muted-foreground">الوقت: {currentPoint.recordedAt}</div>
+                <div className="text-xs text-muted-foreground">السرعة: {currentPoint.speed != null ? `${currentPoint.speed} كم/س` : "—"}</div>
+              </div>
+            </Popup>
+          </Marker>
+        ) : null}
+        {endPoint ? (
+          <Marker
+            position={[endPoint.lat, endPoint.lng]}
+            icon={getDefaultPointIcon("نهاية")}
+            zIndexOffset={1200}
+          >
+            <Popup>
+              <div className="text-right">
+                <div className="font-semibold">نهاية سجل الحركة</div>
+                <div className="text-xs text-muted-foreground">{endPoint.recordedAt}</div>
+              </div>
+            </Popup>
+          </Marker>
+        ) : null}
+      </>
+    );
+  }, [currentPlaybackPoint, historyPlaybackIndex, historyTrack, isHistoryViewMode]);
 
   const pointsMarkersLayer = useMemo(() => {
     if (activeTab !== "points") return null;
@@ -837,16 +1166,6 @@ export function MunicipalityMap({
         <div className="flex flex-wrap items-center gap-2" dir="rtl">
           <Button
             type="button"
-            variant={rightPanel === "athar-live" ? "default" : "secondary"}
-            size="sm"
-            className="gap-2 text-xs"
-            onClick={() => togglePanel("athar-live")}
-          >
-            <CarFront className="h-3.5 w-3.5" />
-            أجهزة أثر الخام
-          </Button>
-          <Button
-            type="button"
             variant={rightPanel === "system-points" ? "default" : "secondary"}
             size="sm"
             className="gap-2 text-xs"
@@ -863,7 +1182,7 @@ export function MunicipalityMap({
             onClick={() => togglePanel("live")}
           >
             <BusFront className="h-3.5 w-3.5" />
-            التتبع الحي الموحد
+            تتبع حي
           </Button>
           <Button
             type="button"
@@ -882,6 +1201,10 @@ export function MunicipalityMap({
         center={initialCenter}
         zoom={13}
         className="h-full w-full"
+        preferCanvas
+        zoomAnimation={false}
+        markerZoomAnimation={false}
+        fadeAnimation={false}
         ref={attachRef ? mapRef : undefined}
         whenReady={() => {
           if (!attachRef) return;
@@ -907,13 +1230,15 @@ export function MunicipalityMap({
         )}
 
         {liveMarkersLayer}
+        {historyPathLayer}
 
         <MarkerClusterGroup
           disableClusteringAtZoom={17}
           showCoverageOnHover={false}
-          animate={true}
+          animate={false}
           animateAddingMarkers={false}
           removeOutsideVisibleBounds={true}
+          chunkedLoading={false}
           maxClusterRadius={80}
           spiderfyOnMaxZoom={false}
           zoomToBoundsOnClick={true}
@@ -991,10 +1316,10 @@ export function MunicipalityMap({
       dir="rtl"
       className={className}
     >
-      <TabsList className="grid w-full grid-cols-4">
+      <TabsList className="grid w-full grid-cols-3">
         <TabsTrigger value="live" className="gap-1.5">
           <BusFront className="h-4 w-4" />
-          التتبع الموحد
+          تتبع حي
         </TabsTrigger>
         <TabsTrigger value="points" className="gap-1.5">
           <MapPin className="h-4 w-4" />
@@ -1003,10 +1328,6 @@ export function MunicipalityMap({
         <TabsTrigger value="zones" className="gap-1.5">
           <Hexagon className="h-4 w-4" />
           مناطق أثر
-        </TabsTrigger>
-        <TabsTrigger value="objects" className="gap-1.5">
-          <CarFront className="h-4 w-4" />
-          سيارات أثر
         </TabsTrigger>
       </TabsList>
       <TabsContent value="live" className="hidden" />
@@ -1046,7 +1367,7 @@ export function MunicipalityMap({
               <span className="text-right text-sm font-medium">
                 {rightPanel === "athar-live" && "أجهزة أثر الخام"}
                 {rightPanel === "system-points" && "نقاط النظام مع المناطق المرتبطة فيها"}
-                {rightPanel === "live" && "التتبع الحي الموحد"}
+                {rightPanel === "live" && "تتبع حي"}
                 {rightPanel === "events" && eventsLabel}
               </span>
               <Button variant="ghost" size="icon" onClick={() => setRightPanel(null)} title="إغلاق">
@@ -1128,7 +1449,7 @@ export function MunicipalityMap({
                         <div className="text-xs text-muted-foreground">المركبة بالنظام: {matchedVehicle?.name}</div>
                       )}
                       {matchedRoute && (
-                        <div className="text-xs text-muted-foreground">المسار الحالي: {matchedRoute?.name}</div>
+                        <div className="text-xs text-muted-foreground">المسار التشغيلي: {matchedRoute?.name}</div>
                       )}
                       <div className="flex flex-wrap gap-2 pt-1">
                         <Button size="sm" className="h-8" onClick={() => focusOnObject(selectedObject)} disabled={selectedObject?.lat == null || selectedObject?.lng == null}>
@@ -1136,10 +1457,10 @@ export function MunicipalityMap({
                         </Button>
                         {matchedVehicle?.routeId ? (
                           <Button size="sm" variant="outline" className="h-8" asChild>
-                            <Link href={`/dashboard/routes/${String(matchedVehicle?.routeId)}/points`}>عرض المسار</Link>
+                            <Link href={`/dashboard/routes/${String(matchedVehicle?.routeId)}/points`}>عرض المسار التشغيلي</Link>
                           </Button>
                         ) : (
-                          <Button size="sm" variant="outline" className="h-8" disabled>عرض المسار</Button>
+                          <Button size="sm" variant="outline" className="h-8" disabled>عرض المسار التشغيلي</Button>
                         )}
                         {matchedVehicle?._id ? (
                           <Button size="sm" variant="outline" className="h-8" asChild>
@@ -1282,7 +1603,7 @@ export function MunicipalityMap({
                   <div className="rounded-xl border bg-muted/20 p-3">
                     <div className="flex items-start justify-between gap-2">
                       <div>
-                        <div className="font-medium">مركز التتبع الحي الموحد</div>
+                        <div className="font-medium">مركز التتبع الحي</div>
                         <div className="mt-1 text-xs text-muted-foreground">شاشة موحدة تعرض أثر وGPS الموبايل على نفس الخريطة.</div>
                       </div>
                       <Button
@@ -1363,7 +1684,7 @@ export function MunicipalityMap({
                     <Search className="absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
                     <Input
                       type="search"
-                      placeholder="ابحث بالمركبة أو المسار أو السائق أو المصدر أو IMEI أو الجهاز..."
+                      placeholder="ابحث بالمركبة أو المسار التشغيلي أو السائق أو المصدر أو IMEI أو الجهاز..."
                       value={liveVehiclesSearchQuery}
                       onChange={(e) => setLiveVehiclesSearchQuery(e.target.value)}
                       className="h-8 pr-8 text-xs"
@@ -1383,13 +1704,223 @@ export function MunicipalityMap({
                     </button>
                   </div>
 
+                  <div className="space-y-3 rounded-xl border p-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <div className="text-xs font-medium text-muted-foreground">سجل حركة المركبة الفعلي</div>
+                        <div className="mt-1 text-[11px] text-muted-foreground">
+                          {historyTrack
+                            ? `${historyTrack.vehicle.name} • ${historyTrack.summary.pointsCount} نقطة حركة`
+                            : "اختر مركبة من القائمة ثم حمّل سجل الحركة الفعلي ضمن الفترة المطلوبة."}
+                        </div>
+                        {historyTrack && !isHistoryViewMode ? (
+                          <div className="mt-1 text-[11px] text-amber-700 dark:text-amber-300">
+                            السجل محمّل لكنه مخفي حاليًا لأنك انتقلت إلى عرض آخر.
+                          </div>
+                        ) : null}
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {historyTrack ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant={isHistoryViewMode ? "default" : "secondary"}
+                            className="h-8"
+                            onClick={() => {
+                              setLiveDisplayMode("history");
+                              onTabChange("live");
+                              showPanel("live");
+                            }}
+                            disabled={historyLoading}
+                          >
+                            {isHistoryViewMode ? "سجل الحركة معروض" : "إظهار السجل"}
+                          </Button>
+                        ) : null}
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-8"
+                          onClick={() => activeHistoryVehicle && void loadVehicleHistory(activeHistoryVehicle)}
+                          disabled={!activeHistoryVehicle || historyLoading}
+                        >
+                          {historyLoading ? "جارٍ التحميل..." : "تحديث السجل"}
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className="h-8"
+                          onClick={clearHistoryTrack}
+                          disabled={!historyTrack && !historyVehicleId}
+                        >
+                          مسح
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div className="space-y-1">
+                        <label className="text-[11px] text-muted-foreground">من</label>
+                        <Input
+                          type="datetime-local"
+                          step={60}
+                          value={historyFrom}
+                          onChange={(event) => setHistoryFrom(event.target.value)}
+                          className="h-9 text-xs"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[11px] text-muted-foreground">إلى</label>
+                        <Input
+                          type="datetime-local"
+                          step={60}
+                          value={historyTo}
+                          onChange={(event) => setHistoryTo(event.target.value)}
+                          className="h-9 text-xs"
+                        />
+                      </div>
+                    </div>
+
+                    {historyError ? (
+                      <div className="rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-2 text-[11px] text-red-700 dark:text-red-300">
+                        {historyError}
+                      </div>
+                    ) : null}
+
+                    {historyTrack ? (
+                      <>
+                        <div className="rounded-lg border border-dashed px-3 py-2 text-[11px] text-muted-foreground">
+                          <span className="font-medium text-foreground">تنبيه توضيحي:</span> المسار التشغيلي هو الخط المعيّن للمركبة داخل النظام، أما سجل الحركة فهو النقاط الفعلية التي التقطناها من جهاز التتبع وتم رسمها على الخريطة كما تحركت المركبة فعليًا.
+                        </div>
+
+                        <div className="grid gap-2 md:grid-cols-2">
+                          <div className="rounded-lg border px-3 py-2 text-[11px]">
+                            <div className="text-muted-foreground">مصدر سجل الحركة</div>
+                            <div className="mt-1 font-medium">
+                              {historyTrack.summary.source === "athar_route" ? "مسار أثر التاريخي" : "النقاط المحفوظة داخلياً"}
+                            </div>
+                          </div>
+                          <div className="rounded-lg border px-3 py-2 text-[11px]">
+                            <div className="text-muted-foreground">المسار التشغيلي للمركبة</div>
+                            <div className="mt-1 font-medium">{historyTrack.vehicle.routeName || "غير معيّن"}</div>
+                          </div>
+                          <div className="rounded-lg border px-3 py-2 text-[11px]">
+                            <div className="text-muted-foreground">الحفظ الداخلي</div>
+                            <div className="mt-1 font-medium">{historyTrack.summary.savedToSystem ? "تم الحفظ" : "عرض مباشر فقط"}</div>
+                          </div>
+                          <div className="rounded-lg border px-3 py-2 text-[11px]">
+                            <div className="text-muted-foreground">بداية الحركة</div>
+                            <div className="mt-1 font-medium">{historyTrack.summary.startedAt || "—"}</div>
+                          </div>
+                          <div className="rounded-lg border px-3 py-2 text-[11px]">
+                            <div className="text-muted-foreground">نهاية الحركة</div>
+                            <div className="mt-1 font-medium">{historyTrack.summary.endedAt || "—"}</div>
+                          </div>
+                        </div>
+
+                        <div className="rounded-lg border px-3 py-3">
+                          <div className="flex flex-wrap items-center justify-between gap-3">
+                            <div>
+                              <div className="text-[11px] font-medium text-muted-foreground">التشغيل التفاعلي لسجل الحركة</div>
+                              <div className="mt-1 text-[11px] text-muted-foreground">
+                                النقطة الحالية: {Math.min(historyPlaybackIndex + 1, historyTrack.points.length)} / {historyTrack.points.length}
+                              </div>
+                              <div className="mt-1 text-[11px] text-muted-foreground">
+                                الوقت الحالي: {currentPlaybackPoint?.recordedAt || "—"}
+                              </div>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Button
+                                type="button"
+                                size="icon"
+                                variant="outline"
+                                className="h-8 w-8"
+                                onClick={() => jumpToHistoryPoint(0)}
+                                disabled={!historyTrack.points.length}
+                              >
+                                <SkipBack className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                type="button"
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={() => setHistoryPlaybackPlaying((current) => !current)}
+                                disabled={historyTrack.points.length <= 1}
+                              >
+                                {historyPlaybackPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                              </Button>
+                              <Button
+                                type="button"
+                                size="icon"
+                                variant="outline"
+                                className="h-8 w-8"
+                                onClick={() => jumpToHistoryPoint(historyTrack.points.length - 1)}
+                                disabled={!historyTrack.points.length}
+                              >
+                                <SkipForward className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {[
+                              { label: "بطيء", value: 1400 },
+                              { label: "متوسط", value: 800 },
+                              { label: "سريع", value: 400 },
+                            ].map((speed) => (
+                              <button
+                                key={speed.value}
+                                type="button"
+                                onClick={() => setHistoryPlaybackSpeedMs(speed.value)}
+                                className={`rounded-full border px-2.5 py-1 text-[11px] transition-colors ${
+                                  historyPlaybackSpeedMs === speed.value
+                                    ? "border-primary bg-primary/10 text-primary"
+                                    : "text-muted-foreground hover:bg-muted"
+                                }`}
+                              >
+                                {speed.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="max-h-56 overflow-y-auto rounded-lg border border-border/70">
+                          {historyTrack.points.map((point, index) => (
+                            <button
+                              key={`${point.recordedAt}-${point.lat}-${point.lng}-${index}`}
+                              type="button"
+                              onClick={() => jumpToHistoryPoint(index)}
+                              className={`block w-full border-t border-border/70 px-3 py-2 text-right text-[11px] transition-colors first:border-t-0 ${
+                                historyPlaybackIndex === index ? "bg-primary/5" : "hover:bg-muted/40"
+                              }`}
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-muted-foreground">النقطة {index + 1}</span>
+                                <span>{point.recordedAt}</span>
+                              </div>
+                              <div className="mt-1 flex items-center justify-between gap-2">
+                                <span className="text-muted-foreground">الإحداثيات</span>
+                                <span>{point.lat.toFixed(5)}, {point.lng.toFixed(5)}</span>
+                              </div>
+                              <div className="mt-1 flex items-center justify-between gap-2">
+                                <span className="text-muted-foreground">السرعة</span>
+                                <span>{point.speed != null ? `${point.speed} كم/س` : "—"}</span>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    ) : null}
+                  </div>
+
                   <div className="max-h-[540px] space-y-2 overflow-y-auto">
                     {filteredLiveVehicles.map((vehicle) => (
-                      <button
+                      <div
                         key={`live-vehicle-${vehicle.id}`}
-                        type="button"
-                        onClick={() => focusOnLiveVehicle(vehicle)}
-                        className="w-full rounded-xl border px-3 py-3 text-right transition-colors hover:bg-muted/50"
+                        className={`w-full rounded-xl border px-3 py-3 text-right transition-colors hover:bg-muted/50 ${
+                          historyTrack?.vehicle.id === vehicle.id ? "border-primary/50 bg-primary/5" : ""
+                        }`}
                       >
                         <div className="flex items-center justify-between gap-2">
                           <span
@@ -1414,7 +1945,7 @@ export function MunicipalityMap({
                         </div>
                         <div className="mt-3 overflow-hidden rounded-lg border border-border/70 bg-background/30">
                           <div className="flex items-center justify-between px-3 py-2 text-[11px]">
-                            <span className="text-muted-foreground">المسار</span>
+                            <span className="text-muted-foreground">المسار التشغيلي</span>
                             <span>{vehicle.route || "مسار غير معين"}</span>
                           </div>
                           <div className="flex items-center justify-between border-t border-border/70 px-3 py-2 text-[11px]">
@@ -1488,7 +2019,27 @@ export function MunicipalityMap({
                             </div>
                           )}
                         </div>
-                      </button>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            className="h-8"
+                            onClick={() => focusOnLiveVehicle(vehicle)}
+                          >
+                            تحديد على الخريطة
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="h-8"
+                            onClick={() => void loadVehicleHistory(vehicle)}
+                            disabled={historyLoading && historyVehicleId === vehicle.id}
+                          >
+                            {historyLoading && historyVehicleId === vehicle.id ? "جارٍ التحميل..." : "عرض سجل الحركة"}
+                          </Button>
+                        </div>
+                      </div>
                     ))}
                     {filteredLiveVehicles.length === 0 && (
                       <div className="rounded-lg border border-dashed px-3 py-4 text-center text-xs text-muted-foreground">
@@ -1605,7 +2156,7 @@ export function MunicipalityMap({
             onClick={() => {
               const panelToOpen = lastOpenedPanel || "system-points";
               showPanel(panelToOpen);
-              onTabChange(panelToOpen === "athar-live" ? "objects" : panelToOpen === "live" ? "live" : "points");
+              onTabChange(panelToOpen === "live" ? "live" : "points");
             }}
             title="فتح لوحة التفاصيل"
             className="absolute right-0 top-1/2 z-[400] flex h-20 w-10 -translate-y-1/2 flex-col items-center justify-center rounded-l-lg border border-r-0 border-border bg-muted/90 shadow-sm transition-colors hover:bg-muted"
@@ -1758,7 +2309,7 @@ export function MunicipalityMap({
               {rightPanel === "live" && (
                 <div className="space-y-3 text-sm">
                   <div className="rounded-xl border bg-muted/20 p-3">
-                    <div className="font-medium">مركز التتبع الحي الموحد</div>
+                    <div className="font-medium">مركز التتبع الحي</div>
                     <div className="mt-1 text-xs text-muted-foreground">
                       إجمالي مباشر: {liveVehicleInventory.length} • بعد الفلاتر: {visibleLiveVehicles.length}
                       {liveVehiclesSearchQuery.trim() && ` • نتائج البحث: ${filteredLiveVehicles.length}`}
@@ -2177,16 +2728,6 @@ export function MunicipalityMap({
           </button>
           <button
             type="button"
-            title="أجهزة أثر الخام"
-            onClick={() => openRightPanel("athar-live")}
-            className={`flex items-center justify-center h-10 w-10 mx-auto rounded-lg transition-colors ${
-              rightPanel === "athar-live" ? "bg-primary text-primary-foreground" : "hover:bg-muted"
-            }`}
-          >
-            <CarFront className="h-5 w-5" />
-          </button>
-          <button
-            type="button"
             title={eventsLabel}
             onClick={() => openRightPanel("events")}
             className={`flex items-center justify-center h-10 w-10 mx-auto rounded-lg transition-colors ${
@@ -2197,7 +2738,7 @@ export function MunicipalityMap({
           </button>
           <button
             type="button"
-            title="لوحة التتبع الحي الموحد"
+            title="لوحة تتبع حي"
             onClick={() => openRightPanel("live")}
             className={`flex items-center justify-center h-10 w-10 mx-auto rounded-lg transition-colors ${
               rightPanel === "live" ? "bg-primary text-primary-foreground" : "hover:bg-muted"

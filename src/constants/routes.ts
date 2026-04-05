@@ -9,6 +9,7 @@ export const routes = {
     home: '/',
     login: '/login',
     register: '/register',
+    apiDocs: '/api-docs',
   },
 
   // Protected Routes

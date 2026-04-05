@@ -45,7 +45,8 @@ export default withAuth(
         if (
           path === routes.public.login ||
           path === routes.public.register ||
-          path === routes.public.home
+          path === routes.public.home ||
+          path === routes.public.apiDocs
         ) {
           return true;
         }

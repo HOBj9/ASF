@@ -651,7 +651,7 @@ export function MunicipalityDashboard({
   }, [canLoadBranchData, loading, loadMapData]);
 
   useEffect(() => {
-    if (activeMapTab !== "live" || !canLoadBranchData) return;
+    if (!canLoadBranchData) return;
     const wsUrl = `/api/vehicles/locations/websocket${branchQuery}`;
     const source = new EventSource(wsUrl);
     source.onopen = () => setVehiclesConnected(true);
@@ -676,13 +676,12 @@ export function MunicipalityDashboard({
       setVehiclesConnected(false);
       source.close();
     };
-  }, [activeMapTab, canLoadBranchData, branchQuery]);
+  }, [canLoadBranchData, branchQuery]);
 
   useEffect(() => {
     if (!canLoadBranchData) return;
-    if (activeMapTab === "live" && !liveLoaded) {
+    if (!liveLoaded) {
       void loadLiveVehicles();
-      return;
     }
 
     if (

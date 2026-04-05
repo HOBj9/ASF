@@ -1,4 +1,4 @@
-import Branch from '@/models/Branch';
+﻿import Branch from '@/models/Branch';
 import Driver from '@/models/Driver';
 import PointCompletion from '@/models/PointCompletion';
 import PointVisit from '@/models/PointVisit';
@@ -33,6 +33,7 @@ export interface ProcessTrackingZoneTransitionInput {
   zoneId?: string | null;
   imei?: string | null;
   providerEventId?: string | null;
+  definitionId?: string | null;
   rawPayload?: Record<string, any> | null;
   eventName?: string | null;
   driverName?: string | null;
@@ -42,7 +43,7 @@ function normalizeZoneLabel(value: string | null | undefined): string | null {
   if (!value) return null;
   const cleaned = String(value).trim();
   if (!cleaned) return null;
-  if (/^\d+$/.test(cleaned)) return `النقطة ${cleaned}`;
+  if (/^\d+$/.test(cleaned)) return `Ø§Ù„Ù†Ù‚Ø·Ø© ${cleaned}`;
   return cleaned;
 }
 
@@ -52,7 +53,7 @@ function resolvePointName(point?: PointLike | null, zoneId?: string | null): str
     point?.nameEn ||
     point?.name ||
     normalizeZoneLabel(zoneId) ||
-    'نقطة غير معروفة'
+    'Ù†Ù‚Ø·Ø© ØºÙŠØ± Ù…Ø¹Ø±ÙˆÙØ©'
   );
 }
 
@@ -76,13 +77,14 @@ export class TrackingEventProcessorService {
     const driverName = await resolveDriverName(input.vehicle, input.driverName || null);
     const eventName =
       input.eventName ||
-      `${pointName} - ${input.type === 'zone_in' ? 'دخول' : 'خروج'}`;
+      `${pointName} - ${input.type === 'zone_in' ? 'Ø¯Ø®ÙˆÙ„' : 'Ø®Ø±ÙˆØ¬'}`;
 
     const zoneEvent: any = await ZoneEvent.create({
       branchId,
       vehicleId,
       driverId: input.vehicle?.driverId || null,
       pointId,
+      definitionId: input.definitionId || null,
       zoneId: resolvedZoneId,
       imei: input.imei || input.vehicle?.imei || null,
       provider: input.provider,
@@ -288,3 +290,4 @@ export class TrackingEventProcessorService {
     await ZoneEvent.findByIdAndUpdate(input.zoneEventId, { isOrphanExit: true }).exec();
   }
 }
+

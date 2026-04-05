@@ -1,51 +1,55 @@
-import type { ReactNode } from "react"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
-import { redirect } from "next/navigation"
-import connectDB from "@/lib/mongodb"
-import User from "@/models/User"
-import { isLineSupervisor, isOrganizationAdmin, isAdmin, isBranchAdmin } from "@/lib/permissions"
-import { resolveOrganizationId } from "@/lib/utils/organization.util"
-import { ProfileManager } from "@/components/profile/profile-manager"
-import { OrganizationLabelsSettings } from "@/components/settings/organization-labels-settings"
-import { NotificationSettings } from "@/components/settings/notification-settings"
-import { LineSupervisorsManager } from "@/components/dashboard/line-supervisors-manager"
-import { getLabelsForSession } from "@/lib/utils/labels-server.util"
-import { loadLineSupervisorsDataset } from "@/lib/server/line-supervisors-dataset"
+﻿import type { ReactNode } from 'react';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
+import { redirect } from 'next/navigation';
+import connectDB from '@/lib/mongodb';
+import User from '@/models/User';
+import { isLineSupervisor, isOrganizationAdmin, isAdmin, isBranchAdmin } from '@/lib/permissions';
+import { resolveOrganizationId } from '@/lib/utils/organization.util';
+import { ProfileManager } from '@/components/profile/profile-manager';
+import { OrganizationLabelsSettings } from '@/components/settings/organization-labels-settings';
+import { NotificationSettings } from '@/components/settings/notification-settings';
+import { LineSupervisorsManager } from '@/components/dashboard/line-supervisors-manager';
+import { TrackingEventDefinitionsManager } from '@/components/settings/tracking-event-definitions-manager';
+import { getLabelsForSession } from '@/lib/utils/labels-server.util';
+import { loadLineSupervisorsDataset } from '@/lib/server/line-supervisors-dataset';
 
 export default async function SettingsPage() {
-  const session = await getServerSession(authOptions)
+  const session = await getServerSession(authOptions);
 
   if (!session) {
-    redirect("/login")
+    redirect('/login');
   }
 
-  await connectDB()
+  await connectDB();
   const user = await User.findById(session.user.id)
-    .select("name email avatar businessName")
-    .lean()
+    .select('name email avatar businessName')
+    .lean();
 
-  const role = session.user.role as any
-  const hideLabelsAndNotifications = isLineSupervisor(role)
-  const showLineSupervisorsBlock =
+  const role = session.user.role as any;
+  const hideLabelsAndNotifications = isLineSupervisor(role);
+  const showManagementBlocks =
     !hideLabelsAndNotifications &&
-    (isOrganizationAdmin(role) || isAdmin(role) || isBranchAdmin(role))
+    (isOrganizationAdmin(role) || isAdmin(role) || isBranchAdmin(role));
 
-  let lineSupervisorsSection: ReactNode = null
-  if (showLineSupervisorsBlock) {
+  const sessionBranchId = (session.user as { branchId?: string | null })?.branchId ?? null;
+
+  let lineSupervisorsSection: ReactNode = null;
+  if (showManagementBlocks) {
     try {
-      const organizationId = await resolveOrganizationId(session)
-      const labels = await getLabelsForSession(session)
-      const { initialUsers, branches, vehicles } = await loadLineSupervisorsDataset(organizationId)
-      const sessionBranchId = (session.user as { branchId?: string | null })?.branchId ?? null
+      const organizationId = await resolveOrganizationId(session);
+      const labels = await getLabelsForSession(session);
+      const { initialUsers, branches, vehicles } = await loadLineSupervisorsDataset(organizationId);
       lineSupervisorsSection = (
         <div>
-          <h2 className="text-xl font-semibold mb-3">
-            {labels.lineSupervisorLabel || "مشرفو الخط"}
+          <h2 className="mb-3 text-xl font-semibold">
+            {labels.lineSupervisorLabel || 'مشرفو الخط'}
           </h2>
-          <p className="text-sm text-muted-foreground mb-4">
-            إدارة {labels.lineSupervisorLabel || "مشرفي الخط"} وبياناتهم وربطهم بالفرع والمركبة.
-            {!sessionBranchId ? ` على مستوى المؤسسة اختر ${labels.branchLabel || "الفرع"} لعرض القائمة.` : ""}
+          <p className="mb-4 text-sm text-muted-foreground">
+            إدارة {labels.lineSupervisorLabel || 'مشرفي الخط'} وبياناتهم وربطهم بالفرع والمركبة.
+            {!sessionBranchId
+              ? ` على مستوى المؤسسة اختر ${labels.branchLabel || 'الفرع'} لعرض القائمة.`
+              : ''}
           </p>
           <LineSupervisorsManager
             organizationId={organizationId}
@@ -55,28 +59,50 @@ export default async function SettingsPage() {
             sessionBranchId={sessionBranchId}
           />
         </div>
-      )
+      );
     } catch {
-      lineSupervisorsSection = null
+      lineSupervisorsSection = null;
+    }
+  }
+
+  let trackingDefinitionsSection: ReactNode = null;
+  if (showManagementBlocks) {
+    try {
+      const organizationId = await resolveOrganizationId(session);
+      const Branch = (await import('@/models/Branch')).default;
+      const branches = await Branch.find({ organizationId })
+        .select('name nameAr _id')
+        .sort({ name: 1 })
+        .lean();
+
+      trackingDefinitionsSection = (
+        <TrackingEventDefinitionsManager
+          organizationId={organizationId}
+          branches={JSON.parse(JSON.stringify(branches))}
+          sessionBranchId={sessionBranchId}
+        />
+      );
+    } catch {
+      trackingDefinitionsSection = null;
     }
   }
 
   return (
-    <div className="text-right space-y-8">
+    <div className="space-y-8 text-right">
       <div className="mb-6 lg:mb-8">
-        <h1 className="text-2xl lg:text-3xl font-bold">الإعدادات</h1>
-        <p className="text-muted-foreground mt-2">
-          {hideLabelsAndNotifications ? "إدارة الملف الشخصي" : "إدارة الملف الشخصي وتسميات المؤسسة"}
+        <h1 className="text-2xl font-bold lg:text-3xl">الإعدادات</h1>
+        <p className="mt-2 text-muted-foreground">
+          {hideLabelsAndNotifications ? 'إدارة الملف الشخصي' : 'إدارة الملف الشخصي وإعدادات المؤسسة والتتبع'}
         </p>
       </div>
 
       <div>
-        <h2 className="text-xl font-semibold mb-3">الملف الشخصي</h2>
+        <h2 className="mb-3 text-xl font-semibold">الملف الشخصي</h2>
         <ProfileManager
           initialUser={{
             id: session.user.id,
-            name: user?.name || session.user.name || "",
-            email: user?.email || session.user.email || "",
+            name: user?.name || session.user.name || '',
+            email: user?.email || session.user.email || '',
             avatar: user?.avatar || undefined,
             businessName: (user as any)?.businessName || undefined,
           }}
@@ -86,20 +112,20 @@ export default async function SettingsPage() {
       {!hideLabelsAndNotifications && (
         <>
           <div>
-            <h2 className="text-xl font-semibold mb-3">تسميات المؤسسة</h2>
+            <h2 className="mb-3 text-xl font-semibold">تسميات المؤسسة</h2>
             <OrganizationLabelsSettings />
           </div>
 
           {lineSupervisorsSection}
 
+          {trackingDefinitionsSection}
+
           <div>
-            <h2 className="text-xl font-semibold mb-3">تخصيص الإشعارات</h2>
+            <h2 className="mb-3 text-xl font-semibold">تخصيص الإشعارات</h2>
             <NotificationSettings />
           </div>
         </>
       )}
-
     </div>
-  )
+  );
 }
-

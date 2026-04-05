@@ -274,6 +274,39 @@ export class AtharService {
     return output;
   }
 
+  async getObjectRouteHistory(
+    imei: string,
+    from: Date,
+    to: Date,
+    minStopMinutes: number = 1
+  ): Promise<any[]> {
+    const normalizedImei = String(imei || '').trim();
+    if (!normalizedImei) return [];
+
+    const cmd = `OBJECT_GET_ROUTE,${normalizedImei},${this.formatDateTime(from)},${this.formatDateTime(to)},${minStopMinutes}`;
+    const response = await this.makeRequest({ cmd });
+    const routeSource = response?.route ?? response?.data?.route ?? response?.data ?? response;
+
+    if (Array.isArray(routeSource)) {
+      if (!routeSource.length) return [];
+      if (!Array.isArray(routeSource[0]) && typeof routeSource[0] !== 'object') {
+        return [routeSource];
+      }
+      return routeSource;
+    }
+
+    if (routeSource && typeof routeSource === 'object') {
+      return Object.values(routeSource);
+    }
+
+    return [];
+  }
+
+  private formatDateTime(date: Date): string {
+    const pad = (value: number) => String(value).padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+  }
+
   async findZoneIdByName(name: string): Promise<string | null> {
     console.log('[Athar] findZoneIdByName: name=', name);
     const zones = await this.getZones();

@@ -1,0 +1,782 @@
+openapi: 3.1.0
+info:
+  title: Waste Management System Mobile API
+  version: 1.0.0
+  summary: Mobile surveys and mobile tracking APIs for line supervisors
+  description: |
+    Unified OpenAPI contract for the mobile app.
+    It covers:
+    - line supervisor mobile login
+    - survey download and submission
+    - mobile tracking status, ingestion, and deactivation
+    - tracking admin monitoring endpoints
+servers:
+  - url: /
+tags:
+  - name: Mobile Auth
+  - name: Mobile Surveys
+  - name: Mobile Tracking
+  - name: Tracking Admin
+paths:
+  /api/tracking/mobile/login:
+    post:
+      tags: [Mobile Auth]
+      summary: Login for the mobile app
+      operationId: mobileLogin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MobileLoginRequest'
+      responses:
+        '200':
+          description: Login succeeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MobileLoginResponse'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '500':
+          $ref: '#/components/responses/Error500'
+
+  /api/mobile/surveys:
+    get:
+      tags: [Mobile Surveys]
+      summary: List active surveys available to the authenticated line supervisor
+      operationId: listMobileSurveys
+      security:
+        - bearerAuth: []
+        - sessionCookieAuth: []
+        - secureSessionCookieAuth: []
+      responses:
+        '200':
+          description: Surveys list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MobileSurveyListResponse'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '500':
+          $ref: '#/components/responses/Error500'
+
+  /api/mobile/surveys/{surveyId}:
+    get:
+      tags: [Mobile Surveys]
+      summary: Get survey details with question keys and point classifications
+      operationId: getMobileSurvey
+      security:
+        - bearerAuth: []
+        - sessionCookieAuth: []
+        - secureSessionCookieAuth: []
+      parameters:
+        - in: path
+          name: surveyId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Survey details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MobileSurveyDetailResponse'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '500':
+          $ref: '#/components/responses/Error500'
+
+  /api/mobile/surveys/{surveyId}/submit:
+    post:
+      tags: [Mobile Surveys]
+      summary: Submit survey answers from mobile
+      operationId: submitMobileSurvey
+      security:
+        - bearerAuth: []
+        - sessionCookieAuth: []
+        - secureSessionCookieAuth: []
+      parameters:
+        - in: path
+          name: surveyId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MobileSurveySubmitRequest'
+      responses:
+        '201':
+          description: Survey submitted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MobileSurveySubmitResponse'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '500':
+          $ref: '#/components/responses/Error500'
+
+  /api/tracking/mobile/status:
+    get:
+      tags: [Mobile Tracking]
+      summary: Get current mobile tracking status
+      operationId: getMobileTrackingStatus
+      security:
+        - bearerAuth: []
+        - sessionCookieAuth: []
+        - secureSessionCookieAuth: []
+      responses:
+        '200':
+          description: Mobile tracking status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MobileTrackingStatusResponse'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '500':
+          $ref: '#/components/responses/Error500'
+
+  /api/tracking/mobile/activate:
+    post:
+      tags: [Mobile Tracking]
+      summary: Legacy device activation
+      description: |
+        Legacy compatibility endpoint.
+
+        New mobile clients can login and send GPS batches directly to `/api/tracking/mobile/ingest`
+        using the mobile bearer token without calling this endpoint first.
+      operationId: activateMobileTracking
+      deprecated: true
+      security:
+        - bearerAuth: []
+        - sessionCookieAuth: []
+        - secureSessionCookieAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MobileActivateRequest'
+      responses:
+        '201':
+          description: Device activated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MobileActivateResponse'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '500':
+          $ref: '#/components/responses/Error500'
+
+  /api/tracking/mobile/ingest:
+    post:
+      tags: [Mobile Tracking]
+      summary: Ingest a GPS batch from the mobile application
+      description: |
+        Standard flow:
+        1. Login using `/api/tracking/mobile/login`
+        2. Send GPS batches directly to this endpoint with `Authorization: Bearer <accessToken>`
+
+        `X-Tracking-Token` is still accepted for legacy clients but is no longer required for new ones.
+      operationId: ingestMobileTrackingBatch
+      security:
+        - bearerAuth: []
+        - sessionCookieAuth: []
+        - secureSessionCookieAuth: []
+        - trackingTokenHeader: []
+      parameters:
+        - in: header
+          name: X-Tracking-Token
+          required: false
+          schema:
+            type: string
+          description: Legacy tracking token returned by `/api/tracking/mobile/activate`
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MobileTrackingBatchRequest'
+            example:
+              deviceId: android-device-001
+              deviceName: Samsung A55
+              platform: android
+              appVersion: 1.0.0
+              batchId: batch-20260330-001
+              sentAt: '2026-03-30T10:00:30Z'
+              samples:
+                - recordedAt: '2026-03-30T10:00:05Z'
+                  lat: 33.5138
+                  lng: 36.2765
+                  speed: 24
+                  heading: 140
+                  accuracy: 8
+                  altitude: 650
+      responses:
+        '200':
+          description: Batch stored and processed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MobileTrackingBatchResponse'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '500':
+          $ref: '#/components/responses/Error500'
+
+  /api/tracking/mobile/deactivate:
+    post:
+      tags: [Mobile Tracking]
+      summary: Deactivate mobile tracking bindings for the authenticated supervisor
+      operationId: deactivateMobileTracking
+      security:
+        - bearerAuth: []
+        - sessionCookieAuth: []
+        - secureSessionCookieAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MobileDeactivateRequest'
+      responses:
+        '200':
+          description: Deactivation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MobileDeactivateResponse'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '500':
+          $ref: '#/components/responses/Error500'
+
+  /api/tracking/bindings/{id}/revoke:
+    post:
+      tags: [Tracking Admin]
+      summary: Revoke a tracking binding
+      operationId: revokeTrackingBinding
+      security:
+        - sessionCookieAuth: []
+        - secureSessionCookieAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Binding revoked successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RevokeTrackingBindingResponse'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '500':
+          $ref: '#/components/responses/Error500'
+
+  /api/tracking/overview:
+    get:
+      tags: [Tracking Admin]
+      summary: Get tracking dashboard overview
+      operationId: getTrackingOverview
+      security:
+        - sessionCookieAuth: []
+        - secureSessionCookieAuth: []
+      parameters:
+        - in: query
+          name: branchId
+          schema:
+            type: string
+        - in: query
+          name: organizationId
+          schema:
+            type: string
+        - in: query
+          name: bindingsLimit
+          schema:
+            type: integer
+        - in: query
+          name: messagesLimit
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Tracking overview payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrackingOverviewResponse'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '500':
+          $ref: '#/components/responses/Error500'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: MobileAuthToken
+    trackingTokenHeader:
+      type: apiKey
+      in: header
+      name: X-Tracking-Token
+      description: Legacy tracking token returned by `/api/tracking/mobile/activate`
+    sessionCookieAuth:
+      type: apiKey
+      in: cookie
+      name: next-auth.session-token
+    secureSessionCookieAuth:
+      type: apiKey
+      in: cookie
+      name: __Secure-next-auth.session-token
+  responses:
+    Error400:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Error401:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Error403:
+      description: Forbidden
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Error404:
+      description: Not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Error500:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+
+    MobileLoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+    MobileLoginUser:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        email:
+          type: string
+          format: email
+        role: { type: string }
+        organizationId:
+          type: [string, 'null']
+        branchId:
+          type: [string, 'null']
+        trackingVehicleId:
+          type: [string, 'null']
+    MobileLoginResponse:
+      type: object
+      properties:
+        accessToken: { type: string }
+        tokenType:
+          type: string
+          enum: [Bearer]
+        expiresAt:
+          type: string
+          format: date-time
+        user:
+          $ref: '#/components/schemas/MobileLoginUser'
+        tracking:
+          type: object
+          properties:
+            canActivate:
+              type: boolean
+
+    MobileSurveySummary:
+      type: object
+      properties:
+        id: { type: string }
+        organizationId:
+          type: [string, 'null']
+        branchId:
+          type: [string, 'null']
+        title: { type: string }
+        titleAr:
+          type: [string, 'null']
+        description:
+          type: [string, 'null']
+        descriptionAr:
+          type: [string, 'null']
+        questionCount:
+          type: integer
+        isActive:
+          type: boolean
+        updatedAt:
+          type: [string, 'null']
+          format: date-time
+    MobileSurveyListResponse:
+      type: object
+      properties:
+        surveys:
+          type: array
+          items:
+            $ref: '#/components/schemas/MobileSurveySummary'
+
+    MobileSurveyQuestion:
+      type: object
+      properties:
+        id:
+          type: [string, 'null']
+        index:
+          type: integer
+        answerKey:
+          type: string
+        type:
+          type: string
+          enum: [text, choice, current_location]
+        questionText:
+          type: string
+        questionTextAr:
+          type: [string, 'null']
+        options:
+          type: array
+          items:
+            type: string
+        required:
+          type: boolean
+    PointClassificationSummary:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        nameAr:
+          type: [string, 'null']
+        primaryClassificationId:
+          type: [string, 'null']
+        branchId:
+          type: [string, 'null']
+        organizationId:
+          type: [string, 'null']
+        order:
+          type: integer
+    MobileSurveyDetailResponse:
+      type: object
+      properties:
+        survey:
+          type: object
+          properties:
+            id: { type: string }
+            organizationId:
+              type: [string, 'null']
+            branchId:
+              type: [string, 'null']
+            title: { type: string }
+            titleAr:
+              type: [string, 'null']
+            description:
+              type: [string, 'null']
+            descriptionAr:
+              type: [string, 'null']
+            isActive:
+              type: boolean
+            updatedAt:
+              type: [string, 'null']
+              format: date-time
+            questions:
+              type: array
+              items:
+                $ref: '#/components/schemas/MobileSurveyQuestion'
+        submissionTemplate:
+          type: object
+          properties:
+            pointFields:
+              type: object
+              properties:
+                required:
+                  type: array
+                  items:
+                    type: string
+            classifications:
+              type: object
+              properties:
+                primaries:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/PointClassificationSummary'
+                secondaries:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/PointClassificationSummary'
+
+    MobileSurveySubmitRequest:
+      type: object
+      properties:
+        point:
+          type: object
+          required:
+            - name
+            - primaryClassificationId
+            - secondaryClassificationId
+            - otherIdentifier
+            - mapLat
+            - mapLng
+          properties:
+            name: { type: string }
+            primaryClassificationId: { type: string }
+            secondaryClassificationId: { type: string }
+            otherIdentifier: { type: string }
+            mapLat: { type: number }
+            mapLng: { type: number }
+            deviceLat:
+              type: [number, 'null']
+            deviceLng:
+              type: [number, 'null']
+        answers:
+          type: array
+          items:
+            type: object
+            properties:
+              questionId:
+                type: [string, 'null']
+              answerKey:
+                type: [string, 'null']
+              value: {}
+    MobileSurveySubmitResponse:
+      type: object
+      properties:
+        submission:
+          type: object
+          additionalProperties: true
+        point:
+          type: object
+          additionalProperties: true
+
+    TrackingProvider:
+      type: string
+      enum: [athar, mobile_app, traccar]
+    ZoneEventProvider:
+      type: string
+      enum: [athar, mobile_app]
+    TrackingConnectivityStatus:
+      type: string
+      enum: [moving, stopped, offline]
+
+    MobileActivateRequest:
+      type: object
+      properties:
+        deviceId: { type: string }
+        deviceName: { type: string }
+        platform: { type: string }
+        appVersion: { type: string }
+    MobileTrackingBinding:
+      type: object
+      additionalProperties: true
+    MobileActivateVehicle:
+      type: object
+      properties:
+        _id: { type: string }
+        name: { type: string }
+        plateNumber:
+          type: [string, 'null']
+        trackingProvider:
+          $ref: '#/components/schemas/TrackingProvider'
+        acceptedTrackingProviders:
+          type: array
+          items:
+            $ref: '#/components/schemas/TrackingProvider'
+        zoneEventProvider:
+          $ref: '#/components/schemas/ZoneEventProvider'
+    MobileActivateResponse:
+      type: object
+      properties:
+        trackingToken: { type: string }
+        binding:
+          $ref: '#/components/schemas/MobileTrackingBinding'
+        vehicle:
+          $ref: '#/components/schemas/MobileActivateVehicle'
+
+    MobileTrackingStatusResponse:
+      type: object
+      properties:
+        user:
+          $ref: '#/components/schemas/MobileLoginUser'
+        tracking:
+          type: object
+          properties:
+            canActivate:
+              type: boolean
+            currentBinding:
+              $ref: '#/components/schemas/MobileTrackingBinding'
+            vehicle:
+              $ref: '#/components/schemas/MobileActivateVehicle'
+            vehicleState:
+              type: object
+              additionalProperties: true
+
+    MobileTrackingBatchRequest:
+      type: object
+      required: [batchId, samples]
+      properties:
+        deviceId:
+          type: [string, 'null']
+        deviceName:
+          type: [string, 'null']
+        platform:
+          type: [string, 'null']
+        appVersion:
+          type: [string, 'null']
+        batchId:
+          type: string
+        sentAt:
+          type: [string, 'null']
+          format: date-time
+        samples:
+          type: array
+          items:
+            type: object
+            required: [recordedAt, lat, lng]
+            properties:
+              recordedAt:
+                type: string
+                format: date-time
+              lat:
+                type: number
+              lng:
+                type: number
+              speed:
+                type: [number, 'null']
+              heading:
+                type: [number, 'null']
+              accuracy:
+                type: [number, 'null']
+              altitude:
+                type: [number, 'null']
+    MobileTrackingBatchResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        duplicate:
+          type: boolean
+        ingressId:
+          type: [string, 'null']
+        acceptedSamples:
+          type: integer
+        lateSamples:
+          type: integer
+        zoneEventsEnabled:
+          type: boolean
+        definitionsCount:
+          type: integer
+        legacyFallbackUsed:
+          type: boolean
+
+    MobileDeactivateRequest:
+      type: object
+      properties:
+        deviceId:
+          type: string
+    MobileDeactivateResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        deactivatedCount:
+          type: integer
+
+    RevokeTrackingBindingResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+
+    TrackingOverviewResponse:
+      type: object
+      properties:
+        scope:
+          type: object
+          additionalProperties: true
+        summary:
+          type: object
+          additionalProperties: true
+        liveVehicles:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        bindings:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        recentMessages:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        branchProviders:
+          type: array
+          items:
+            type: object
+            additionalProperties: true

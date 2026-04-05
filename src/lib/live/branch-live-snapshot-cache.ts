@@ -3,7 +3,7 @@ import type { VehicleLiveLocationItem } from "@/lib/services/live-tracking.servi
 import { TtlCache } from "./ttl-cache";
 
 const eventSnapshotCache = new TtlCache<DashboardEventItem[]>(3_000);
-const vehicleSnapshotCache = new TtlCache<VehicleLiveLocationItem[]>(4_000);
+const vehicleSnapshotCache = new TtlCache<VehicleLiveLocationItem[]>(2_000);
 
 function getEventSnapshotKey(branchId: string, limit: number, skip: number): string {
   return `${branchId}:events:${limit}:${skip}`;

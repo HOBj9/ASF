@@ -1,6 +1,7 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import dynamic from "next/dynamic"
+import { useCallback, useEffect, useMemo, useState, type ComponentType } from "react"
 import { useSession } from "next-auth/react"
 import toast from "react-hot-toast"
 import { Activity, Link2, RefreshCw, ShieldCheck, Smartphone, Truck, Webhook } from "lucide-react"
@@ -14,10 +15,25 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Loading } from "@/components/ui/loading"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import type { MapTab } from "./municipality-map"
+
+const MunicipalityMap = dynamic(
+  () => import("./municipality-map").then((module) => ({ default: module.MunicipalityMap })),
+  {
+    ssr: false,
+    loading: () => <Loading text="جاري تحميل خريطة التتبع..." />,
+  },
+)
 
 type TrackingProvider = "athar" | "mobile_app" | "traccar"
 type TrackingConnectivityStatus = "moving" | "stopped" | "offline"
-type TrackingIngressStatus = "processed" | "duplicate" | "ignored_late" | "rejected" | "error" | "received"
+type TrackingIngressStatus =
+  | "processed"
+  | "duplicate"
+  | "ignored_late"
+  | "rejected"
+  | "error"
+  | "received"
 
 type OrganizationOption = {
   _id: string
@@ -125,6 +141,18 @@ type OverviewResponse = {
   }>
 }
 
+type BranchTrackingExperience = {
+  branch: Record<string, any> | null
+  routes: Record<string, any>[]
+  events: Record<string, any>[]
+  points: Record<string, any>[]
+  markers: Record<string, any>[]
+  zones: Record<string, any>[]
+  objects: Record<string, any>[]
+  vehicles: Record<string, any>[]
+  liveVehicles: Record<string, any>[]
+}
+
 function getProviderLabel(provider: TrackingProvider) {
   if (provider === "mobile_app") return "تطبيق الموبايل"
   if (provider === "traccar") return "تراكار"
@@ -169,7 +197,7 @@ function SummaryCard(props: {
   title: string
   value: string | number
   subtitle?: string
-  icon: React.ComponentType<{ className?: string }>
+  icon: ComponentType<{ className?: string }>
 }) {
   const Icon = props.icon
   return (
@@ -192,24 +220,42 @@ function EmptyState({ text }: { text: string }) {
   return <div className="rounded-lg border p-6 text-center text-sm text-muted-foreground">{text}</div>
 }
 
+async function fetchJson<T>(url: string): Promise<T> {
+  const response = await fetch(url)
+  const payload = await response.json().catch(() => ({}))
+  if (!response.ok) {
+    throw new Error((payload as any)?.error || "تعذر تحميل البيانات المطلوبة")
+  }
+  return payload as T
+}
+
 export function TrackingMonitor() {
   const { data: session } = useSession()
   const { labels } = useLabels()
 
   const [selectedOrganizationId, setSelectedOrganizationId] = useState("")
   const [selectedBranchId, setSelectedBranchId] = useState("")
-  const [activeTab, setActiveTab] = useState("live")
+  const [activeTab, setActiveTab] = useState("map")
+  const [mapTab, setMapTab] = useState<MapTab>("live")
   const [loading, setLoading] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [revokingBindingId, setRevokingBindingId] = useState<string | null>(null)
   const [overview, setOverview] = useState<OverviewResponse | null>(null)
+  const [branchExperience, setBranchExperience] = useState<BranchTrackingExperience | null>(null)
+  const [branchExperienceLoading, setBranchExperienceLoading] = useState(false)
 
   const userIsAdmin = useMemo(() => isAdmin(session?.user?.role as any), [session?.user?.role])
-  const userIsOrgAdmin = useMemo(() => isOrganizationAdmin(session?.user?.role as any), [session?.user?.role])
+  const userIsOrgAdmin = useMemo(
+    () => isOrganizationAdmin(session?.user?.role as any),
+    [session?.user?.role],
+  )
   const sessionBranchId = (session?.user as any)?.branchId ?? null
   const sessionOrganizationId = (session?.user as any)?.organizationId ?? null
   const organizationsQuery = useOrganizations(userIsAdmin)
-  const organizations = useMemo(() => (organizationsQuery.data ?? []) as OrganizationOption[], [organizationsQuery.data])
+  const organizations = useMemo(
+    () => (organizationsQuery.data ?? []) as OrganizationOption[],
+    [organizationsQuery.data],
+  )
   const branchesQuery = useBranches({
     organizationId: userIsAdmin ? selectedOrganizationId || null : null,
     enabled:
@@ -218,13 +264,16 @@ export function TrackingMonitor() {
   })
   const branches = useMemo(() => (branchesQuery.data ?? []) as BranchOption[], [branchesQuery.data])
 
-  const resolvedOrganizationId = userIsAdmin ? selectedOrganizationId || sessionOrganizationId || "" : sessionOrganizationId || ""
+  const resolvedOrganizationId = userIsAdmin
+    ? selectedOrganizationId || sessionOrganizationId || ""
+    : sessionOrganizationId || ""
   const resolvedBranchId = selectedBranchId || sessionBranchId || ""
   const canLoad = useMemo(() => {
     if (session === undefined) return false
     if (userIsAdmin) return Boolean(resolvedOrganizationId)
     return true
   }, [resolvedOrganizationId, session, userIsAdmin])
+  const canLoadBranchExperience = Boolean(resolvedBranchId)
 
   useEffect(() => {
     if (!userIsAdmin || organizations.length !== 1 || selectedOrganizationId) return
@@ -236,36 +285,79 @@ export function TrackingMonitor() {
     setSelectedBranchId("")
   }, [selectedOrganizationId, userIsAdmin])
 
-  const loadOverview = useCallback(async (silent = false) => {
-    if (!canLoad) {
-      setOverview(null)
-      return
-    }
-
-    if (silent) {
-      setRefreshing(true)
-    } else {
-      setLoading(true)
-    }
-
-    try {
-      const searchParams = new URLSearchParams()
-      if (resolvedBranchId) {
-        searchParams.set("branchId", resolvedBranchId)
-      } else if (userIsAdmin && resolvedOrganizationId) {
-        searchParams.set("organizationId", resolvedOrganizationId)
+  const loadOverview = useCallback(
+    async (silent = false) => {
+      if (!canLoad) {
+        setOverview(null)
+        return
       }
 
-      const queryString = searchParams.toString()
-      const response: any = await apiClient.get(`/tracking/overview${queryString ? `?${queryString}` : ""}`)
-      setOverview((response?.data ?? response) as OverviewResponse)
-    } catch (error: any) {
-      toast.error(error.message || "فشل تحميل بيانات التتبع")
-    } finally {
-      setLoading(false)
-      setRefreshing(false)
-    }
-  }, [canLoad, resolvedBranchId, resolvedOrganizationId, userIsAdmin])
+      if (silent) {
+        setRefreshing(true)
+      } else {
+        setLoading(true)
+      }
+
+      try {
+        const searchParams = new URLSearchParams()
+        if (resolvedBranchId) {
+          searchParams.set("branchId", resolvedBranchId)
+        } else if (userIsAdmin && resolvedOrganizationId) {
+          searchParams.set("organizationId", resolvedOrganizationId)
+        }
+
+        const queryString = searchParams.toString()
+        const response: any = await apiClient.get(`/tracking/overview${queryString ? `?${queryString}` : ""}`)
+        setOverview((response?.data ?? response) as OverviewResponse)
+      } catch (error: any) {
+        toast.error(error.message || "فشل تحميل بيانات التتبع")
+      } finally {
+        setLoading(false)
+        setRefreshing(false)
+      }
+    },
+    [canLoad, resolvedBranchId, resolvedOrganizationId, userIsAdmin],
+  )
+
+  const loadBranchExperience = useCallback(
+    async (silent = false) => {
+      if (!canLoadBranchExperience) {
+        setBranchExperience(null)
+        return
+      }
+
+      if (!silent) {
+        setBranchExperienceLoading(true)
+      }
+
+      try {
+        const branchQuery = `branchId=${encodeURIComponent(resolvedBranchId)}`
+        const [overviewPayload, mapPayload, livePayload] = await Promise.all([
+          fetchJson<Record<string, any>>(`/api/dashboard/overview?${branchQuery}`),
+          fetchJson<Record<string, any>>(`/api/dashboard/map-data?${branchQuery}`),
+          fetchJson<Record<string, any>>(`/api/vehicles/locations?${branchQuery}`),
+        ])
+
+        setBranchExperience({
+          branch: overviewPayload?.branch || null,
+          routes: Array.isArray(overviewPayload?.routes) ? overviewPayload.routes : [],
+          events: Array.isArray(overviewPayload?.events) ? overviewPayload.events : [],
+          points: Array.isArray(mapPayload?.points) ? mapPayload.points : [],
+          markers: Array.isArray(mapPayload?.markers) ? mapPayload.markers : [],
+          zones: Array.isArray(mapPayload?.zones) ? mapPayload.zones : [],
+          objects: Array.isArray(mapPayload?.objects) ? mapPayload.objects : [],
+          vehicles: Array.isArray(mapPayload?.vehicles) ? mapPayload.vehicles : [],
+          liveVehicles: Array.isArray(livePayload?.data) ? livePayload.data : [],
+        })
+      } catch (error: any) {
+        toast.error(error?.message || "فشل تحميل خريطة التتبع")
+        setBranchExperience(null)
+      } finally {
+        setBranchExperienceLoading(false)
+      }
+    },
+    [canLoadBranchExperience, resolvedBranchId],
+  )
 
   useEffect(() => {
     if (!canLoad) {
@@ -276,6 +368,14 @@ export function TrackingMonitor() {
   }, [canLoad, loadOverview])
 
   useEffect(() => {
+    if (!canLoadBranchExperience) {
+      setBranchExperience(null)
+      return
+    }
+    void loadBranchExperience()
+  }, [canLoadBranchExperience, loadBranchExperience])
+
+  useEffect(() => {
     if (!canLoad) return
     const interval = setInterval(() => {
       void loadOverview(true)
@@ -284,21 +384,50 @@ export function TrackingMonitor() {
     return () => clearInterval(interval)
   }, [canLoad, loadOverview])
 
-  const handleRevokeBinding = useCallback(async (bindingId: string) => {
-    const confirmed = window.confirm("سيتم إبطال هذا الربط وإيقاف استقبال دفعات التتبع من هذا الجهاز. هل تريد المتابعة؟")
-    if (!confirmed) return
+  useEffect(() => {
+    if (!canLoadBranchExperience) return
+    const interval = setInterval(() => {
+      void loadBranchExperience(true)
+    }, 30000)
 
-    setRevokingBindingId(bindingId)
+    return () => clearInterval(interval)
+  }, [canLoadBranchExperience, loadBranchExperience])
+
+  const handleRevokeBinding = useCallback(
+    async (bindingId: string) => {
+      const confirmed = window.confirm(
+        "سيتم إبطال هذا الربط وإيقاف استقبال دفعات التتبع من هذا الجهاز. هل تريد المتابعة؟",
+      )
+      if (!confirmed) return
+
+      setRevokingBindingId(bindingId)
+      try {
+        await apiClient.post(`/tracking/bindings/${bindingId}/revoke`)
+        toast.success("تم إبطال ربط التتبع")
+        await Promise.all([
+          loadOverview(true),
+          resolvedBranchId ? loadBranchExperience(true) : Promise.resolve(),
+        ])
+      } catch (error: any) {
+        toast.error(error.message || "فشل إبطال الربط")
+      } finally {
+        setRevokingBindingId(null)
+      }
+    },
+    [loadBranchExperience, loadOverview, resolvedBranchId],
+  )
+
+  const manualRefresh = useCallback(async () => {
+    setRefreshing(true)
     try {
-      await apiClient.post(`/tracking/bindings/${bindingId}/revoke`)
-      toast.success("تم إبطال ربط التتبع")
-      await loadOverview(true)
-    } catch (error: any) {
-      toast.error(error.message || "فشل إبطال الربط")
+      await Promise.all([
+        loadOverview(true),
+        resolvedBranchId ? loadBranchExperience(true) : Promise.resolve(),
+      ])
     } finally {
-      setRevokingBindingId(null)
+      setRefreshing(false)
     }
-  }, [loadOverview])
+  }, [loadBranchExperience, loadOverview, resolvedBranchId])
 
   const liveVehicles = useMemo(
     () =>
@@ -309,7 +438,7 @@ export function TrackingMonitor() {
         }
         return left.branchName.localeCompare(right.branchName, "ar")
       }),
-    [overview?.liveVehicles]
+    [overview?.liveVehicles],
   )
 
   const activeBindingTotal = useMemo(() => {
@@ -324,10 +453,15 @@ export function TrackingMonitor() {
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <p className="text-sm text-muted-foreground">
-                مراقبة الحالة الحية، ربط الأجهزة، ودفعات التتبع الواردة من أثر وتطبيق الموبايل، مع جاهزية للتوسع لاحقًا إلى تراكار.
+                مراقبة الحالة الحية، ربط الأجهزة، ودفعات التتبع الواردة من أثر وتطبيق الموبايل، مع عرض
+                حي للمركبات وسجل الحركة على الخريطة بفلترة دقيقة حتى مستوى الدقيقة.
               </p>
             </div>
-            <Button variant="outline" onClick={() => void loadOverview(true)} disabled={loading || refreshing}>
+            <Button
+              variant="outline"
+              onClick={() => void manualRefresh()}
+              disabled={loading || refreshing || branchExperienceLoading}
+            >
               <RefreshCw className={`ml-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
               تحديث
             </Button>
@@ -374,8 +508,8 @@ export function TrackingMonitor() {
 
               <span className="text-xs text-muted-foreground">
                 {resolvedBranchId
-                  ? "يتم عرض بيانات فرع واحد."
-                  : "يتم عرض البيانات على مستوى النطاق الكامل المتاح لك."}
+                  ? "يتم عرض بيانات فرع واحد بكل تفاصيل الخريطة والسجل."
+                  : "لعرض الخريطة التفصيلية وسجل الحركة بدقة، اختر فرعاً واحداً."}
               </span>
             </div>
           )}
@@ -450,12 +584,46 @@ export function TrackingMonitor() {
           </div>
 
           <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="mb-4">
+            <TabsList className="mb-4 flex h-auto flex-wrap gap-2">
+              <TabsTrigger value="map">الخريطة التفصيلية</TabsTrigger>
               <TabsTrigger value="live">الحالة الحية</TabsTrigger>
               <TabsTrigger value="bindings">الربوط</TabsTrigger>
               <TabsTrigger value="messages">الدفعات الواردة</TabsTrigger>
               <TabsTrigger value="providers">المزودات</TabsTrigger>
             </TabsList>
+
+            <TabsContent value="map" className="space-y-4">
+              {!resolvedBranchId ? (
+                <EmptyState text="اختر فرعاً واحداً لعرض الموقع الحالي، سجل الحركة، والفلاتر الزمنية الدقيقة على الخريطة." />
+              ) : branchExperienceLoading && !branchExperience ? (
+                <Loading text="جاري تجهيز خريطة التتبع وسجل الحركة..." />
+              ) : !branchExperience?.branch ? (
+                <EmptyState text="تعذر تحميل بيانات الخريطة لهذا الفرع." />
+              ) : (
+                <>
+                  <Card>
+                    <CardContent className="p-4 text-sm text-muted-foreground">
+                      من هذه الخريطة يمكنك الضغط على أي مركبة لرؤية موقعها الحالي، عرض سجل الحركة الكامل،
+                      تحديد فترة من تاريخ إلى تاريخ ومن ساعة إلى ساعة ومن دقيقة إلى دقيقة، مع تتبع المسار
+                      كاملاً على الخريطة بنفس تجربة لوحة التحكم الحالية.
+                    </CardContent>
+                  </Card>
+                  <MunicipalityMap
+                    municipality={branchExperience.branch as any}
+                    liveVehicles={branchExperience.liveVehicles as any}
+                    atharObjects={branchExperience.objects as any}
+                    vehicles={branchExperience.vehicles as any}
+                    routes={branchExperience.routes as any}
+                    zones={branchExperience.zones as any}
+                    points={branchExperience.points as any}
+                    atharMarkers={branchExperience.markers as any}
+                    activeTab={mapTab}
+                    onTabChange={setMapTab}
+                    events={branchExperience.events as any}
+                  />
+                </>
+              )}
+            </TabsContent>
 
             <TabsContent value="live">
               <Card>
@@ -491,7 +659,9 @@ export function TrackingMonitor() {
                               </td>
                               <td className="p-2">{item.providerLabel}</td>
                               <td className="p-2">
-                                <span className={`inline-flex rounded-full px-2 py-1 text-xs ${getLiveStatusClasses(item.connectivityStatus)}`}>
+                                <span
+                                  className={`inline-flex rounded-full px-2 py-1 text-xs ${getLiveStatusClasses(item.connectivityStatus)}`}
+                                >
                                   {item.connectivityStatus === "moving"
                                     ? "متحركة"
                                     : item.connectivityStatus === "stopped"
@@ -502,7 +672,9 @@ export function TrackingMonitor() {
                               <td className="p-2">{item.lineSupervisorName || "—"}</td>
                               <td className="p-2">
                                 <div>{item.lastUpdateLabel}</div>
-                                <div className="text-xs text-muted-foreground">{formatDateTime(item.lastReceivedAt)}</div>
+                                <div className="text-xs text-muted-foreground">
+                                  {formatDateTime(item.lastReceivedAt)}
+                                </div>
                               </td>
                               <td className="p-2">{item.speed.toFixed(0)} كم/س</td>
                               <td className="p-2">
@@ -510,7 +682,9 @@ export function TrackingMonitor() {
                                   <span className="font-mono text-xs">
                                     {item.coordinates[0].toFixed(5)}, {item.coordinates[1].toFixed(5)}
                                   </span>
-                                ) : "—"}
+                                ) : (
+                                  "—"
+                                )}
                               </td>
                               <td className="p-2">{item.insidePointCount}</td>
                             </tr>
@@ -522,7 +696,108 @@ export function TrackingMonitor() {
                 </CardContent>
               </Card>
             </TabsContent>
-            
+
+            <TabsContent value="bindings">
+              <Card>
+                <CardHeader>
+                  <CardTitle>ربوط التتبع والأجهزة</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {overview.bindings.length === 0 ? (
+                    <EmptyState text="لا توجد ربوط تتبع ضمن النطاق الحالي." />
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b text-right">
+                            <th className="p-2">{labels.branchLabel || "الفرع"}</th>
+                            <th className="p-2">{labels.vehicleLabel || "المركبة"}</th>
+                            <th className="p-2">المزوّد</th>
+                            <th className="p-2">الجهاز</th>
+                            <th className="p-2">الإمكانات</th>
+                            <th className="p-2">آخر ظهور</th>
+                            <th className="p-2">الحالة</th>
+                            <th className="p-2">الإجراء</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {overview.bindings.map((binding) => (
+                            <tr key={binding._id} className="border-b align-top">
+                              <td className="p-2">{binding.branchName}</td>
+                              <td className="p-2">
+                                <div className="font-medium">{binding.vehicleName}</div>
+                                <div className="text-xs text-muted-foreground">{binding.plateNumber || "—"}</div>
+                                <div className="text-xs text-muted-foreground">
+                                  {binding.lineSupervisorName || binding.lineSupervisorEmail || "—"}
+                                </div>
+                              </td>
+                              <td className="p-2">
+                                <div>{binding.providerLabel}</div>
+                                <div className="text-xs text-muted-foreground">
+                                  {binding.externalId || "بدون معرّف خارجي"}
+                                </div>
+                              </td>
+                              <td className="p-2">
+                                <div>{binding.deviceName || "—"}</div>
+                                <div className="text-xs text-muted-foreground">
+                                  {[binding.platform, binding.appVersion].filter(Boolean).join(" • ") || "—"}
+                                </div>
+                              </td>
+                              <td className="p-2">
+                                <div className="flex flex-wrap gap-1">
+                                  {binding.capabilities.length > 0 ? (
+                                    binding.capabilities.map((capability) => (
+                                      <span
+                                        key={`${binding._id}-${capability}`}
+                                        className="rounded-full bg-muted px-2 py-1 text-xs text-muted-foreground"
+                                      >
+                                        {capability}
+                                      </span>
+                                    ))
+                                  ) : (
+                                    <span className="text-xs text-muted-foreground">—</span>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="p-2">{formatDateTime(binding.lastSeenAt)}</td>
+                              <td className="p-2">
+                                <div className="flex flex-col gap-1">
+                                  <span
+                                    className={`inline-flex w-fit rounded-full px-2 py-1 text-xs ${
+                                      binding.isActive
+                                        ? "bg-emerald-500/15 text-emerald-700"
+                                        : "bg-slate-500/15 text-slate-700"
+                                    }`}
+                                  >
+                                    {binding.isActive ? "نشط" : "متوقف"}
+                                  </span>
+                                  {binding.isPrimary ? (
+                                    <span className="inline-flex w-fit rounded-full bg-primary/10 px-2 py-1 text-xs text-primary">
+                                      الربط الأساسي
+                                    </span>
+                                  ) : null}
+                                </div>
+                              </td>
+                              <td className="p-2">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => void handleRevokeBinding(binding._id)}
+                                  disabled={revokingBindingId === binding._id}
+                                >
+                                  {revokingBindingId === binding._id ? "جارٍ الإبطال..." : "إبطال الربط"}
+                                </Button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
             <TabsContent value="messages">
               <Card>
                 <CardHeader>
@@ -558,7 +833,9 @@ export function TrackingMonitor() {
                               </td>
                               <td className="p-2 font-mono text-xs">{message.providerMessageId}</td>
                               <td className="p-2">
-                                <span className={`inline-flex rounded-full px-2 py-1 text-xs ${getIngressStatusClasses(message.status)}`}>
+                                <span
+                                  className={`inline-flex rounded-full px-2 py-1 text-xs ${getIngressStatusClasses(message.status)}`}
+                                >
                                   {message.status === "processed"
                                     ? "معالجة"
                                     : message.status === "duplicate"
@@ -612,13 +889,21 @@ export function TrackingMonitor() {
                                 return (
                                   <td key={provider} className="p-2">
                                     <div className="space-y-1">
-                                      <span className={`inline-flex rounded-full px-2 py-1 text-xs ${providerState.enabled ? "bg-emerald-500/15 text-emerald-700" : "bg-slate-500/15 text-slate-700"}`}>
+                                      <span
+                                        className={`inline-flex rounded-full px-2 py-1 text-xs ${
+                                          providerState.enabled
+                                            ? "bg-emerald-500/15 text-emerald-700"
+                                            : "bg-slate-500/15 text-slate-700"
+                                        }`}
+                                      >
                                         {providerState.enabled ? "مفعّل" : "غير مفعّل"}
                                       </span>
                                       <div className="text-xs text-muted-foreground">
                                         {getProviderSourceLabel(
                                           providerState.source,
-                                          provider === "athar" ? branch.providers.athar.legacyFallback : undefined
+                                          provider === "athar"
+                                            ? branch.providers.athar.legacyFallback
+                                            : undefined,
                                         )}
                                       </div>
                                     </div>

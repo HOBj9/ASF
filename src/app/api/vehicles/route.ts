@@ -1,12 +1,30 @@
-export const dynamic = 'force-dynamic';
+﻿export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
-import { requireAuth, requirePermission, handleApiError } from '@/lib/middleware/api-auth.middleware';
+import { requirePermission, handleApiError } from '@/lib/middleware/api-auth.middleware';
 import { VehicleService } from '@/lib/services/vehicle.service';
 import { resolveBranchId } from '@/lib/utils/municipality.util';
 import { permissionActions, permissionResources } from '@/constants/permissions';
+import type { TrackingProvider, ZoneEventProvider } from '@/lib/tracking/types';
 
 const vehicleService = new VehicleService();
+
+function normalizeTrackingProvider(value: unknown): TrackingProvider | undefined {
+  return value === 'mobile_app' || value === 'traccar' || value === 'athar' ? value : undefined;
+}
+
+function normalizeAcceptedTrackingProviders(value: unknown): TrackingProvider[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const normalized = value.filter(
+    (item): item is TrackingProvider => item === 'athar' || item === 'mobile_app' || item === 'traccar'
+  );
+  return normalized.length > 0 ? Array.from(new Set(normalized)) : [];
+}
+
+function normalizeZoneEventProvider(value: unknown): ZoneEventProvider | null | undefined {
+  if (value === null) return null;
+  return value === 'athar' || value === 'mobile_app' ? value : undefined;
+}
 
 export async function GET(request: Request) {
   try {
@@ -33,17 +51,34 @@ export async function POST(request: Request) {
     const body = await request.json();
     const branchId = resolveBranchId(session, body.branchId);
 
-    const { name, plateNumber, imei, trackingProvider, fuelType, fuelPricePerKm, atharObjectId, driverId, routeId, isActive } = body;
+    const {
+      name,
+      plateNumber,
+      imei,
+      trackingProvider,
+      acceptedTrackingProviders,
+      zoneEventProvider,
+      fuelType,
+      fuelPricePerKm,
+      atharObjectId,
+      driverId,
+      routeId,
+      isActive,
+    } = body;
     if (!name) {
-      return NextResponse.json(
-        { error: 'الاسم مطلوب' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'الاسم مطلوب' }, { status: 400 });
     }
 
-    if ((trackingProvider || 'athar') === 'athar' && !String(imei || '').trim()) {
+    const normalizedTrackingProvider = normalizeTrackingProvider(trackingProvider);
+    const normalizedAcceptedProviders = normalizeAcceptedTrackingProviders(acceptedTrackingProviders);
+    const normalizedZoneEventProvider = normalizeZoneEventProvider(zoneEventProvider);
+
+    if (
+      (normalizedAcceptedProviders?.includes('athar') || normalizedTrackingProvider === 'athar') &&
+      !String(imei || '').trim()
+    ) {
       return NextResponse.json(
-        { error: 'رقم IMEI مطلوب للمركبات التي تعمل عبر أثر' },
+        { error: 'رقم IMEI مطلوب للمركبات التي تستقبل تتبعاً من أثر' },
         { status: 400 }
       );
     }
@@ -53,7 +88,9 @@ export async function POST(request: Request) {
       name,
       plateNumber,
       imei,
-      trackingProvider,
+      trackingProvider: normalizedTrackingProvider,
+      acceptedTrackingProviders: normalizedAcceptedProviders,
+      zoneEventProvider: normalizedZoneEventProvider,
       fuelType: fuelType === 'diesel' ? 'diesel' : 'gasoline',
       fuelPricePerKm: fuelPricePerKm != null && fuelPricePerKm !== '' ? Number(fuelPricePerKm) : undefined,
       atharObjectId,

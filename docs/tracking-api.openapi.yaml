@@ -8,7 +8,6 @@ info:
 
     Covered endpoints:
     - Mobile supervisor login
-    - Mobile device activation
     - Mobile GPS batch ingestion
     - Tracking binding revocation
     - Tracking monitoring overview
@@ -108,9 +107,14 @@ paths:
     post:
       tags:
         - Mobile Tracking
-      summary: Activate a mobile device for tracking
+      summary: Legacy device activation
+      deprecated: true
       description: |
-        Activates tracking for the currently authenticated line supervisor and issues a device-specific tracking token.
+        Legacy compatibility endpoint.
+
+        New mobile clients do not need this step anymore. They can:
+        1. Login using `/api/tracking/mobile/login`
+        2. Send GPS batches directly to `/api/tracking/mobile/ingest` using the bearer token
 
         Authentication:
         - Dashboard session cookie, or
@@ -206,24 +210,34 @@ paths:
         - Mobile Tracking
       summary: Ingest a GPS batch from the mobile application
       description: |
-        Receives a batch of GPS samples for the activated mobile device.
+        Receives a batch of GPS samples for the authenticated line supervisor.
+
+        Standard flow:
+        1. Login using `/api/tracking/mobile/login`
+        2. Send GPS batches directly to this endpoint with `Authorization: Bearer <accessToken>`
+
+        The backend resolves the assigned vehicle from the supervisor account and creates or updates the mobile tracking binding automatically.
 
         Rules implemented in the backend:
-        - `X-Tracking-Token` header is required
+        - `Authorization: Bearer <accessToken>` is the default authentication method
+        - `X-Tracking-Token` is still accepted for legacy clients
         - Maximum 300 samples per batch
         - Samples are ordered by `recordedAt`
         - Duplicate batches are detected by `(provider, batchId)`
         - Late samples are stored but do not mutate the operational state
       operationId: ingestMobileTrackingBatch
       security:
+        - bearerAuth: []
+        - sessionCookieAuth: []
+        - secureSessionCookieAuth: []
         - trackingTokenHeader: []
       parameters:
         - in: header
           name: X-Tracking-Token
-          required: true
+          required: false
           schema:
             type: string
-          description: Tracking token returned by `/api/tracking/mobile/activate`
+          description: Legacy tracking token returned by `/api/tracking/mobile/activate`
       requestBody:
         required: true
         content:
@@ -233,6 +247,10 @@ paths:
             examples:
               default:
                 value:
+                  deviceId: android-device-001
+                  deviceName: Samsung A55
+                  platform: android
+                  appVersion: 1.0.0
                   batchId: batch-20260330-001
                   sentAt: '2026-03-30T10:00:30Z'
                   samples:
@@ -286,12 +304,18 @@ paths:
                   value:
                     error: The maximum batch size is 300 samples
         '401':
-          description: Missing or invalid tracking token
+          description: Missing or invalid authentication
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
               examples:
+                missingAuth:
+                  value:
+                    error: You must login first
+                invalidMobileToken:
+                  value:
+                    error: Invalid mobile login token
                 missingToken:
                   value:
                     error: Tracking token is missing
@@ -427,7 +451,7 @@ components:
       type: apiKey
       in: header
       name: X-Tracking-Token
-      description: Device tracking token returned by `/api/tracking/mobile/activate`
+      description: Legacy device tracking token returned by `/api/tracking/mobile/activate`
     sessionCookieAuth:
       type: apiKey
       in: cookie
@@ -725,6 +749,24 @@ components:
         - batchId
         - samples
       properties:
+        deviceId:
+          type:
+            - string
+            - 'null'
+          description: Optional stable identifier for the mobile installation or device
+        deviceName:
+          type:
+            - string
+            - 'null'
+        platform:
+          type:
+            - string
+            - 'null'
+          description: e.g. android or ios
+        appVersion:
+          type:
+            - string
+            - 'null'
         batchId:
           type: string
         sentAt:

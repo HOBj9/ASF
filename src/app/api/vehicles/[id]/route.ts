@@ -1,12 +1,30 @@
-export const dynamic = 'force-dynamic';
+﻿export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { requirePermission, handleApiError } from '@/lib/middleware/api-auth.middleware';
 import { VehicleService } from '@/lib/services/vehicle.service';
 import { resolveBranchId } from '@/lib/utils/municipality.util';
 import { permissionActions, permissionResources } from '@/constants/permissions';
+import type { TrackingProvider, ZoneEventProvider } from '@/lib/tracking/types';
 
 const vehicleService = new VehicleService();
+
+function normalizeTrackingProvider(value: unknown): TrackingProvider | undefined {
+  return value === 'mobile_app' || value === 'traccar' || value === 'athar' ? value : undefined;
+}
+
+function normalizeAcceptedTrackingProviders(value: unknown): TrackingProvider[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const normalized = value.filter(
+    (item): item is TrackingProvider => item === 'athar' || item === 'mobile_app' || item === 'traccar'
+  );
+  return Array.from(new Set(normalized));
+}
+
+function normalizeZoneEventProvider(value: unknown): ZoneEventProvider | null | undefined {
+  if (value === null) return null;
+  return value === 'athar' || value === 'mobile_app' ? value : undefined;
+}
 
 export async function GET(
   request: Request,
@@ -45,9 +63,17 @@ export async function PATCH(
     const branchId = resolveBranchId(session, body.branchId);
     const { id } = await params;
 
-    if ((body.trackingProvider || 'athar') === 'athar' && body.imei !== undefined && !String(body.imei || '').trim()) {
+    const normalizedTrackingProvider = normalizeTrackingProvider(body.trackingProvider);
+    const normalizedAcceptedProviders = normalizeAcceptedTrackingProviders(body.acceptedTrackingProviders);
+    const normalizedZoneEventProvider = normalizeZoneEventProvider(body.zoneEventProvider);
+
+    if (
+      body.imei !== undefined &&
+      (normalizedAcceptedProviders?.includes('athar') || normalizedTrackingProvider === 'athar') &&
+      !String(body.imei || '').trim()
+    ) {
       return NextResponse.json(
-        { error: 'رقم IMEI مطلوب للمركبات التي تعمل عبر أثر' },
+        { error: 'رقم IMEI مطلوب للمركبات التي تستقبل تتبعاً من أثر' },
         { status: 400 }
       );
     }
@@ -56,7 +82,9 @@ export async function PATCH(
       name: body.name,
       plateNumber: body.plateNumber,
       imei: body.imei,
-      trackingProvider: body.trackingProvider,
+      trackingProvider: normalizedTrackingProvider,
+      acceptedTrackingProviders: normalizedAcceptedProviders,
+      zoneEventProvider: normalizedZoneEventProvider,
       fuelType: body.fuelType === 'diesel' ? 'diesel' : body.fuelType === 'gasoline' ? 'gasoline' : undefined,
       fuelPricePerKm:
         body.fuelPricePerKm === '' || body.fuelPricePerKm === undefined
