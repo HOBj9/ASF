@@ -1,4 +1,6 @@
 import { isAdmin, isOrganizationAdmin } from '@/lib/permissions';
+import Branch from '@/models/Branch';
+import connectDB from '@/lib/mongodb';
 
 export function resolveBranchId(
   session: any,
@@ -20,6 +22,46 @@ export function resolveBranchId(
   }
 
   return sessionBranchId;
+}
+
+export async function assertBranchAccess(
+  session: any,
+  branchId: string
+): Promise<string> {
+  const resolvedBranchId = String(branchId || '').trim();
+  if (!resolvedBranchId) {
+    throw new Error('يرجى تحديد الفرع');
+  }
+
+  const role = session?.user?.role || null;
+  const sessionBranchId = session?.user?.branchId || null;
+  const sessionOrganizationId = session?.user?.organizationId || null;
+
+  if (isAdmin(role)) {
+    return resolvedBranchId;
+  }
+
+  if (isOrganizationAdmin(role)) {
+    const organizationId = sessionOrganizationId ? String(sessionOrganizationId) : null;
+    if (!organizationId) {
+      throw new Error('لا توجد مؤسسة مرتبطة بالحساب');
+    }
+
+    await connectDB();
+    const branch = await Branch.findOne({ _id: resolvedBranchId, organizationId })
+      .select('_id')
+      .lean();
+    if (!branch) {
+      throw new Error('الفرع المحدد غير تابع للمؤسسة');
+    }
+    return resolvedBranchId;
+  }
+
+  if (!sessionBranchId || String(sessionBranchId) !== resolvedBranchId) {
+    throw new Error('ليس لديك صلاحية على هذا الفرع');
+  }
+
+  return resolvedBranchId;
 }
 
 /**

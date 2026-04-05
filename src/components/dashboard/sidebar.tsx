@@ -189,6 +189,13 @@ export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarP
     },
     {
       group: "branchOps" as const,
+      title: "مراقبة التتبع",
+      href: "/dashboard/tracking",
+      icon: Activity,
+      permissions: [{ resource: permissionResources.VEHICLES, action: permissionActions.READ }],
+    },
+    {
+      group: "branchOps" as const,
       title: labels.driverLabel || "السائقون",
       href: "/dashboard/drivers",
       icon: Users,
@@ -336,7 +343,11 @@ export function Sidebar({ isAdmin: initialIsAdmin, user: initialUser }: SidebarP
             ]))
         )
       }
-      if ((item as any).lineSupervisorCanSee && (userIsOrgAdmin || userIsAdmin)) return true
+      if (
+        (item as any).lineSupervisorCanSee &&
+        (userIsOrgAdmin || userIsAdmin || isBranchAdmin(session?.user?.role as any))
+      )
+        return true
       if (item.permissions && item.permissions.length > 0) {
         const role = session?.user?.role || null
         return hasAnyPermission(role as any, item.permissions)

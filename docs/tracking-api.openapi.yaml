@@ -1,0 +1,1227 @@
+﻿openapi: 3.1.0
+info:
+  title: Waste Management System Tracking API
+  version: 1.0.0
+  summary: Unified tracking APIs for mobile ingestion and tracking administration
+  description: |
+    OpenAPI documentation for the tracking module that is currently implemented in the system.
+
+    Covered endpoints:
+    - Mobile supervisor login
+    - Mobile GPS batch ingestion
+    - Tracking binding revocation
+    - Tracking monitoring overview
+
+    Notes:
+    - `athar` remains a supported provider in the backend, but its legacy webhook contract is documented separately.
+    - `traccar` is prepared at the architecture level and is not exposed as a public API in this version.
+servers:
+  - url: /
+    description: Same host as the Next.js application
+tags:
+  - name: Mobile Tracking
+    description: APIs used by the mobile application
+  - name: Tracking Admin
+    description: Internal dashboard/admin APIs for monitoring and control
+paths:
+  /api/tracking/mobile/login:
+    post:
+      tags:
+        - Mobile Tracking
+      summary: Login for mobile tracking
+      description: |
+        Authenticates a line supervisor and returns a short-lived mobile bearer token.
+        Only users with the `line_supervisor` role can use this endpoint.
+      operationId: mobileTrackingLogin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MobileLoginRequest'
+            examples:
+              default:
+                value:
+                  email: supervisor@example.com
+                  password: secret123
+      responses:
+        '200':
+          description: Login succeeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MobileLoginResponse'
+              examples:
+                default:
+                  value:
+                    accessToken: eyJzdWIiOiIxMjM0NSJ9.signature
+                    tokenType: Bearer
+                    expiresAt: '2026-03-31T10:00:00.000Z'
+                    user:
+                      id: 67ea5cd0d2f9b54dd82b4310
+                      name: Ahmed Supervisor
+                      email: supervisor@example.com
+                      role: line_supervisor
+                      organizationId: 67ea5ab9d2f9b54dd82b4301
+                      branchId: 67ea5b11d2f9b54dd82b4307
+                      trackingVehicleId: 67ea5d5dd2f9b54dd82b4323
+                    tracking:
+                      canActivate: true
+        '400':
+          description: Missing email or password
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                missingFields:
+                  value:
+                    error: Email and password are required
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalidCredentials:
+                  value:
+                    error: Invalid credentials
+        '403':
+          description: User is not allowed to use mobile tracking login
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                wrongRole:
+                  value:
+                    error: Mobile tracking login is available only for line supervisors
+                disabledUser:
+                  value:
+                    error: User account is disabled
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/tracking/mobile/activate:
+    post:
+      tags:
+        - Mobile Tracking
+      summary: Legacy device activation
+      deprecated: true
+      description: |
+        Legacy compatibility endpoint.
+
+        New mobile clients do not need this step anymore. They can:
+        1. Login using `/api/tracking/mobile/login`
+        2. Send GPS batches directly to `/api/tracking/mobile/ingest` using the bearer token
+
+        Authentication:
+        - Dashboard session cookie, or
+        - Mobile bearer token returned by `/api/tracking/mobile/login`
+
+        The backend does not accept `vehicleId` from the mobile client. The vehicle is resolved from the supervisor account (`trackingVehicleId`).
+      operationId: activateMobileTracking
+      security:
+        - bearerAuth: []
+        - sessionCookieAuth: []
+        - secureSessionCookieAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MobileActivateRequest'
+            examples:
+              android:
+                value:
+                  deviceId: android-device-001
+                  deviceName: Samsung A55
+                  platform: android
+                  appVersion: 1.0.0
+      responses:
+        '201':
+          description: Device activated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MobileActivateResponse'
+              examples:
+                default:
+                  value:
+                    trackingToken: trk_live_d47Qab5h7YvLJYjMByXQ
+                    binding:
+                      _id: 67ea5e5bd2f9b54dd82b4330
+                      branchId: 67ea5b11d2f9b54dd82b4307
+                      vehicleId: 67ea5d5dd2f9b54dd82b4323
+                      provider: mobile_app
+                      externalId: android-device-001
+                      userId: 67ea5cd0d2f9b54dd82b4310
+                      capabilities:
+                        - gps_batch_ingest
+                      isPrimary: true
+                      isActive: true
+                      lastSeenAt: null
+                      metadata:
+                        deviceId: android-device-001
+                        deviceName: Samsung A55
+                        platform: android
+                        appVersion: 1.0.0
+                        activatedAt: '2026-03-30T09:15:00.000Z'
+                      createdAt: '2026-03-30T09:15:00.000Z'
+                      updatedAt: '2026-03-30T09:15:00.000Z'
+                    vehicle:
+                      _id: 67ea5d5dd2f9b54dd82b4323
+                      name: Route 12 Vehicle
+                      plateNumber: '123456'
+                      trackingProvider: mobile_app
+        '401':
+          description: Missing or invalid login credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                missingAuth:
+                  value:
+                    error: You must login first
+                invalidMobileToken:
+                  value:
+                    error: Invalid mobile login token
+        '403':
+          description: User is authenticated but not allowed to activate mobile tracking
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                wrongRole:
+                  value:
+                    error: Only line supervisors can activate mobile tracking
+                noVehicle:
+                  value:
+                    error: A vehicle must be assigned to the line supervisor before activation
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/tracking/mobile/ingest:
+    post:
+      tags:
+        - Mobile Tracking
+      summary: Ingest a GPS batch from the mobile application
+      description: |
+        Receives a batch of GPS samples for the authenticated line supervisor.
+
+        Standard flow:
+        1. Login using `/api/tracking/mobile/login`
+        2. Send GPS batches directly to this endpoint with `Authorization: Bearer <accessToken>`
+
+        The backend resolves the assigned vehicle from the supervisor account and creates or updates the mobile tracking binding automatically.
+
+        Rules implemented in the backend:
+        - `Authorization: Bearer <accessToken>` is the default authentication method
+        - `X-Tracking-Token` is still accepted for legacy clients
+        - Maximum 300 samples per batch
+        - Samples are ordered by `recordedAt`
+        - Duplicate batches are detected by `(provider, batchId)`
+        - Late samples are stored but do not mutate the operational state
+      operationId: ingestMobileTrackingBatch
+      security:
+        - bearerAuth: []
+        - sessionCookieAuth: []
+        - secureSessionCookieAuth: []
+        - trackingTokenHeader: []
+      parameters:
+        - in: header
+          name: X-Tracking-Token
+          required: false
+          schema:
+            type: string
+          description: Legacy tracking token returned by `/api/tracking/mobile/activate`
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MobileTrackingBatchRequest'
+            examples:
+              default:
+                value:
+                  deviceId: android-device-001
+                  deviceName: Samsung A55
+                  platform: android
+                  appVersion: 1.0.0
+                  batchId: batch-20260330-001
+                  sentAt: '2026-03-30T10:00:30Z'
+                  samples:
+                    - recordedAt: '2026-03-30T10:00:05Z'
+                      lat: 33.5138
+                      lng: 36.2765
+                      speed: 24
+                      heading: 140
+                      accuracy: 8
+                      altitude: 650
+                    - recordedAt: '2026-03-30T10:00:15Z'
+                      lat: 33.5141
+                      lng: 36.2772
+                      speed: 20
+                      heading: 142
+                      accuracy: 7
+      responses:
+        '200':
+          description: Batch stored and processed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MobileTrackingBatchResponse'
+              examples:
+                processed:
+                  value:
+                    success: true
+                    duplicate: false
+                    ingressId: 67ea60b1d2f9b54dd82b4340
+                    acceptedSamples: 2
+                    lateSamples: 0
+                duplicate:
+                  value:
+                    success: true
+                    duplicate: true
+                    ingressId: 67ea60b1d2f9b54dd82b4340
+        '400':
+          description: Invalid payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                missingBatchId:
+                  value:
+                    error: batchId is required
+                missingSamples:
+                  value:
+                    error: samples are required
+                tooManySamples:
+                  value:
+                    error: The maximum batch size is 300 samples
+        '401':
+          description: Missing or invalid authentication
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                missingAuth:
+                  value:
+                    error: You must login first
+                invalidMobileToken:
+                  value:
+                    error: Invalid mobile login token
+                missingToken:
+                  value:
+                    error: Tracking token is missing
+                invalidToken:
+                  value:
+                    error: Tracking token is invalid
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/tracking/bindings/{id}/revoke:
+    post:
+      tags:
+        - Tracking Admin
+      summary: Revoke a tracking binding
+      description: |
+        Deactivates a tracking binding and forces the related tracking state to `offline`.
+        Intended for dashboard/admin usage.
+      operationId: revokeTrackingBinding
+      security:
+        - sessionCookieAuth: []
+        - secureSessionCookieAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Tracking binding identifier
+      responses:
+        '200':
+          description: Binding revoked successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RevokeTrackingBindingResponse'
+              examples:
+                default:
+                  value:
+                    success: true
+        '401':
+          description: Unauthenticated dashboard request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Missing `vehicles.update` permission
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Binding not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/tracking/overview:
+    get:
+      tags:
+        - Tracking Admin
+      summary: Get tracking monitoring overview
+      description: |
+        Returns the tracking dashboard overview for a branch or an organization.
+        Requires dashboard authentication with `vehicles.read` permission.
+      operationId: getTrackingOverview
+      security:
+        - sessionCookieAuth: []
+        - secureSessionCookieAuth: []
+      parameters:
+        - in: query
+          name: branchId
+          required: false
+          schema:
+            type: string
+          description: Limit the overview to a single branch
+        - in: query
+          name: organizationId
+          required: false
+          schema:
+            type: string
+          description: Organization scope for super admins
+        - in: query
+          name: bindingsLimit
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 200
+          description: Maximum number of bindings to include
+        - in: query
+          name: messagesLimit
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 300
+            default: 100
+          description: Maximum number of recent ingress messages to include
+      responses:
+        '200':
+          description: Tracking overview payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrackingOverviewResponse'
+        '401':
+          description: Unauthenticated dashboard request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Missing `vehicles.read` permission
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: MobileAuthToken
+      description: Bearer token returned by `/api/tracking/mobile/login`
+    trackingTokenHeader:
+      type: apiKey
+      in: header
+      name: X-Tracking-Token
+      description: Legacy device tracking token returned by `/api/tracking/mobile/activate`
+    sessionCookieAuth:
+      type: apiKey
+      in: cookie
+      name: next-auth.session-token
+      description: Default NextAuth session cookie for local or non-secure environments
+    secureSessionCookieAuth:
+      type: apiKey
+      in: cookie
+      name: __Secure-next-auth.session-token
+      description: NextAuth session cookie used in secure deployments
+  responses:
+    InternalServerError:
+      description: Unexpected server-side error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            default:
+              value:
+                error: Internal server error
+  schemas:
+    TrackingProvider:
+      type: string
+      enum:
+        - athar
+        - mobile_app
+        - traccar
+    TrackingConnectivityStatus:
+      type: string
+      enum:
+        - moving
+        - stopped
+        - offline
+    TrackingIngressStatus:
+      type: string
+      enum:
+        - received
+        - processed
+        - duplicate
+        - ignored_late
+        - rejected
+        - error
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+    MobileLoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+    MobileLoginUser:
+      type: object
+      required:
+        - id
+        - name
+        - email
+        - role
+        - organizationId
+        - branchId
+        - trackingVehicleId
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+          example: line_supervisor
+        organizationId:
+          type:
+            - string
+            - 'null'
+        branchId:
+          type:
+            - string
+            - 'null'
+        trackingVehicleId:
+          type:
+            - string
+            - 'null'
+    MobileLoginTrackingState:
+      type: object
+      required:
+        - canActivate
+      properties:
+        canActivate:
+          type: boolean
+    MobileLoginResponse:
+      type: object
+      required:
+        - accessToken
+        - tokenType
+        - expiresAt
+        - user
+        - tracking
+      properties:
+        accessToken:
+          type: string
+        tokenType:
+          type: string
+          enum:
+            - Bearer
+        expiresAt:
+          type: string
+          format: date-time
+        user:
+          $ref: '#/components/schemas/MobileLoginUser'
+        tracking:
+          $ref: '#/components/schemas/MobileLoginTrackingState'
+    MobileActivateRequest:
+      type: object
+      properties:
+        deviceId:
+          type: string
+          description: Stable identifier for the mobile installation/device
+        deviceName:
+          type: string
+        platform:
+          type: string
+          description: e.g. android or ios
+        appVersion:
+          type: string
+    MobileTrackingBindingMetadata:
+      type:
+        - object
+        - 'null'
+      properties:
+        deviceId:
+          type:
+            - string
+            - 'null'
+        deviceName:
+          type:
+            - string
+            - 'null'
+        platform:
+          type:
+            - string
+            - 'null'
+        appVersion:
+          type:
+            - string
+            - 'null'
+        activatedAt:
+          type:
+            - string
+            - 'null'
+          format: date-time
+      additionalProperties: true
+    MobileTrackingBinding:
+      type:
+        - object
+        - 'null'
+      required:
+        - _id
+        - branchId
+        - vehicleId
+        - provider
+        - externalId
+        - userId
+        - capabilities
+        - isPrimary
+        - isActive
+        - lastSeenAt
+        - metadata
+        - createdAt
+        - updatedAt
+      properties:
+        _id:
+          type: string
+        branchId:
+          type: string
+        vehicleId:
+          type: string
+        provider:
+          $ref: '#/components/schemas/TrackingProvider'
+        externalId:
+          type:
+            - string
+            - 'null'
+        userId:
+          type:
+            - string
+            - 'null'
+        capabilities:
+          type: array
+          items:
+            type: string
+        isPrimary:
+          type: boolean
+        isActive:
+          type: boolean
+        lastSeenAt:
+          type:
+            - string
+            - 'null'
+          format: date-time
+        metadata:
+          $ref: '#/components/schemas/MobileTrackingBindingMetadata'
+        createdAt:
+          type:
+            - string
+            - 'null'
+          format: date-time
+        updatedAt:
+          type:
+            - string
+            - 'null'
+          format: date-time
+    MobileActivateVehicle:
+      type: object
+      required:
+        - _id
+        - name
+        - plateNumber
+        - trackingProvider
+      properties:
+        _id:
+          type: string
+        name:
+          type: string
+        plateNumber:
+          type:
+            - string
+            - 'null'
+        trackingProvider:
+          type: string
+          enum:
+            - mobile_app
+    MobileActivateResponse:
+      type: object
+      required:
+        - trackingToken
+        - binding
+        - vehicle
+      properties:
+        trackingToken:
+          type: string
+        binding:
+          $ref: '#/components/schemas/MobileTrackingBinding'
+        vehicle:
+          $ref: '#/components/schemas/MobileActivateVehicle'
+    MobileTrackingSample:
+      type: object
+      required:
+        - recordedAt
+        - lat
+        - lng
+      properties:
+        recordedAt:
+          type: string
+          format: date-time
+        lat:
+          type: number
+          minimum: -90
+          maximum: 90
+        lng:
+          type: number
+          minimum: -180
+          maximum: 180
+        speed:
+          type:
+            - number
+            - 'null'
+        heading:
+          type:
+            - number
+            - 'null'
+        accuracy:
+          type:
+            - number
+            - 'null'
+        altitude:
+          type:
+            - number
+            - 'null'
+    MobileTrackingBatchRequest:
+      type: object
+      required:
+        - batchId
+        - samples
+      properties:
+        deviceId:
+          type:
+            - string
+            - 'null'
+          description: Optional stable identifier for the mobile installation or device
+        deviceName:
+          type:
+            - string
+            - 'null'
+        platform:
+          type:
+            - string
+            - 'null'
+          description: e.g. android or ios
+        appVersion:
+          type:
+            - string
+            - 'null'
+        batchId:
+          type: string
+        sentAt:
+          type:
+            - string
+            - 'null'
+          format: date-time
+        samples:
+          type: array
+          minItems: 1
+          maxItems: 300
+          items:
+            $ref: '#/components/schemas/MobileTrackingSample'
+    MobileTrackingBatchResponse:
+      type: object
+      required:
+        - success
+        - duplicate
+        - ingressId
+      properties:
+        success:
+          type: boolean
+        duplicate:
+          type: boolean
+        ingressId:
+          type:
+            - string
+            - 'null'
+        acceptedSamples:
+          type: integer
+          minimum: 0
+        lateSamples:
+          type: integer
+          minimum: 0
+    RevokeTrackingBindingResponse:
+      type: object
+      required:
+        - success
+      properties:
+        success:
+          type: boolean
+    TrackingOverviewScope:
+      type: object
+      required:
+        - type
+        - organizationId
+        - branchId
+        - branchCount
+      properties:
+        type:
+          type: string
+          enum:
+            - branch
+            - organization
+        organizationId:
+          type:
+            - string
+            - 'null'
+        branchId:
+          type:
+            - string
+            - 'null'
+        branchCount:
+          type: integer
+          minimum: 0
+    ProviderCountMap:
+      type: object
+      required:
+        - athar
+        - mobile_app
+        - traccar
+      properties:
+        athar:
+          type: integer
+          minimum: 0
+        mobile_app:
+          type: integer
+          minimum: 0
+        traccar:
+          type: integer
+          minimum: 0
+    LiveConnectivityCounts:
+      type: object
+      required:
+        - moving
+        - stopped
+        - offline
+      properties:
+        moving:
+          type: integer
+          minimum: 0
+        stopped:
+          type: integer
+          minimum: 0
+        offline:
+          type: integer
+          minimum: 0
+    IngressLast24h:
+      type: object
+      required:
+        - total
+        - processed
+        - duplicate
+        - ignored_late
+        - rejected
+        - error
+      properties:
+        total:
+          type: integer
+          minimum: 0
+        processed:
+          type: integer
+          minimum: 0
+        duplicate:
+          type: integer
+          minimum: 0
+        ignored_late:
+          type: integer
+          minimum: 0
+        rejected:
+          type: integer
+          minimum: 0
+        error:
+          type: integer
+          minimum: 0
+    TrackingOverviewSummary:
+      type: object
+      required:
+        - branchCount
+        - totalVehicles
+        - providerVehicleCounts
+        - activeBindingCounts
+        - primaryBindingCounts
+        - liveConnectivityCounts
+        - ingressLast24h
+        - providerEnabledBranches
+      properties:
+        branchCount:
+          type: integer
+          minimum: 0
+        totalVehicles:
+          type: integer
+          minimum: 0
+        providerVehicleCounts:
+          $ref: '#/components/schemas/ProviderCountMap'
+        activeBindingCounts:
+          $ref: '#/components/schemas/ProviderCountMap'
+        primaryBindingCounts:
+          $ref: '#/components/schemas/ProviderCountMap'
+        liveConnectivityCounts:
+          $ref: '#/components/schemas/LiveConnectivityCounts'
+        ingressLast24h:
+          $ref: '#/components/schemas/IngressLast24h'
+        providerEnabledBranches:
+          $ref: '#/components/schemas/ProviderCountMap'
+    TrackingCoordinates:
+      type:
+        - array
+        - 'null'
+      minItems: 2
+      maxItems: 2
+      items:
+        type: number
+    TrackingLiveVehicle:
+      type: object
+      required:
+        - vehicleId
+        - branchId
+        - branchName
+        - vehicleName
+        - plateNumber
+        - provider
+        - providerLabel
+        - connectivityStatus
+        - driverName
+        - lineSupervisorName
+        - lastUpdateLabel
+        - lastReceivedAt
+        - lastRecordedAt
+        - speed
+        - heading
+        - accuracy
+        - coordinates
+        - insidePointCount
+      properties:
+        vehicleId:
+          type: string
+        branchId:
+          type: string
+        branchName:
+          type: string
+        vehicleName:
+          type: string
+        plateNumber:
+          type:
+            - string
+            - 'null'
+        provider:
+          $ref: '#/components/schemas/TrackingProvider'
+        providerLabel:
+          type: string
+        connectivityStatus:
+          $ref: '#/components/schemas/TrackingConnectivityStatus'
+        driverName:
+          type:
+            - string
+            - 'null'
+        lineSupervisorName:
+          type:
+            - string
+            - 'null'
+        lastUpdateLabel:
+          type: string
+        lastReceivedAt:
+          type:
+            - string
+            - 'null'
+          format: date-time
+        lastRecordedAt:
+          type:
+            - string
+            - 'null'
+          format: date-time
+        speed:
+          type: number
+        heading:
+          type: number
+        accuracy:
+          type:
+            - number
+            - 'null'
+        coordinates:
+          $ref: '#/components/schemas/TrackingCoordinates'
+        insidePointCount:
+          type: integer
+          minimum: 0
+    TrackingBindingListItem:
+      type: object
+      required:
+        - _id
+        - branchId
+        - branchName
+        - provider
+        - providerLabel
+        - vehicleId
+        - vehicleName
+        - plateNumber
+        - externalId
+        - isPrimary
+        - isActive
+        - lastSeenAt
+        - lineSupervisorName
+        - lineSupervisorEmail
+        - capabilities
+        - deviceName
+        - platform
+        - appVersion
+      properties:
+        _id:
+          type: string
+        branchId:
+          type: string
+        branchName:
+          type: string
+        provider:
+          $ref: '#/components/schemas/TrackingProvider'
+        providerLabel:
+          type: string
+        vehicleId:
+          type: string
+        vehicleName:
+          type: string
+        plateNumber:
+          type:
+            - string
+            - 'null'
+        externalId:
+          type:
+            - string
+            - 'null'
+        isPrimary:
+          type: boolean
+        isActive:
+          type: boolean
+        lastSeenAt:
+          type:
+            - string
+            - 'null'
+          format: date-time
+        lineSupervisorName:
+          type:
+            - string
+            - 'null'
+        lineSupervisorEmail:
+          type:
+            - string
+            - 'null'
+          format: email
+        capabilities:
+          type: array
+          items:
+            type: string
+        deviceName:
+          type:
+            - string
+            - 'null'
+        platform:
+          type:
+            - string
+            - 'null'
+        appVersion:
+          type:
+            - string
+            - 'null'
+    TrackingRecentMessage:
+      type: object
+      required:
+        - _id
+        - branchId
+        - branchName
+        - vehicleId
+        - vehicleName
+        - plateNumber
+        - provider
+        - providerLabel
+        - providerMessageId
+        - status
+        - receivedAt
+        - processedAt
+        - errorMessage
+        - bindingId
+        - bindingProvider
+        - batchSize
+      properties:
+        _id:
+          type: string
+        branchId:
+          type:
+            - string
+            - 'null'
+        branchName:
+          type: string
+        vehicleId:
+          type:
+            - string
+            - 'null'
+        vehicleName:
+          type:
+            - string
+            - 'null'
+        plateNumber:
+          type:
+            - string
+            - 'null'
+        provider:
+          $ref: '#/components/schemas/TrackingProvider'
+        providerLabel:
+          type: string
+        providerMessageId:
+          type: string
+        status:
+          $ref: '#/components/schemas/TrackingIngressStatus'
+        receivedAt:
+          type: string
+          format: date-time
+        processedAt:
+          type:
+            - string
+            - 'null'
+          format: date-time
+        errorMessage:
+          type:
+            - string
+            - 'null'
+        bindingId:
+          type:
+            - string
+            - 'null'
+        bindingProvider:
+          type:
+            - string
+            - 'null'
+        batchSize:
+          type:
+            - integer
+            - 'null'
+          minimum: 0
+    TrackingProviderState:
+      type: object
+      required:
+        - enabled
+        - source
+      properties:
+        enabled:
+          type: boolean
+        source:
+          type: string
+          enum:
+            - config
+            - legacy_branch_key
+            - configured_without_key
+            - not_configured
+        legacyFallback:
+          type: boolean
+    TrackingBranchProviders:
+      type: object
+      required:
+        - branchId
+        - branchName
+        - providers
+      properties:
+        branchId:
+          type: string
+        branchName:
+          type: string
+        providers:
+          type: object
+          required:
+            - athar
+            - mobile_app
+            - traccar
+          properties:
+            athar:
+              $ref: '#/components/schemas/TrackingProviderState'
+            mobile_app:
+              $ref: '#/components/schemas/TrackingProviderState'
+            traccar:
+              $ref: '#/components/schemas/TrackingProviderState'
+    TrackingOverviewResponse:
+      type: object
+      required:
+        - scope
+        - summary
+        - liveVehicles
+        - bindings
+        - recentMessages
+        - branchProviders
+      properties:
+        scope:
+          $ref: '#/components/schemas/TrackingOverviewScope'
+        summary:
+          $ref: '#/components/schemas/TrackingOverviewSummary'
+        liveVehicles:
+          type: array
+          items:
+            $ref: '#/components/schemas/TrackingLiveVehicle'
+        bindings:
+          type: array
+          items:
+            $ref: '#/components/schemas/TrackingBindingListItem'
+        recentMessages:
+          type: array
+          items:
+            $ref: '#/components/schemas/TrackingRecentMessage'
+        branchProviders:
+          type: array
+          items:
+            $ref: '#/components/schemas/TrackingBranchProviders'

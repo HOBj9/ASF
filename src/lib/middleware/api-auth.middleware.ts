@@ -93,6 +93,45 @@ export async function requirePermission(
   return { session, role };
 }
 
+/** Pass if the user has any of the listed resource+action pairs (session role or DB role). */
+export async function requireAnyPermission(
+  checks: Array<{ resource: string; action: string }>,
+): Promise<{ session: any; role: any } | NextResponse> {
+  const authResult = await requireAuth();
+
+  if (authResult instanceof NextResponse) {
+    return authResult;
+  }
+
+  const { session } = authResult;
+  const sessionRole = session.user?.role as SessionRole | null;
+
+  const matches = (roleLike: any) =>
+    !!roleLike &&
+    checks.some(({ resource, action }) => hasPermission(roleLike as any, resource, action));
+
+  if (sessionRole && matches(sessionRole)) {
+    return { session, role: sessionRole };
+  }
+
+  await connectDB();
+  const roleId = typeof session.user.role === 'string' ? session.user.role : session.user.role?._id;
+  const role = roleId
+    ? await getOrLoadRolePermissions(String(roleId), () =>
+        Role.findById(roleId).populate('permissions').lean(),
+      )
+    : null;
+
+  if (!role || !matches(role)) {
+    return NextResponse.json(
+      { error: messages.errors.forbidden },
+      { status: 403 },
+    );
+  }
+
+  return { session, role };
+}
+
 export function handleApiError(error: any): NextResponse {
   console.error('API Error:', error);
   return NextResponse.json(

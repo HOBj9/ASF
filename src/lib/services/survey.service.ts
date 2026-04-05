@@ -4,7 +4,7 @@
  */
 
 import connectDB from '@/lib/mongodb';
-import Survey, { ISurvey, ISurveyQuestion } from '@/models/Survey';
+import Survey, { ISurveyQuestion } from '@/models/Survey';
 import SurveySubmission from '@/models/SurveySubmission';
 import Organization from '@/models/Organization';
 import { PointService } from '@/lib/services/point.service';
@@ -40,7 +40,161 @@ export interface SubmitSurveyData {
   answers: Record<string, unknown>;
 }
 
+export interface MobileSurveyAnswerData {
+  questionId?: string;
+  answerKey?: string;
+  value: unknown;
+}
+
+export interface SubmitMobileSurveyData {
+  point: {
+    name: string;
+    primaryClassificationId: string;
+    secondaryClassificationId: string;
+    otherIdentifier: string;
+    mapLat: number;
+    mapLng: number;
+    deviceLat?: number | null;
+    deviceLng?: number | null;
+  };
+  answers: MobileSurveyAnswerData[];
+}
+
 export class SurveyService {
+  private buildQuestionAnswerKey(index: number) {
+    return `question_${index}`;
+  }
+
+  private resolveSurveyQuestionKey(
+    question: any,
+    index: number,
+    answers: Record<string, unknown>
+  ) {
+    const questionId = question?._id ? String(question._id) : null;
+    const answerKey = this.buildQuestionAnswerKey(index);
+
+    if (questionId && Object.prototype.hasOwnProperty.call(answers, questionId)) {
+      return questionId;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(answers, answerKey)) {
+      return answerKey;
+    }
+
+    return answerKey;
+  }
+
+  private ensureSurveyVisibleToBranch(survey: any, branchId?: string | null) {
+    const currentBranchId = String(branchId || '').trim();
+    const surveyBranchId = survey?.branchId ? String(survey.branchId) : null;
+
+    if (!currentBranchId || !surveyBranchId) {
+      return;
+    }
+
+    if (surveyBranchId !== currentBranchId) {
+      const error: any = new Error('الاستبيان غير متاح لهذا الفرع');
+      error.status = 403;
+      throw error;
+    }
+  }
+
+  private parseLocationAnswer(
+    value: unknown,
+    fallbackLat?: number | null,
+    fallbackLng?: number | null
+  ): { lat: number; lng: number; serialized: string } | null {
+    if (
+      typeof fallbackLat === 'number' &&
+      Number.isFinite(fallbackLat) &&
+      typeof fallbackLng === 'number' &&
+      Number.isFinite(fallbackLng)
+    ) {
+      return {
+        lat: fallbackLat,
+        lng: fallbackLng,
+        serialized: `${fallbackLat},${fallbackLng}`,
+      };
+    }
+
+    if (typeof value === 'string') {
+      const [latPart, lngPart] = value.split(',').map((item) => item.trim());
+      const lat = Number(latPart);
+      const lng = Number(lngPart);
+
+      if (Number.isFinite(lat) && Number.isFinite(lng)) {
+        return {
+          lat,
+          lng,
+          serialized: `${lat},${lng}`,
+        };
+      }
+    }
+
+    if (value && typeof value === 'object') {
+      const lat = Number((value as Record<string, unknown>).lat);
+      const lng = Number((value as Record<string, unknown>).lng);
+
+      if (Number.isFinite(lat) && Number.isFinite(lng)) {
+        return {
+          lat,
+          lng,
+          serialized: `${lat},${lng}`,
+        };
+      }
+    }
+
+    return null;
+  }
+
+  private validateSubmissionAnswers(
+    survey: any,
+    answers: Record<string, unknown>,
+    input: { mapLat: number; mapLng: number }
+  ) {
+    const questions = Array.isArray(survey?.questions) ? survey.questions : [];
+
+    questions.forEach((question: any, index: number) => {
+      const answerKey = this.resolveSurveyQuestionKey(question, index, answers);
+      const value = answers[answerKey];
+      const required = Boolean(question?.required);
+      const label = question?.questionTextAr || question?.questionText || `#${index + 1}`;
+
+      if (question?.type === 'current_location') {
+        if (!required) return;
+
+        const locationAnswer = this.parseLocationAnswer(value, input.mapLat, input.mapLng);
+        if (!locationAnswer) {
+          const error: any = new Error(`الإجابة مطلوبة للسؤال: ${label}`);
+          error.status = 400;
+          throw error;
+        }
+        return;
+      }
+
+      if (!required && (value === undefined || value === null || value === '')) {
+        return;
+      }
+
+      if (required && (value === undefined || value === null || String(value).trim() === '')) {
+        const error: any = new Error(`الإجابة مطلوبة للسؤال: ${label}`);
+        error.status = 400;
+        throw error;
+      }
+
+      if (question?.type === 'choice' && value != null) {
+        const normalizedValue = String(value).trim();
+        const allowedOptions = Array.isArray(question?.options) ? question.options : [];
+
+        if (!allowedOptions.includes(normalizedValue)) {
+          const error: any = new Error(`الإجابة غير صالحة للسؤال: ${label}`);
+          error.status = 400;
+          throw error;
+        }
+      }
+    });
+  }
+
   async create(organizationId: string, data: CreateSurveyData): Promise<any> {
     await connectDB();
 
@@ -68,6 +222,20 @@ export class SurveyService {
     return Survey.findOne({ _id: id, organizationId }).lean().exec();
   }
 
+  async getActiveForLineSupervisor(
+    surveyId: string,
+    organizationId: string,
+    branchId?: string | null
+  ): Promise<any | null> {
+    const survey = await this.getById(surveyId, organizationId);
+    if (!survey || survey.isActive === false) {
+      return null;
+    }
+
+    this.ensureSurveyVisibleToBranch(survey, branchId);
+    return survey;
+  }
+
   /**
    * List surveys for an organization. If branchId is provided (line supervisor / branch admin),
    * returns org-wide surveys (branchId null) + surveys for that branch only.
@@ -79,11 +247,13 @@ export class SurveyService {
     branchId?: string | null
   ): Promise<any[]> {
     await connectDB();
+
     const query: Record<string, unknown> = { organizationId };
     if (activeOnly) query.isActive = true;
     if (branchId != null && String(branchId).trim() !== '') {
       query.$or = [{ branchId: null }, { branchId }];
     }
+
     return Survey.find(query).sort({ updatedAt: -1 }).lean().exec();
   }
 
@@ -100,7 +270,9 @@ export class SurveyService {
     if (data.descriptionAr !== undefined) updateData.descriptionAr = data.descriptionAr?.trim() || null;
     if (data.questions !== undefined) updateData.questions = data.questions;
     if (data.isActive !== undefined) updateData.isActive = data.isActive;
-    if (data.branchId !== undefined) updateData.branchId = data.branchId && String(data.branchId).trim() ? data.branchId : null;
+    if (data.branchId !== undefined) {
+      updateData.branchId = data.branchId && String(data.branchId).trim() ? data.branchId : null;
+    }
 
     const updated = await Survey.findByIdAndUpdate(id, updateData, {
       new: true,
@@ -139,17 +311,27 @@ export class SurveyService {
       throw new Error('الاستبيان غير نشط');
     }
 
+    this.ensureSurveyVisibleToBranch(survey, branchId);
+
     const org = await Organization.findById(organizationId).lean();
     if (!org) {
       throw new Error('المؤسسة غير موجودة');
     }
 
-    const answers = data.answers && typeof data.answers === 'object' ? (data.answers as Record<string, unknown>) : {};
+    const answers =
+      data.answers && typeof data.answers === 'object'
+        ? (data.answers as Record<string, unknown>)
+        : {};
+
+    this.validateSubmissionAnswers(survey, answers, {
+      mapLat: data.mapLat,
+      mapLng: data.mapLng,
+    });
+
     const nameFromAnswers =
       String(answers.pointName ?? answers.name ?? answers.question_0 ?? '').trim() || '';
     const pointName =
-      nameFromAnswers ||
-      `نقطة من مسح – ${new Date().toLocaleDateString('ar-SY')}`;
+      nameFromAnswers || `نقطة من مسح - ${new Date().toLocaleDateString('ar-SY')}`;
 
     const point = await pointService.createAtOrganization(organizationId, {
       name: pointName,
@@ -159,9 +341,16 @@ export class SurveyService {
       radiusMeters: 500,
       isActive: true,
       createdByUserId: userId,
-      primaryClassificationId: typeof answers.primaryClassificationId === 'string' ? answers.primaryClassificationId : null,
-      secondaryClassificationId: typeof answers.secondaryClassificationId === 'string' ? answers.secondaryClassificationId : null,
-      otherIdentifier: typeof answers.otherIdentifier === 'string' ? answers.otherIdentifier : null,
+      primaryClassificationId:
+        typeof answers.primaryClassificationId === 'string'
+          ? answers.primaryClassificationId
+          : null,
+      secondaryClassificationId:
+        typeof answers.secondaryClassificationId === 'string'
+          ? answers.secondaryClassificationId
+          : null,
+      otherIdentifier:
+        typeof answers.otherIdentifier === 'string' ? answers.otherIdentifier : null,
     });
 
     const submission = await SurveySubmission.create({
@@ -181,6 +370,101 @@ export class SurveyService {
       submission: submission.toObject ? submission.toObject() : submission,
       point: point.toObject ? point.toObject() : point,
     };
+  }
+
+  async submitFromMobile(
+    surveyId: string,
+    userId: string,
+    organizationId: string,
+    data: SubmitMobileSurveyData,
+    branchId?: string | null
+  ) {
+    const survey = await this.getActiveForLineSupervisor(surveyId, organizationId, branchId);
+    if (!survey) {
+      const error: any = new Error('الاستبيان غير موجود أو غير نشط');
+      error.status = 404;
+      throw error;
+    }
+
+    const point = data?.point || ({} as SubmitMobileSurveyData['point']);
+    const mapLat = Number(point.mapLat);
+    const mapLng = Number(point.mapLng);
+    const deviceLat =
+      point.deviceLat != null && Number.isFinite(Number(point.deviceLat))
+        ? Number(point.deviceLat)
+        : null;
+    const deviceLng =
+      point.deviceLng != null && Number.isFinite(Number(point.deviceLng))
+        ? Number(point.deviceLng)
+        : null;
+
+    if (!Number.isFinite(mapLat) || !Number.isFinite(mapLng)) {
+      const error: any = new Error('إحداثيات موقع النقطة مطلوبة');
+      error.status = 400;
+      throw error;
+    }
+
+    const pointName = String(point.name || '').trim();
+    const primaryClassificationId = String(point.primaryClassificationId || '').trim();
+    const secondaryClassificationId = String(point.secondaryClassificationId || '').trim();
+    const otherIdentifier = String(point.otherIdentifier || '').trim();
+
+    if (!pointName || !primaryClassificationId || !secondaryClassificationId || !otherIdentifier) {
+      const error: any = new Error(
+        'اسم النقطة والتصنيفات والرقم التعريفي الآخر مطلوبة'
+      );
+      error.status = 400;
+      throw error;
+    }
+
+    const normalizedAnswers: Record<string, unknown> = {
+      pointName,
+      primaryClassificationId,
+      secondaryClassificationId,
+      otherIdentifier,
+    };
+
+    const mobileAnswers = Array.isArray(data?.answers) ? data.answers : [];
+    const questions = Array.isArray(survey.questions) ? survey.questions : [];
+
+    for (let index = 0; index < questions.length; index += 1) {
+      const question = questions[index];
+      const questionId = question?._id ? String(question._id) : null;
+      const answerKey = this.buildQuestionAnswerKey(index);
+      const answerItem = mobileAnswers.find((item) => {
+        if (!item || typeof item !== 'object') return false;
+        if (questionId && item.questionId && String(item.questionId) === questionId) return true;
+        return item.answerKey === answerKey;
+      });
+
+      if (!answerItem) continue;
+
+      if (question?.type === 'current_location') {
+        const parsedLocation = this.parseLocationAnswer(answerItem.value, mapLat, mapLng);
+        if (parsedLocation) {
+          normalizedAnswers[answerKey] = parsedLocation.serialized;
+          normalizedAnswers[`${answerKey}_lat`] = parsedLocation.lat;
+          normalizedAnswers[`${answerKey}_lng`] = parsedLocation.lng;
+        }
+        continue;
+      }
+
+      normalizedAnswers[answerKey] = answerItem.value;
+    }
+
+    return this.submit(
+      surveyId,
+      userId,
+      organizationId,
+      {
+        mapLat,
+        mapLng,
+        deviceLat,
+        deviceLng,
+        answers: normalizedAnswers,
+      },
+      branchId
+    );
   }
 
   /**
@@ -221,7 +505,7 @@ export class SurveyService {
       String(answers.pointName ?? answers.name ?? answers.question_0 ?? '').trim() || '';
     const pointName =
       nameFromAnswers ||
-      `نقطة من مسح – ${new Date(submission.createdAt).toLocaleDateString('ar-SY')}`;
+      `نقطة من مسح - ${new Date(submission.createdAt).toLocaleDateString('ar-SY')}`;
 
     const point = await pointService.createAtOrganization(organizationId, {
       name: pointName,
@@ -262,10 +546,12 @@ export class SurveyService {
     branchId?: string | null
   ): Promise<any[]> {
     await connectDB();
+
     const query: Record<string, unknown> = { surveyId, organizationId };
     if (branchId != null && String(branchId).trim() !== '') {
       query.branchId = branchId;
     }
+
     return SurveySubmission.find(query)
       .sort({ createdAt: -1 })
       .populate('userId', 'name email')
@@ -281,10 +567,12 @@ export class SurveyService {
     branchId?: string | null
   ): Promise<any[]> {
     await connectDB();
+
     const query: Record<string, unknown> = { organizationId };
     if (branchId != null && String(branchId).trim() !== '') {
       query.branchId = branchId;
     }
+
     return SurveySubmission.find(query)
       .sort({ createdAt: -1 })
       .populate('userId', 'name email')

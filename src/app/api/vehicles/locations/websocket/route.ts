@@ -50,7 +50,7 @@ export async function GET(request: Request) {
       void send();
       intervalId = setInterval(() => {
         void send();
-      }, 5000);
+      }, 3000);
 
       request.signal.addEventListener('abort', () => {
         isClosed = true;

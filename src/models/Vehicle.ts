@@ -1,4 +1,10 @@
 import mongoose, { Schema, Document, Model } from 'mongoose';
+import {
+  trackingProviders,
+  zoneEventProviders,
+  type TrackingProvider,
+  type ZoneEventProvider,
+} from '@/lib/tracking/types';
 
 export type VehicleFuelType = 'gasoline' | 'diesel';
 
@@ -6,7 +12,10 @@ export interface IVehicle extends Document {
   branchId: mongoose.Types.ObjectId;
   name: string;
   plateNumber?: string;
-  imei: string;
+  imei?: string | null;
+  trackingProvider: TrackingProvider;
+  acceptedTrackingProviders: TrackingProvider[];
+  zoneEventProvider?: ZoneEventProvider | null;
   fuelType?: VehicleFuelType;
   fuelPricePerKm?: number;
   atharObjectId?: string;
@@ -37,8 +46,29 @@ const VehicleSchema: Schema = new Schema(
     },
     imei: {
       type: String,
-      required: true,
       trim: true,
+      default: null,
+    },
+    trackingProvider: {
+      type: String,
+      enum: trackingProviders,
+      default: 'athar',
+      index: true,
+    },
+    acceptedTrackingProviders: {
+      type: [
+        {
+          type: String,
+          enum: trackingProviders,
+        },
+      ],
+      default: undefined,
+    },
+    zoneEventProvider: {
+      type: String,
+      enum: zoneEventProviders,
+      default: null,
+      index: true,
     },
     fuelType: {
       type: String,
@@ -74,8 +104,48 @@ const VehicleSchema: Schema = new Schema(
   }
 );
 
-VehicleSchema.index({ branchId: 1, imei: 1 }, { unique: true });
+VehicleSchema.index(
+  { branchId: 1, imei: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      imei: { $exists: true, $type: 'string', $ne: '' },
+    },
+  }
+);
 VehicleSchema.index({ branchId: 1, name: 1 });
+VehicleSchema.index({ branchId: 1, zoneEventProvider: 1 });
+
+VehicleSchema.pre('validate', function (next) {
+  const trackingProvider =
+    typeof this.trackingProvider === 'string' &&
+    trackingProviders.includes(this.trackingProvider as TrackingProvider)
+      ? (this.trackingProvider as TrackingProvider)
+      : 'athar';
+
+  if (!Array.isArray(this.acceptedTrackingProviders) || this.acceptedTrackingProviders.length === 0) {
+    this.acceptedTrackingProviders = [trackingProvider];
+  } else {
+    const normalized = Array.from(
+      new Set(
+        this.acceptedTrackingProviders.filter((provider: unknown) =>
+          typeof provider === 'string' && trackingProviders.includes(provider as TrackingProvider)
+        )
+      )
+    ) as TrackingProvider[];
+    this.acceptedTrackingProviders = normalized.length > 0 ? normalized : [trackingProvider];
+  }
+
+  if (
+    this.zoneEventProvider == null ||
+    !zoneEventProviders.includes(this.zoneEventProvider as ZoneEventProvider)
+  ) {
+    this.zoneEventProvider =
+      trackingProvider === 'mobile_app' ? 'mobile_app' : 'athar';
+  }
+
+  next();
+});
 
 let Vehicle: Model<IVehicle>;
 

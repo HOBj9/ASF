@@ -18,6 +18,7 @@ export interface CreateUserData {
   role: string;
   organizationId?: string;
   branchId?: string;
+  trackingVehicleId?: string;
   isActive?: boolean;
 }
 
@@ -29,6 +30,7 @@ export interface UpdateUserData {
   role?: string;
   organizationId?: string;
   branchId?: string;
+  trackingVehicleId?: string | null;
   isActive?: boolean;
 }
 
@@ -63,6 +65,7 @@ export class UserService {
       role: data.role,
       organizationId: data.organizationId || null,
       branchId: data.branchId || null,
+      trackingVehicleId: data.trackingVehicleId || null,
       isActive: data.isActive ?? true,
     });
 
@@ -151,6 +154,9 @@ export class UserService {
     }
     if (data.organizationId !== undefined) {
       updateData.organizationId = data.organizationId || null;
+    }
+    if (data.trackingVehicleId !== undefined) {
+      updateData.trackingVehicleId = data.trackingVehicleId || null;
     }
     
     // Ensure isActive is a boolean if provided

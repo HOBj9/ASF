@@ -21,6 +21,7 @@ import Vehicle from "../src/models/Vehicle"
 import Point from "../src/models/Point"
 import Route from "../src/models/Route"
 import RoutePoint from "../src/models/RoutePoint"
+import TrackingEventDefinition from "../src/models/TrackingEventDefinition"
 import ZoneEvent from "../src/models/ZoneEvent"
 import PointVisit from "../src/models/PointVisit"
 import Unit from "../src/models/Unit"
@@ -54,6 +55,7 @@ const models: ModelInfo[] = [
   { name: "Point", model: Point, collection: "points" },
   { name: "Route", model: Route, collection: "routes" },
   { name: "RoutePoint", model: RoutePoint, collection: "routepoints" },
+  { name: "TrackingEventDefinition", model: TrackingEventDefinition, collection: "trackingeventdefinitions" },
   { name: "ZoneEvent", model: ZoneEvent, collection: "zoneevents" },
   { name: "PointVisit", model: PointVisit, collection: "pointvisits" },
   { name: "Unit", model: Unit, collection: "units" },

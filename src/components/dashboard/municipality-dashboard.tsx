@@ -53,14 +53,27 @@ type Point = {
 
 type LiveVehicle = {
   id: string;
+  provider: "athar" | "mobile_app" | "traccar";
+  providerLabel: string;
+  vehicleName: string;
+  plateNumber: string | null;
   busNumber: string;
   driverName: string;
+  route: string;
+  routeId: string | null;
   status: "moving" | "stopped" | "offline";
   lastUpdate: string;
+  lastReceivedAt: string | null;
+  lastRecordedAt: string | null;
   speed: number;
   heading: number;
+  accuracy: number | null;
   coordinates: [number, number] | null;
   imei?: string;
+  trackingExternalId?: string | null;
+  deviceName?: string | null;
+  platform?: string | null;
+  appVersion?: string | null;
 };
 
 type AtharZone = {
@@ -638,7 +651,7 @@ export function MunicipalityDashboard({
   }, [canLoadBranchData, loading, loadMapData]);
 
   useEffect(() => {
-    if (activeMapTab !== "live" || !canLoadBranchData) return;
+    if (!canLoadBranchData) return;
     const wsUrl = `/api/vehicles/locations/websocket${branchQuery}`;
     const source = new EventSource(wsUrl);
     source.onopen = () => setVehiclesConnected(true);
@@ -663,13 +676,12 @@ export function MunicipalityDashboard({
       setVehiclesConnected(false);
       source.close();
     };
-  }, [activeMapTab, canLoadBranchData, branchQuery]);
+  }, [canLoadBranchData, branchQuery]);
 
   useEffect(() => {
     if (!canLoadBranchData) return;
-    if (activeMapTab === "live" && !liveLoaded) {
+    if (!liveLoaded) {
       void loadLiveVehicles();
-      return;
     }
 
     if (
@@ -935,7 +947,7 @@ export function MunicipalityDashboard({
               <div className="grid gap-4 lg:grid-cols-2">
                 <div className="rounded-lg border bg-card p-4 text-right">
                   <div className="flex items-center justify-end gap-1 mb-1">
-                    <Info className="h-3.5 w-3.5 text-muted-foreground" title="عدد النقاط التي تمت زيارتها يومياً." />
+                    <Info className="h-3.5 w-3.5 text-muted-foreground" />
                     <h3 className="text-sm font-semibold">{labels.pointLabel} المنجزة يومياً</h3>
                   </div>
                   <div className="h-52">
@@ -953,7 +965,7 @@ export function MunicipalityDashboard({
 
                 <div className="rounded-lg border bg-card p-4 text-right">
                   <div className="flex items-center justify-end gap-1 mb-1">
-                    <Info className="h-3.5 w-3.5 text-muted-foreground" title="إجمالي أحداث الدخول والخروج يومياً." />
+                    <Info className="h-3.5 w-3.5 text-muted-foreground" />
                     <h3 className="text-sm font-semibold">الأحداث اليومية</h3>
                   </div>
                   <div className="h-52">
@@ -973,7 +985,7 @@ export function MunicipalityDashboard({
               <div className="grid gap-4 lg:grid-cols-2">
                 <div className="rounded-lg border bg-card p-4 text-right">
                   <div className="flex items-center justify-end gap-1 mb-1">
-                    <Info className="h-3.5 w-3.5 text-muted-foreground" title="متوسط مدة بقاء المركبة داخل النقطة." />
+                    <Info className="h-3.5 w-3.5 text-muted-foreground" />
                     <h3 className="text-sm font-semibold">متوسط وقت الخدمة (دقائق)</h3>
                   </div>
                   <div className="h-52">
@@ -991,7 +1003,7 @@ export function MunicipalityDashboard({
 
                 <div className="rounded-lg border bg-card p-4 text-right">
                   <div className="flex items-center justify-end gap-1 mb-1">
-                    <Info className="h-3.5 w-3.5 text-muted-foreground" title="مقارنة شهرية للنقاط المخدومة." />
+                    <Info className="h-3.5 w-3.5 text-muted-foreground" />
                     <h3 className="text-sm font-semibold">{labels.pointLabel} الشهرية</h3>
                   </div>
                   <div className="h-52">
@@ -1346,4 +1358,5 @@ export function MunicipalityDashboard({
     </div>
   );
 }
+
 

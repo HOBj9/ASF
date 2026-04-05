@@ -1,14 +1,18 @@
-import mongoose, { Schema, Document, Model } from 'mongoose';
+﻿import mongoose, { Schema, Document, Model } from 'mongoose';
+import { trackingProviders, type TrackingProvider } from '@/lib/tracking/types';
 
 export type ZoneEventType = 'zone_in' | 'zone_out';
 
 export interface IZoneEvent extends Document {
+  definitionId?: mongoose.Types.ObjectId;
   branchId: mongoose.Types.ObjectId;
   vehicleId?: mongoose.Types.ObjectId;
   driverId?: mongoose.Types.ObjectId;
   pointId?: mongoose.Types.ObjectId;
   zoneId?: string;
   imei?: string;
+  provider?: TrackingProvider;
+  providerEventId?: string;
   atharEventId?: string;
   name?: string;
   driverName?: string;
@@ -16,9 +20,9 @@ export interface IZoneEvent extends Document {
   eventTimestamp?: Date;
   receivedAt: Date;
   rawPayload?: Record<string, any>;
-  /** دخول متكرر: كان هناك زيارة مفتوحة للمنطقة نفسها */
+  /** Ø¯Ø®ÙˆÙ„ Ù…ØªÙƒØ±Ø±: ÙƒØ§Ù† Ù‡Ù†Ø§Ùƒ Ø²ÙŠØ§Ø±Ø© Ù…ÙØªÙˆØ­Ø© Ù„Ù„Ù…Ù†Ø·Ù‚Ø© Ù†ÙØ³Ù‡Ø§ */
   isRepeatedEntry?: boolean;
-  /** خروج يتيم: لا توجد زيارة مفتوحة مطابقة */
+  /** Ø®Ø±ÙˆØ¬ ÙŠØªÙŠÙ…: Ù„Ø§ ØªÙˆØ¬Ø¯ Ø²ÙŠØ§Ø±Ø© Ù…ÙØªÙˆØ­Ø© Ù…Ø·Ø§Ø¨Ù‚Ø© */
   isOrphanExit?: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -50,6 +54,12 @@ const ZoneEventSchema: Schema = new Schema(
       default: null,
       index: true,
     },
+    definitionId: {
+      type: Schema.Types.ObjectId,
+      ref: 'TrackingEventDefinition',
+      default: null,
+      index: true,
+    },
     zoneId: {
       type: String,
       trim: true,
@@ -57,6 +67,18 @@ const ZoneEventSchema: Schema = new Schema(
       index: true,
     },
     imei: {
+      type: String,
+      trim: true,
+      default: null,
+      index: true,
+    },
+    provider: {
+      type: String,
+      enum: trackingProviders,
+      default: 'athar',
+      index: true,
+    },
+    providerEventId: {
       type: String,
       trim: true,
       default: null,
@@ -112,8 +134,10 @@ const ZoneEventSchema: Schema = new Schema(
 );
 
 ZoneEventSchema.index({ branchId: 1, atharEventId: 1 });
+ZoneEventSchema.index({ branchId: 1, provider: 1, providerEventId: 1 });
 ZoneEventSchema.index({ branchId: 1, zoneId: 1, imei: 1, eventTimestamp: 1 });
 ZoneEventSchema.index({ branchId: 1, eventTimestamp: -1 });
+ZoneEventSchema.index({ branchId: 1, definitionId: 1, eventTimestamp: -1 });
 
 let ZoneEvent: Model<IZoneEvent>;
 
@@ -124,3 +148,4 @@ if (mongoose.models.ZoneEvent) {
 }
 
 export default ZoneEvent;
+

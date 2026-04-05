@@ -34,6 +34,7 @@ export const authOptions: NextAuthOptions = {
             avatar: user.avatar || null,
             organizationId: (user as any).organizationId || null,
             branchId: (user as any).branchId || null,
+            trackingVehicleId: (user as any).trackingVehicleId || null,
             isActive: user.isActive,
           };
         } catch (error: any) {
@@ -52,6 +53,7 @@ export const authOptions: NextAuthOptions = {
         token.email = (user as any).email;
         token.branchId = (user as any).branchId || null;
         token.organizationId = (user as any).organizationId || null;
+        token.trackingVehicleId = (user as any).trackingVehicleId || null;
         token.isActive = (user as any).isActive ?? true;
 
         if ((user as any).originalAdminId) {
@@ -72,6 +74,9 @@ export const authOptions: NextAuthOptions = {
           if (sessionData.email) token.email = sessionData.email;
           if (sessionData.branchId !== undefined) token.branchId = sessionData.branchId;
           if (sessionData.organizationId !== undefined) token.organizationId = sessionData.organizationId;
+          if (sessionData.trackingVehicleId !== undefined) {
+            token.trackingVehicleId = sessionData.trackingVehicleId;
+          }
           if (sessionData.isActive !== undefined) token.isActive = sessionData.isActive;
 
           if (sessionData.originalAdminId) {
@@ -89,7 +94,7 @@ export const authOptions: NextAuthOptions = {
             const connectDB = (await import("@/lib/mongodb")).default;
             await connectDB();
             const dbUser = await User.findById(token.id)
-              .select("avatar name email role branchId organizationId isActive")
+              .select("avatar name email role branchId organizationId trackingVehicleId isActive")
               .populate({ path: "role", populate: { path: "permissions" } })
               .lean();
 
@@ -100,6 +105,7 @@ export const authOptions: NextAuthOptions = {
               token.role = dbUser.role;
               token.branchId = (dbUser as any).branchId || null;
               token.organizationId = (dbUser as any).organizationId || null;
+              token.trackingVehicleId = (dbUser as any).trackingVehicleId || null;
               token.isActive = (dbUser as any).isActive ?? true;
             }
           } catch {
@@ -121,6 +127,7 @@ export const authOptions: NextAuthOptions = {
         session.user.email = (token.email as string) || session.user.email;
         session.user.branchId = (token.branchId as string) || null;
         session.user.organizationId = (token.organizationId as string) || null;
+        session.user.trackingVehicleId = (token.trackingVehicleId as string) || null;
         session.user.isActive = token.isActive !== false;
 
         if (token.originalAdminId) {

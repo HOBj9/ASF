@@ -3,9 +3,8 @@
  * Communication layer with Athar GPS platform
  */
 
-import Branch from '@/models/Branch';
-import connectDB from '@/lib/mongodb';
 import { TtlCache } from '@/lib/live/ttl-cache';
+import { resolveAtharProviderConfig } from '@/lib/trackingcore/provider-config';
 
 // Cache Athar API responses to reduce external API calls
 const zonesCache = new TtlCache<any[]>(5 * 60 * 1000);   // 5min - zones change rarely
@@ -27,17 +26,17 @@ export class AtharService {
   }
 
   static async forBranch(branchId: string): Promise<AtharService> {
-    await connectDB();
-    const branch = await Branch.findById(branchId).select('atharKey').lean();
-    if (!branch?.atharKey) {
+    const resolvedConfig = await resolveAtharProviderConfig(branchId);
+    
+    if (!resolvedConfig?.apiKey) {
       throw new Error('مفتاح Athar API غير معرّف للفرع');
     }
 
     return new AtharService({
-      baseUrl: process.env.ATHAR_BASE_URL || 'https://admin.alather.net/api/api.php',
-      apiKey: branch.atharKey,
-      api: process.env.ATHAR_API_TYPE || 'user',
-      version: process.env.ATHAR_VERSION || '1.0',
+      baseUrl: resolvedConfig.baseUrl,
+      apiKey: resolvedConfig.apiKey,
+      api: resolvedConfig.api,
+      version: resolvedConfig.version,
     });
   }
 
@@ -273,6 +272,39 @@ export class AtharService {
     }
 
     return output;
+  }
+
+  async getObjectRouteHistory(
+    imei: string,
+    from: Date,
+    to: Date,
+    minStopMinutes: number = 1
+  ): Promise<any[]> {
+    const normalizedImei = String(imei || '').trim();
+    if (!normalizedImei) return [];
+
+    const cmd = `OBJECT_GET_ROUTE,${normalizedImei},${this.formatDateTime(from)},${this.formatDateTime(to)},${minStopMinutes}`;
+    const response = await this.makeRequest({ cmd });
+    const routeSource = response?.route ?? response?.data?.route ?? response?.data ?? response;
+
+    if (Array.isArray(routeSource)) {
+      if (!routeSource.length) return [];
+      if (!Array.isArray(routeSource[0]) && typeof routeSource[0] !== 'object') {
+        return [routeSource];
+      }
+      return routeSource;
+    }
+
+    if (routeSource && typeof routeSource === 'object') {
+      return Object.values(routeSource);
+    }
+
+    return [];
+  }
+
+  private formatDateTime(date: Date): string {
+    const pad = (value: number) => String(value).padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
   }
 
   async findZoneIdByName(name: string): Promise<string | null> {

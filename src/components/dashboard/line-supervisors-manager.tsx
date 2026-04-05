@@ -1,10 +1,10 @@
 "use client"
 
-import { useState, useCallback } from "react"
-import { useRouter } from "next/navigation"
+import { useCallback, useEffect, useMemo, useState } from "react"
+import toast from "react-hot-toast"
 import { useLabels } from "@/hooks/use-labels"
+import { apiClient } from "@/lib/api/client"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
 import {
   Dialog,
   DialogContent,
@@ -24,144 +24,385 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { ActionButton } from "@/components/ui/action-button"
-import { apiClient } from "@/lib/api/client"
-import toast from "react-hot-toast"
 
-type Branch = { _id: string; name?: string; nameAr?: string }
+type Branch = {
+  _id: string
+  name?: string
+  nameAr?: string
+}
+
+type VehicleOption = {
+  _id: string
+  name: string
+  plateNumber?: string | null
+  branchId?: string | { _id: string; name?: string; nameAr?: string } | null
+  trackingProvider?: "athar" | "mobile_app" | "traccar"
+}
 
 type LineSupervisorUser = {
   _id: string
   name: string
   email: string
+  phone?: string
   role?: { name: string; nameAr?: string }
   branchId?: string | { _id: string; name?: string; nameAr?: string } | null
+  trackingVehicleId?: string | VehicleOption | null
   isActive?: boolean
   createdAt?: string
+}
+
+type FormState = {
+  name: string
+  email: string
+  password: string
+  branchId: string
+  trackingVehicleId: string
+  isActive: boolean
 }
 
 interface LineSupervisorsManagerProps {
   organizationId: string
   initialUsers: LineSupervisorUser[]
   branches: Branch[]
+  vehicles: VehicleOption[]
+  /** When set (e.g. مدير فرع)، يقتصر العرض على هذا الفرع دون اختيار من القائمة. */
+  sessionBranchId?: string | null
 }
 
-export function LineSupervisorsManager({ organizationId, initialUsers, branches }: LineSupervisorsManagerProps) {
-  const router = useRouter()
-  const { labels } = useLabels()
-  const [users, setUsers] = useState<LineSupervisorUser[]>(initialUsers)
-  const [formOpen, setFormOpen] = useState(false)
-  const [submitting, setSubmitting] = useState(false)
-  const [form, setForm] = useState({
+function resolveBranchLabel(branch?: string | { _id: string; name?: string; nameAr?: string } | null): string {
+  if (!branch) return "—"
+  if (typeof branch === "object") {
+    return branch.nameAr || branch.name || "—"
+  }
+  return "—"
+}
+
+function resolveBranchId(branch?: string | { _id: string; name?: string; nameAr?: string } | null): string {
+  if (!branch) return ""
+  if (typeof branch === "object") {
+    return String(branch._id || "")
+  }
+  return String(branch)
+}
+
+function resolveVehicleId(vehicle?: string | VehicleOption | null): string {
+  if (!vehicle) return ""
+  if (typeof vehicle === "object") {
+    return String(vehicle._id || "")
+  }
+  return String(vehicle)
+}
+
+function resolveVehicleLabel(
+  vehicle?: string | VehicleOption | null,
+  fallbackVehicles: VehicleOption[] = [],
+): string {
+  const resolved =
+    vehicle && typeof vehicle === "object"
+      ? vehicle
+      : vehicle
+        ? fallbackVehicles.find((item) => String(item._id) === String(vehicle)) || null
+        : null
+
+  if (!resolved) return "—"
+  return `${resolved.name}${resolved.plateNumber ? ` (${resolved.plateNumber})` : ""}`
+}
+
+function createEmptyForm(): FormState {
+  return {
     name: "",
     email: "",
     password: "",
     branchId: "",
+    trackingVehicleId: "",
     isActive: true,
-  })
+  }
+}
+
+export function LineSupervisorsManager({
+  organizationId,
+  initialUsers,
+  branches,
+  vehicles,
+  sessionBranchId = null,
+}: LineSupervisorsManagerProps) {
+  const { labels } = useLabels()
+  const [users, setUsers] = useState<LineSupervisorUser[]>(initialUsers)
+  const needsOrgBranchPicker = !sessionBranchId && branches.length > 0
+  const [branchFilterId, setBranchFilterId] = useState(() => sessionBranchId || "")
+  const [formOpen, setFormOpen] = useState(false)
+  const [editingUser, setEditingUser] = useState<LineSupervisorUser | null>(null)
+  const [submitting, setSubmitting] = useState(false)
+  const [form, setForm] = useState<FormState>(createEmptyForm)
+
+  useEffect(() => {
+    setBranchFilterId(sessionBranchId || "")
+  }, [sessionBranchId])
+
+  const effectiveListBranchId = sessionBranchId || branchFilterId
+
+  const displayUsers = useMemo(() => {
+    if (needsOrgBranchPicker && !branchFilterId) {
+      return []
+    }
+    if (!effectiveListBranchId) {
+      return users
+    }
+    return users.filter((u) => resolveBranchId(u.branchId) === effectiveListBranchId)
+  }, [users, needsOrgBranchPicker, branchFilterId, effectiveListBranchId])
+
+  const scopedBranchLabel = useMemo(() => {
+    if (!sessionBranchId) return ""
+    const b = branches.find((x) => String(x._id) === String(sessionBranchId))
+    return b?.nameAr || b?.name || ""
+  }, [branches, sessionBranchId])
+
+  const canUseCreate = !needsOrgBranchPicker || !!branchFilterId
+
+  const decorateUser = useCallback((user: any): LineSupervisorUser => {
+    const branch = branches.find((item) => String(item._id) === String(user.branchId))
+    const vehicle = vehicles.find((item) => String(item._id) === String(user.trackingVehicleId))
+
+    return {
+      ...user,
+      branchId: branch ? { _id: branch._id, name: branch.name, nameAr: branch.nameAr } : user.branchId || null,
+      trackingVehicleId: vehicle || user.trackingVehicleId || null,
+    }
+  }, [branches, vehicles])
+
+  const resetForm = useCallback(() => {
+    setEditingUser(null)
+    setForm(createEmptyForm())
+  }, [])
+
+  const closeDialog = useCallback((nextOpen: boolean) => {
+    setFormOpen(nextOpen)
+    if (!nextOpen) {
+      resetForm()
+    }
+  }, [resetForm])
+
+  const availableVehicles = useMemo(() => {
+    return vehicles.filter((vehicle) => {
+      const branchId =
+        vehicle.branchId && typeof vehicle.branchId === "object" && "_id" in vehicle.branchId
+          ? String(vehicle.branchId._id)
+          : vehicle.branchId
+            ? String(vehicle.branchId)
+            : ""
+      return branchId === form.branchId
+    })
+  }, [vehicles, form.branchId])
+
+  const openCreate = useCallback(() => {
+    setEditingUser(null)
+    const preBranch = effectiveListBranchId || branchFilterId
+    setForm({
+      ...createEmptyForm(),
+      branchId: preBranch || "",
+    })
+    setFormOpen(true)
+  }, [effectiveListBranchId, branchFilterId])
+
+  const openEdit = useCallback((user: LineSupervisorUser) => {
+    setEditingUser(user)
+    setForm({
+      name: user.name || "",
+      email: user.email || "",
+      password: "",
+      branchId: resolveBranchId(user.branchId),
+      trackingVehicleId: resolveVehicleId(user.trackingVehicleId),
+      isActive: user.isActive !== false,
+    })
+    setFormOpen(true)
+  }, [])
 
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!form.name.trim() || !form.email.trim() || !form.password) {
-      toast.error("الاسم والبريد الإلكتروني وكلمة المرور مطلوبة")
+
+    if (!form.name.trim() || !form.email.trim()) {
+      toast.error("الاسم والبريد الإلكتروني مطلوبان")
       return
     }
+
     if (!form.branchId) {
-      toast.error("الفرع مطلوب. مشرف الخط يجب أن يكون مرتبطاً بفرع واحد.")
+      toast.error("الفرع مطلوب. مشرف الخط يجب أن يكون مرتبطًا بفرع واحد.")
       return
     }
-    if (form.password.length < 6) {
+
+    if (!editingUser && !form.password) {
+      toast.error("كلمة المرور مطلوبة")
+      return
+    }
+
+    if (form.password && form.password.length < 6) {
       toast.error("كلمة المرور يجب أن تكون 6 أحرف على الأقل")
       return
     }
+
     setSubmitting(true)
+
     try {
-      const res = await apiClient.post(`/organizations/${organizationId}/line-supervisors`, {
+      const payload = {
         name: form.name.trim(),
-        email: form.email.trim(),
-        password: form.password,
+        email: form.email.trim().toLowerCase(),
         branchId: form.branchId,
+        trackingVehicleId: form.trackingVehicleId || undefined,
         isActive: form.isActive,
-      })
-      const newUser = res?.data?.user || res?.user
-      if (newUser) {
-        const branch = branches.find((b) => String(b._id) === String(newUser.branchId))
-        setUsers((prev) => [{ ...newUser, branchId: branch ? { _id: branch._id, name: branch.name, nameAr: branch.nameAr } : null }, ...prev])
-        toast.success(`تم إضافة ${labels.lineSupervisorLabel} بنجاح`)
-        setForm({ name: "", email: "", password: "", branchId: "", isActive: true })
-        setFormOpen(false)
-      } else {
-        throw new Error(res?.error || "حدث خطأ")
+        ...(form.password ? { password: form.password } : {}),
       }
+
+      const response = editingUser
+        ? await apiClient.patch(`/organizations/${organizationId}/line-supervisors`, {
+            userId: editingUser._id,
+            ...payload,
+          })
+        : await apiClient.post(`/organizations/${organizationId}/line-supervisors`, payload)
+
+      const returnedUser = response?.data?.user || response?.user
+      if (!returnedUser) {
+        throw new Error(response?.error || "حدث خطأ غير متوقع")
+      }
+
+      const nextUser = decorateUser(returnedUser)
+
+      if (editingUser) {
+        setUsers((prev) => prev.map((user) => (user._id === editingUser._id ? nextUser : user)))
+        toast.success(`تم تحديث ${labels.lineSupervisorLabel} بنجاح`)
+      } else {
+        setUsers((prev) => [nextUser, ...prev])
+        toast.success(`تم إضافة ${labels.lineSupervisorLabel} بنجاح`)
+      }
+
+      closeDialog(false)
     } catch (err: any) {
-      toast.error(err?.message || `فشل في إضافة ${labels.lineSupervisorLabel}`)
+      toast.error(err?.message || `فشل في حفظ ${labels.lineSupervisorLabel}`)
     } finally {
       setSubmitting(false)
     }
-  }, [organizationId, form, labels.lineSupervisorLabel, branches])
+  }, [organizationId, form, editingUser, decorateUser, closeDialog, labels.lineSupervisorLabel])
 
   return (
     <>
       <Card className="text-right">
         <CardHeader>
-          <div className="flex items-center justify-between flex-row-reverse">
-            <CardTitle className="text-right">قائمة {labels.lineSupervisorLabel} ({users.length})</CardTitle>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:flex-row-reverse">
+            <div className="space-y-1">
+              <CardTitle className="text-right">
+                قائمة {labels.lineSupervisorLabel} ({displayUsers.length}
+                {users.length !== displayUsers.length ? ` / ${users.length}` : ""})
+              </CardTitle>
+              {sessionBranchId && scopedBranchLabel ? (
+                <p className="text-sm text-muted-foreground">
+                  الفرع الحالي: {scopedBranchLabel}
+                </p>
+              ) : null}
+            </div>
             <ActionButton
               action="create"
-              onClick={() => setFormOpen(true)}
+              onClick={openCreate}
               customLabel={`إضافة ${labels.lineSupervisorLabel}`}
+              disabled={!canUseCreate}
             />
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
+          {needsOrgBranchPicker ? (
+            <div className="flex flex-wrap items-center gap-3 rounded-lg border border-dashed bg-muted/20 p-4">
+              <span className="text-sm text-muted-foreground">
+                لعرض {labels.lineSupervisorLabel} ومعلوماتهم على مستوى المؤسسة، اختر {labels.branchLabel || "الفرع"}:
+              </span>
+              <Select
+                value={branchFilterId || "__none__"}
+                onValueChange={(v) => setBranchFilterId(v === "__none__" ? "" : v)}
+              >
+                <SelectTrigger className="w-[min(100%,280px)] text-right">
+                  <SelectValue placeholder={`— اختر ${labels.branchLabel || "الفرع"} —`} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">— لم يُحدد بعد —</SelectItem>
+                  {branches.map((branch) => (
+                    <SelectItem key={branch._id} value={branch._id}>
+                      {branch.nameAr || branch.name || branch._id}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : null}
+
+          {needsOrgBranchPicker && !branchFilterId ? (
+            <p className="rounded-lg border bg-muted/10 p-4 text-sm text-muted-foreground text-center">
+              يرجى اختيار {labels.branchLabel || "الفرع"} أعلاه لعرض الجدول وإضافة {labels.lineSupervisorLabel} الجدد.
+            </p>
+          ) : null}
+
           <div className="rounded-lg border overflow-hidden">
             <table className="w-full text-sm text-right">
               <thead className="bg-muted/50 border-b">
                 <tr>
                   <th className="p-3 font-medium">الاسم</th>
                   <th className="p-3 font-medium">البريد الإلكتروني</th>
-                  <th className="p-3 font-medium">{labels.branchLabel || "الفرع"}</th>
+                  <th className="p-3 font-medium">الهاتف</th>
+                  {sessionBranchId ? null : (
+                    <th className="p-3 font-medium">{labels.branchLabel || "الفرع"}</th>
+                  )}
+                  <th className="p-3 font-medium">{labels.vehicleLabel || "المركبة"}</th>
                   <th className="p-3 font-medium text-center">الحالة</th>
                   <th className="p-3 font-medium">تاريخ الإضافة</th>
+                  <th className="p-3 font-medium">الإجراءات</th>
                 </tr>
               </thead>
               <tbody>
-                {users.length === 0 ? (
+                {displayUsers.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="p-6 text-center text-muted-foreground">
-                      لا يوجد {labels.lineSupervisorLabel} بعد. اضغط &quot;إضافة {labels.lineSupervisorLabel}&quot; لبدء الإضافة.
+                    <td
+                      colSpan={sessionBranchId ? 7 : 8}
+                      className="p-6 text-center text-muted-foreground"
+                    >
+                      {needsOrgBranchPicker && !branchFilterId
+                        ? `اختر ${labels.branchLabel || "الفرع"} لعرض ${labels.lineSupervisorLabel}.`
+                        : users.length === 0
+                          ? `لا يوجد ${labels.lineSupervisorLabel} بعد. اضغط «إضافة» للبدء.`
+                          : `لا يوجد ${labels.lineSupervisorLabel} في ${labels.branchLabel || "هذا الفرع"}.`}
                     </td>
                   </tr>
                 ) : (
-                  users.map((u) => (
-                    <tr key={u._id} className="border-b last:border-0 hover:bg-muted/30">
-                      <td className="p-3">{u.name}</td>
-                      <td className="p-3">{u.email}</td>
-                      <td className="p-3">
-                        {u.branchId && typeof u.branchId === "object" && "nameAr" in u.branchId
-                          ? (u.branchId as any).nameAr || (u.branchId as any).name || "—"
-                          : u.branchId && typeof u.branchId === "object" && "name" in u.branchId
-                          ? (u.branchId as any).name || "—"
-                          : "—"}
-                      </td>
+                  displayUsers.map((user) => (
+                    <tr key={user._id} className="border-b last:border-0 hover:bg-muted/30">
+                      <td className="p-3">{user.name}</td>
+                      <td className="p-3">{user.email}</td>
+                      <td className="p-3 text-muted-foreground">{user.phone?.trim() || "—"}</td>
+                      {sessionBranchId ? null : (
+                        <td className="p-3">{resolveBranchLabel(user.branchId)}</td>
+                      )}
+                      <td className="p-3">{resolveVehicleLabel(user.trackingVehicleId, vehicles)}</td>
                       <td className="p-3 text-center">
                         <span
                           className={`inline-flex rounded-full px-2 py-0.5 text-xs ${
-                            u.isActive !== false
+                            user.isActive !== false
                               ? "bg-emerald-500/20 text-emerald-700 dark:text-emerald-400"
                               : "bg-destructive/20 text-destructive"
                           }`}
                         >
-                          {u.isActive !== false ? "نشط" : "غير نشط"}
+                          {user.isActive !== false ? "نشط" : "غير نشط"}
                         </span>
                       </td>
                       <td className="p-3 text-muted-foreground">
-                        {u.createdAt
-                          ? new Date(u.createdAt).toLocaleDateString("ar-SY", {
+                        {user.createdAt
+                          ? new Date(user.createdAt).toLocaleDateString("ar-SY", {
                               year: "numeric",
                               month: "short",
                               day: "numeric",
                             })
                           : "—"}
+                      </td>
+                      <td className="p-3">
+                        <ActionButton
+                          action="edit"
+                          onClick={() => openEdit(user)}
+                          customLabel="تعديل"
+                        />
                       </td>
                     </tr>
                   ))
@@ -172,76 +413,123 @@ export function LineSupervisorsManager({ organizationId, initialUsers, branches 
         </CardContent>
       </Card>
 
-      <Dialog open={formOpen} onOpenChange={setFormOpen}>
+      <Dialog open={formOpen} onOpenChange={closeDialog}>
         <DialogContent className="sm:max-w-[500px] text-right">
           <DialogHeader>
-            <DialogTitle>إضافة {labels.lineSupervisorLabel}</DialogTitle>
-            <DialogDescription>أدخل بيانات {labels.lineSupervisorLabel} الجديد. يجب ربطه بفرع واحد من مؤسستك.</DialogDescription>
+            <DialogTitle>
+              {editingUser ? `تعديل ${labels.lineSupervisorLabel}` : `إضافة ${labels.lineSupervisorLabel}`}
+            </DialogTitle>
+            <DialogDescription>
+              {editingUser
+                ? `حدّث بيانات ${labels.lineSupervisorLabel} وربطه بالمركبة المناسبة لتفعيل تتبع الموبايل.`
+                : `أدخل بيانات ${labels.lineSupervisorLabel} الجديد. يمكن ربطه بمركبة ليصبح جاهزًا لتفعيل تتبع الموبايل.`}
+            </DialogDescription>
           </DialogHeader>
+
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="ls-name">الاسم</Label>
               <Input
                 id="ls-name"
                 value={form.name}
-                onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
+                onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
                 placeholder="اسم مشرف الخط"
                 disabled={submitting}
               />
             </div>
+
             <div className="space-y-2">
               <Label htmlFor="ls-email">البريد الإلكتروني</Label>
               <Input
                 id="ls-email"
                 type="email"
                 value={form.email}
-                onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))}
+                onChange={(e) => setForm((prev) => ({ ...prev, email: e.target.value }))}
                 placeholder="email@example.com"
                 disabled={submitting}
               />
             </div>
+
             <div className="space-y-2">
               <Label htmlFor="ls-branch">{labels.branchLabel || "الفرع"} *</Label>
               <Select
                 value={form.branchId}
-                onValueChange={(v) => setForm((p) => ({ ...p, branchId: v }))}
+                onValueChange={(value) => setForm((prev) => ({ ...prev, branchId: value, trackingVehicleId: "" }))}
                 disabled={submitting}
               >
                 <SelectTrigger id="ls-branch" className="text-right">
                   <SelectValue placeholder={`اختر ${labels.branchLabel || "الفرع"}`} />
                 </SelectTrigger>
                 <SelectContent>
-                  {branches.map((b) => (
-                    <SelectItem key={b._id} value={b._id}>
-                      {b.nameAr || b.name || b._id}
+                  {branches.map((branch) => (
+                    <SelectItem key={branch._id} value={branch._id}>
+                      {branch.nameAr || branch.name || branch._id}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
+
             <div className="space-y-2">
-              <Label htmlFor="ls-password">كلمة المرور</Label>
+              <Label htmlFor="ls-vehicle">{labels.vehicleLabel || "المركبة"} (اختياري)</Label>
+              <Select
+                value={form.trackingVehicleId || "none"}
+                onValueChange={(value) => setForm((prev) => ({ ...prev, trackingVehicleId: value === "none" ? "" : value }))}
+                disabled={submitting || !form.branchId}
+              >
+                <SelectTrigger id="ls-vehicle" className="text-right">
+                  <SelectValue
+                    placeholder={
+                      form.branchId
+                        ? `اختر ${labels.vehicleLabel || "المركبة"}`
+                        : `اختر ${labels.branchLabel || "الفرع"} أولًا`
+                    }
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">بدون ربط</SelectItem>
+                  {availableVehicles.map((vehicle) => (
+                    <SelectItem key={vehicle._id} value={vehicle._id}>
+                      {vehicle.name}{vehicle.plateNumber ? ` (${vehicle.plateNumber})` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="ls-password">
+                {editingUser ? "كلمة المرور الجديدة (اختياري)" : "كلمة المرور"}
+              </Label>
               <Input
                 id="ls-password"
                 type="password"
                 value={form.password}
-                onChange={(e) => setForm((p) => ({ ...p, password: e.target.value }))}
-                placeholder="6 أحرف على الأقل"
+                onChange={(e) => setForm((prev) => ({ ...prev, password: e.target.value }))}
+                placeholder={editingUser ? "اتركها فارغة للإبقاء على الحالية" : "6 أحرف على الأقل"}
                 disabled={submitting}
               />
             </div>
+
             <div className="flex items-center justify-between rounded-lg border p-3">
               <Label htmlFor="ls-active" className="text-right">الحساب نشط</Label>
               <Checkbox
                 id="ls-active"
                 checked={form.isActive}
-                onCheckedChange={(c) => setForm((p) => ({ ...p, isActive: !!c }))}
+                onCheckedChange={(checked) => setForm((prev) => ({ ...prev, isActive: !!checked }))}
                 disabled={submitting}
               />
             </div>
+
             <DialogFooter className="flex-row-reverse gap-2">
-              <ActionButton type="button" action="cancel" onClick={() => setFormOpen(false)} disabled={submitting} />
-              <ActionButton type="submit" action="save" loading={submitting} disabled={submitting} customLabel="إضافة" />
+              <ActionButton type="button" action="cancel" onClick={() => closeDialog(false)} disabled={submitting} />
+              <ActionButton
+                type="submit"
+                action={editingUser ? "update" : "save"}
+                loading={submitting}
+                disabled={submitting}
+                customLabel={editingUser ? "تحديث" : "إضافة"}
+              />
             </DialogFooter>
           </form>
         </DialogContent>

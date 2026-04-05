@@ -1,22 +1,24 @@
-/**
+﻿/**
  * Vehicle Service
  * Business logic for vehicle management
  */
 
 import connectDB from '@/lib/mongodb';
-import Vehicle, { IVehicle } from '@/models/Vehicle';
+import Vehicle from '@/models/Vehicle';
 import Driver from '@/models/Driver';
 import Branch from '@/models/Branch';
 import Route from '@/models/Route';
-import RoutePoint from '@/models/RoutePoint';
-import Point from '@/models/Point';
-import { AtharService } from '@/lib/services/athar.service';
+import TrackingBinding from '@/models/TrackingBinding';
+import type { TrackingProvider, ZoneEventProvider } from '@/lib/tracking/types';
 
 export interface CreateVehicleData {
   branchId: string;
   name: string;
   plateNumber?: string;
-  imei: string;
+  imei?: string;
+  trackingProvider?: TrackingProvider;
+  acceptedTrackingProviders?: TrackingProvider[];
+  zoneEventProvider?: ZoneEventProvider | null;
   fuelType?: 'gasoline' | 'diesel';
   fuelPricePerKm?: number;
   atharObjectId?: string;
@@ -29,6 +31,9 @@ export interface UpdateVehicleData {
   name?: string;
   plateNumber?: string;
   imei?: string;
+  trackingProvider?: TrackingProvider;
+  acceptedTrackingProviders?: TrackingProvider[];
+  zoneEventProvider?: ZoneEventProvider | null;
   fuelType?: 'gasoline' | 'diesel';
   fuelPricePerKm?: number | null;
   atharObjectId?: string | null;
@@ -38,44 +43,132 @@ export interface UpdateVehicleData {
 }
 
 export class VehicleService {
-  private getWebhookUrl(): string {
-    const base = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || 'http://localhost:3000';
-    return `${base}/api/athar/webhook`;
+  private normalizeTrackingProvider(provider?: TrackingProvider | null): TrackingProvider {
+    return provider === 'mobile_app' || provider === 'traccar' ? provider : 'athar';
   }
 
-  private async createAtharRouteEventsForVehicle(
-    branchId: string,
-    routeId: string,
-    imei: string
-  ): Promise<void> {
-    const routePoints = await RoutePoint.find({ routeId })
-      .sort({ order: 1 })
-      .select('pointId order')
-      .lean();
+  private normalizeZoneEventProvider(
+    provider: ZoneEventProvider | null | undefined,
+    fallbackTrackingProvider: TrackingProvider
+  ): ZoneEventProvider | null {
+    if (provider === 'athar' || provider === 'mobile_app') {
+      return provider;
+    }
+    return fallbackTrackingProvider === 'mobile_app' ? 'mobile_app' : 'athar';
+  }
 
-    if (!routePoints.length) return;
+  private normalizeAcceptedTrackingProviders(
+    providers: TrackingProvider[] | null | undefined,
+    fallbackTrackingProvider: TrackingProvider,
+    zoneEventProvider: ZoneEventProvider | null
+  ): TrackingProvider[] {
+    const normalized = Array.isArray(providers)
+      ? providers
+          .map((provider) => this.normalizeTrackingProvider(provider))
+          .filter(Boolean)
+      : [];
 
-    const pointIds = routePoints.map((rp) => rp.pointId);
-    const points = await Point.find({
-      _id: { $in: pointIds },
-      branchId,
-      zoneId: { $ne: null },
-      isActive: true,
-    })
-      .select('name nameAr nameEn zoneId')
-      .lean();
+    if (!normalized.includes(fallbackTrackingProvider)) {
+      normalized.push(fallbackTrackingProvider);
+    }
+    if (zoneEventProvider && !normalized.includes(zoneEventProvider)) {
+      normalized.push(zoneEventProvider);
+    }
 
-    const pointById = new Map(points.map((p) => [String(p._id), p]));
-    const atharService = await AtharService.forBranch(branchId);
-    const webhookUrl = this.getWebhookUrl();
+    return Array.from(new Set(normalized));
+  }
 
-    for (const rp of routePoints) {
-      const point = pointById.get(String(rp.pointId));
-      if (!point?.zoneId) continue;
+  private resolveTrackingPolicy(input: {
+    trackingProvider?: TrackingProvider | null;
+    acceptedTrackingProviders?: TrackingProvider[] | null;
+    zoneEventProvider?: ZoneEventProvider | null;
+  }) {
+    const trackingProvider = this.normalizeTrackingProvider(input.trackingProvider || 'athar');
+    const resolvedZoneEventProvider = this.normalizeZoneEventProvider(
+      input.zoneEventProvider,
+      trackingProvider
+    );
+    const acceptedTrackingProviders = this.normalizeAcceptedTrackingProviders(
+      input.acceptedTrackingProviders,
+      trackingProvider,
+      resolvedZoneEventProvider
+    );
 
-      const pointName = point.nameAr || point.nameEn || point.name || 'Point';
-      await atharService.createZoneEvent(pointName, point.zoneId, imei, 'zone_in', webhookUrl);
-      await atharService.createZoneEvent(pointName, point.zoneId, imei, 'zone_out', webhookUrl);
+    return {
+      trackingProvider,
+      acceptedTrackingProviders,
+      zoneEventProvider: resolvedZoneEventProvider,
+    };
+  }
+
+  private async syncAtharTrackingBinding(vehicle: {
+    _id: unknown;
+    branchId: unknown;
+    imei?: string | null;
+    atharObjectId?: string | null;
+    trackingProvider?: TrackingProvider | null;
+  }): Promise<void> {
+    const vehicleId = String(vehicle._id);
+    const branchId = String(vehicle.branchId);
+    const imei = String(vehicle.imei || '').trim();
+    const trackingProvider = this.normalizeTrackingProvider(vehicle.trackingProvider || 'athar');
+
+    if (!imei) {
+      await TrackingBinding.updateMany(
+        { vehicleId, provider: 'athar' },
+        {
+          $set: {
+            isActive: false,
+            isPrimary: false,
+            metadata: {
+              imei: null,
+              atharObjectId: vehicle.atharObjectId || null,
+            },
+          },
+        }
+      ).exec();
+      return;
+    }
+
+    const binding = await TrackingBinding.findOneAndUpdate(
+      {
+        vehicleId,
+        provider: 'athar',
+      },
+      {
+        $set: {
+          branchId,
+          vehicleId,
+          provider: 'athar',
+          externalId: String(vehicle.atharObjectId || '').trim() || imei,
+          capabilities: ['athar_zone_events', 'athar_live_location'],
+          isActive: true,
+          isPrimary: trackingProvider === 'athar',
+          metadata: {
+            imei,
+            atharObjectId: vehicle.atharObjectId || null,
+          },
+        },
+      },
+      {
+        upsert: true,
+        new: true,
+        setDefaultsOnInsert: true,
+      }
+    ).lean();
+
+    if (trackingProvider === 'athar' && binding?._id) {
+      await TrackingBinding.updateMany(
+        {
+          vehicleId,
+          _id: { $ne: binding._id },
+        },
+        {
+          $set: {
+            isPrimary: false,
+          },
+        }
+      ).exec();
     }
   }
 
@@ -87,20 +180,32 @@ export class VehicleService {
       throw new Error('الفرع غير موجود');
     }
 
+    const trackingPolicy = this.resolveTrackingPolicy({
+      trackingProvider: data.trackingProvider,
+      acceptedTrackingProviders: data.acceptedTrackingProviders,
+      zoneEventProvider: data.zoneEventProvider,
+    });
+    const normalizedImei = String(data.imei || '').trim() || null;
+
+    if (trackingPolicy.acceptedTrackingProviders.includes('athar') && !normalizedImei) {
+      throw new Error('رقم IMEI مطلوب للمركبات التي تستقبل تتبعاً من أثر');
+    }
+
     if (data.routeId) {
       const route = await Route.findOne({ _id: data.routeId, branchId: data.branchId }).lean();
       if (!route) {
         throw new Error('المسار غير موجود أو غير تابع للفرع');
       }
-
-      await this.createAtharRouteEventsForVehicle(data.branchId, data.routeId, data.imei);
     }
 
     const vehicle = await Vehicle.create({
       branchId: data.branchId,
       name: data.name,
       plateNumber: data.plateNumber || null,
-      imei: data.imei,
+      imei: normalizedImei,
+      trackingProvider: trackingPolicy.trackingProvider,
+      acceptedTrackingProviders: trackingPolicy.acceptedTrackingProviders,
+      zoneEventProvider: trackingPolicy.zoneEventProvider,
       fuelType: data.fuelType || 'gasoline',
       fuelPricePerKm: data.fuelPricePerKm ?? null,
       atharObjectId: data.atharObjectId || null,
@@ -113,6 +218,8 @@ export class VehicleService {
       await Driver.findByIdAndUpdate(data.driverId, { assignedVehicleId: vehicle._id }).exec();
     }
 
+    await this.syncAtharTrackingBinding(vehicle);
+
     return vehicle;
   }
 
@@ -121,10 +228,6 @@ export class VehicleService {
     return Vehicle.find({ branchId }).lean().exec();
   }
 
-  /**
-   * Import vehicles from Athar objects (no Athar API calls).
-   * Skips objects that already have a vehicle in this branch with same imei or atharObjectId.
-   */
   async importFromAtharObjects(
     branchId: string,
     objects: Array<{ id: string; imei: string; name?: string; plateNumber?: string | null }>
@@ -152,17 +255,21 @@ export class VehicleService {
         continue;
       }
 
-      await Vehicle.create({
+      const vehicle = await Vehicle.create({
         branchId,
         name: obj.name || `مركبة أثر ${obj.id}`,
         plateNumber: obj.plateNumber ?? null,
         imei: obj.imei,
+        trackingProvider: 'athar',
+        acceptedTrackingProviders: ['athar'],
+        zoneEventProvider: 'athar',
         fuelType: 'gasoline',
         atharObjectId: obj.id,
         driverId: null,
         routeId: null,
         isActive: true,
       });
+      await this.syncAtharTrackingBinding(vehicle);
       imported += 1;
     }
 
@@ -183,8 +290,7 @@ export class VehicleService {
     }
 
     const prevDriverId = vehicle.driverId?.toString();
-    const nextDriverId =
-      data.driverId === undefined ? prevDriverId : data.driverId || null;
+    const nextDriverId = data.driverId === undefined ? prevDriverId : data.driverId || null;
 
     if (data.driverId !== undefined && prevDriverId && prevDriverId !== nextDriverId) {
       await Driver.findByIdAndUpdate(prevDriverId, { assignedVehicleId: null }).exec();
@@ -194,16 +300,25 @@ export class VehicleService {
       await Driver.findByIdAndUpdate(data.driverId, { assignedVehicleId: vehicle._id }).exec();
     }
 
-    const updateData: any = { ...data };
-    delete updateData.branchId;
-    if (data.plateNumber !== undefined && data.plateNumber === '') updateData.plateNumber = null;
-    if (data.atharObjectId !== undefined && data.atharObjectId === '') updateData.atharObjectId = null;
-    if (data.driverId !== undefined && (data.driverId === '' || data.driverId == null)) updateData.driverId = null;
-    if (data.routeId !== undefined && (data.routeId === '' || data.routeId == null)) updateData.routeId = null;
-    if (data.fuelPricePerKm !== undefined) {
-      updateData.fuelPricePerKm = data.fuelPricePerKm == null
-        ? null
-        : Number(data.fuelPricePerKm);
+    const trackingPolicy = this.resolveTrackingPolicy({
+      trackingProvider:
+        data.trackingProvider || (vehicle.trackingProvider as TrackingProvider | undefined) || 'athar',
+      acceptedTrackingProviders:
+        data.acceptedTrackingProviders !== undefined
+          ? data.acceptedTrackingProviders
+          : ((vehicle.acceptedTrackingProviders as TrackingProvider[] | undefined) || undefined),
+      zoneEventProvider:
+        data.zoneEventProvider !== undefined
+          ? data.zoneEventProvider
+          : ((vehicle.zoneEventProvider as ZoneEventProvider | null | undefined) ?? undefined),
+    });
+    const nextImei =
+      data.imei === undefined
+        ? String(vehicle.imei || '').trim() || null
+        : String(data.imei || '').trim() || null;
+
+    if (trackingPolicy.acceptedTrackingProviders.includes('athar') && !nextImei) {
+      throw new Error('رقم IMEI مطلوب للمركبات التي تستقبل تتبعاً من أثر');
     }
 
     if (data.routeId) {
@@ -211,18 +326,23 @@ export class VehicleService {
       if (!route) {
         throw new Error('المسار غير موجود أو غير تابع للفرع');
       }
-
-      const nextRouteId = String(data.routeId);
-      const prevRouteId = vehicle.routeId ? String(vehicle.routeId) : null;
-      const nextImei = data.imei || vehicle.imei;
-      if (prevRouteId !== nextRouteId) {
-        await this.createAtharRouteEventsForVehicle(branchId, nextRouteId, nextImei);
-      }
     }
 
-    if (data.routeId === undefined && data.imei && vehicle.routeId && data.imei !== vehicle.imei) {
-      await this.createAtharRouteEventsForVehicle(branchId, String(vehicle.routeId), data.imei);
+    const updateData: Record<string, unknown> = { ...data };
+    delete (updateData as any).branchId;
+
+    if (data.plateNumber !== undefined && data.plateNumber === '') updateData.plateNumber = null;
+    if (data.imei !== undefined) updateData.imei = nextImei;
+    if (data.atharObjectId !== undefined && data.atharObjectId === '') updateData.atharObjectId = null;
+    if (data.driverId !== undefined && (data.driverId === '' || data.driverId == null)) updateData.driverId = null;
+    if (data.routeId !== undefined && (data.routeId === '' || data.routeId == null)) updateData.routeId = null;
+    if (data.fuelPricePerKm !== undefined) {
+      updateData.fuelPricePerKm = data.fuelPricePerKm == null ? null : Number(data.fuelPricePerKm);
     }
+
+    updateData.trackingProvider = trackingPolicy.trackingProvider;
+    updateData.acceptedTrackingProviders = trackingPolicy.acceptedTrackingProviders;
+    updateData.zoneEventProvider = trackingPolicy.zoneEventProvider;
 
     const updated = await Vehicle.findByIdAndUpdate(vehicle._id, updateData, {
       new: true,
@@ -230,6 +350,10 @@ export class VehicleService {
     })
       .lean()
       .exec();
+
+    if (updated) {
+      await this.syncAtharTrackingBinding(updated);
+    }
 
     return updated;
   }
@@ -243,8 +367,17 @@ export class VehicleService {
       await Driver.findByIdAndUpdate(vehicle.driverId, { assignedVehicleId: null }).exec();
     }
 
+    await TrackingBinding.updateMany(
+      { vehicleId: id },
+      {
+        $set: {
+          isActive: false,
+          isPrimary: false,
+        },
+      }
+    ).exec();
+
     const deleted = await Vehicle.findByIdAndDelete(id).exec();
     return !!deleted;
   }
 }
-
