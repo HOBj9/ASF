@@ -22,6 +22,12 @@ paths:
     post:
       tags: [Mobile Auth]
       summary: Login for the mobile app
+      description: |
+        Authenticates a line supervisor and returns a bearer token that is used for:
+        - listing available surveys
+        - loading a survey with its answer instructions
+        - submitting survey answers
+        - sending mobile tracking batches
       operationId: mobileLogin
       requestBody:
         required: true
@@ -29,6 +35,9 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/MobileLoginRequest'
+            example:
+              email: supervisor@example.com
+              password: secret123
       responses:
         '200':
           description: Login succeeded
@@ -36,6 +45,20 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/MobileLoginResponse'
+              example:
+                accessToken: eyJzdWIiOiIxMjM0NSJ9.signature
+                tokenType: Bearer
+                expiresAt: '2026-04-06T10:00:00.000Z'
+                user:
+                  id: 67ea5cd0d2f9b54dd82b4310
+                  name: Ahmed Supervisor
+                  email: supervisor@example.com
+                  role: line_supervisor
+                  organizationId: 67ea5ab9d2f9b54dd82b4301
+                  branchId: 67ea5b11d2f9b54dd82b4307
+                  trackingVehicleId: 67ea5d5dd2f9b54dd82b4323
+                tracking:
+                  canActivate: true
         '400':
           $ref: '#/components/responses/Error400'
         '401':
@@ -49,6 +72,13 @@ paths:
     get:
       tags: [Mobile Surveys]
       summary: List active surveys available to the authenticated line supervisor
+      description: |
+        Returns only the surveys visible to the authenticated line supervisor according to:
+        - the bearer token identity
+        - the supervisor organization
+        - the supervisor branch scope
+
+        Use the returned `id` to request the full survey details from `/api/mobile/surveys/{surveyId}`.
       operationId: listMobileSurveys
       security:
         - bearerAuth: []
@@ -61,6 +91,18 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/MobileSurveyListResponse'
+              example:
+                surveys:
+                  - id: 67fe0001d2f9b54dd82b5001
+                    organizationId: 69afecbba6a0fb6ab38efa05
+                    branchId: 69afecf2a6a0fb6ab38efa36
+                    title: New collection point survey
+                    titleAr: استبيان نقطة تجميع جديدة
+                    description: Create a new collection point from the mobile app
+                    descriptionAr: إنشاء نقطة تجميع جديدة من تطبيق الموبايل
+                    questionCount: 3
+                    isActive: true
+                    updatedAt: '2026-04-05T08:15:00.000Z'
         '401':
           $ref: '#/components/responses/Error401'
         '403':
@@ -72,6 +114,17 @@ paths:
     get:
       tags: [Mobile Surveys]
       summary: Get survey details with question keys and point classifications
+      description: |
+        Returns the selected survey plus everything the mobile client needs to answer it:
+        - ordered questions
+        - `answerKey` for each question
+        - classification lists required for point creation
+        - required point fields
+
+        Answering rules:
+        - send either `questionId` or `answerKey` for each answer item
+        - for `choice` questions, `value` must be one of the listed `options`
+        - for `current_location`, the API can use the point coordinates when no dedicated answer value is sent
       operationId: getMobileSurvey
       security:
         - bearerAuth: []
@@ -90,6 +143,71 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/MobileSurveyDetailResponse'
+              example:
+                survey:
+                  id: 67fe0001d2f9b54dd82b5001
+                  organizationId: 69afecbba6a0fb6ab38efa05
+                  branchId: 69afecf2a6a0fb6ab38efa36
+                  title: New collection point survey
+                  titleAr: استبيان نقطة تجميع جديدة
+                  description: Create a new collection point from the mobile app
+                  descriptionAr: إنشاء نقطة تجميع جديدة من تطبيق الموبايل
+                  isActive: true
+                  updatedAt: '2026-04-05T08:15:00.000Z'
+                  questions:
+                    - id: 67fe0101d2f9b54dd82b5101
+                      index: 0
+                      answerKey: question_0
+                      type: text
+                      questionText: Point note
+                      questionTextAr: ملاحظة على النقطة
+                      options: []
+                      required: false
+                    - id: 67fe0101d2f9b54dd82b5102
+                      index: 1
+                      answerKey: question_1
+                      type: choice
+                      questionText: Container condition
+                      questionTextAr: حالة الحاوية
+                      options:
+                        - good
+                        - needs_maintenance
+                        - damaged
+                      required: true
+                    - id: 67fe0101d2f9b54dd82b5103
+                      index: 2
+                      answerKey: question_2
+                      type: current_location
+                      questionText: Current location
+                      questionTextAr: الموقع الحالي
+                      options: []
+                      required: true
+                submissionTemplate:
+                  pointFields:
+                    required:
+                      - name
+                      - primaryClassificationId
+                      - secondaryClassificationId
+                      - otherIdentifier
+                      - mapLat
+                      - mapLng
+                  classifications:
+                    primaries:
+                      - id: 68010001d2f9b54dd82b6001
+                        name: container
+                        nameAr: حاوية
+                        primaryClassificationId: null
+                        branchId: 69afecf2a6a0fb6ab38efa36
+                        organizationId: 69afecbba6a0fb6ab38efa05
+                        order: 1
+                    secondaries:
+                      - id: 68010001d2f9b54dd82b6002
+                        name: household
+                        nameAr: منزلي
+                        primaryClassificationId: 68010001d2f9b54dd82b6001
+                        branchId: 69afecf2a6a0fb6ab38efa36
+                        organizationId: 69afecbba6a0fb6ab38efa05
+                        order: 1
         '401':
           $ref: '#/components/responses/Error401'
         '403':
@@ -103,6 +221,15 @@ paths:
     post:
       tags: [Mobile Surveys]
       summary: Submit survey answers from mobile
+      description: |
+        Submits survey answers for the authenticated line supervisor and creates the point described in the request.
+
+        How to answer:
+        - fill the `point` object with the required point creation fields
+        - send one item per answered survey question inside `answers`
+        - use either `questionId` or `answerKey`
+        - for `choice` questions, `value` must match one of the options from the survey details endpoint
+        - for `current_location`, you may send the location through the point coordinates, or send a question answer value
       operationId: submitMobileSurvey
       security:
         - bearerAuth: []
@@ -120,6 +247,28 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/MobileSurveySubmitRequest'
+            example:
+              point:
+                name: Container A-12
+                primaryClassificationId: 68010001d2f9b54dd82b6001
+                secondaryClassificationId: 68010001d2f9b54dd82b6002
+                otherIdentifier: CNT-A12
+                mapLat: 33.5138
+                mapLng: 36.2765
+                deviceLat: 33.5139
+                deviceLng: 36.2766
+              answers:
+                - questionId: 67fe0101d2f9b54dd82b5101
+                  answerKey: question_0
+                  value: Near the main street
+                - questionId: 67fe0101d2f9b54dd82b5102
+                  answerKey: question_1
+                  value: good
+                - questionId: 67fe0101d2f9b54dd82b5103
+                  answerKey: question_2
+                  value:
+                    lat: 33.5138
+                    lng: 36.2765
       responses:
         '201':
           description: Survey submitted successfully
@@ -127,6 +276,26 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/MobileSurveySubmitResponse'
+              example:
+                submission:
+                  _id: 68020001d2f9b54dd82b7001
+                  surveyId: 67fe0001d2f9b54dd82b5001
+                  userId: 69ca816dab6441549b3bca06
+                  organizationId: 69afecbba6a0fb6ab38efa05
+                  branchId: 69afecf2a6a0fb6ab38efa36
+                  mapLat: 33.5138
+                  mapLng: 36.2765
+                  deviceLat: 33.5139
+                  deviceLng: 36.2766
+                  pointId: 68020001d2f9b54dd82b7002
+                  createdAt: '2026-04-06T09:10:00.000Z'
+                point:
+                  _id: 68020001d2f9b54dd82b7002
+                  name: Container A-12
+                  lat: 33.5138
+                  lng: 36.2765
+                  organizationId: 69afecbba6a0fb6ab38efa05
+                  branchId: null
         '400':
           $ref: '#/components/responses/Error400'
         '401':
@@ -492,6 +661,7 @@ components:
           type: integer
         answerKey:
           type: string
+          description: Stable key that can be used in the submit payload when questionId is not available
         type:
           type: string
           enum: [text, choice, current_location]
@@ -571,6 +741,7 @@ components:
 
     MobileSurveySubmitRequest:
       type: object
+      required: [point, answers]
       properties:
         point:
           type: object
@@ -594,14 +765,28 @@ components:
               type: [number, 'null']
         answers:
           type: array
+          description: Ordered or unordered answers mapped by questionId or answerKey
           items:
-            type: object
-            properties:
-              questionId:
-                type: [string, 'null']
-              answerKey:
-                type: [string, 'null']
-              value: {}
+            $ref: '#/components/schemas/MobileSurveyAnswerItem'
+    MobileSurveyAnswerItem:
+      type: object
+      properties:
+        questionId:
+          type: [string, 'null']
+          description: Original survey question id returned by the details endpoint
+        answerKey:
+          type: [string, 'null']
+          description: Fallback answer key returned by the details endpoint
+        value:
+          description: |
+            Answer value. Examples:
+            - text question: "Near the main street"
+            - choice question: "good"
+            - current_location question: { "lat": 33.5138, "lng": 36.2765 }
+      example:
+        questionId: 67fe0101d2f9b54dd82b5102
+        answerKey: question_1
+        value: good
     MobileSurveySubmitResponse:
       type: object
       properties:

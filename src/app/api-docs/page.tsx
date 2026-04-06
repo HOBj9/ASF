@@ -3,10 +3,10 @@ import Script from "next/script";
 
 export const metadata: Metadata = {
   title: "API Docs",
-  description: "Tracking API reference",
+  description: "Mobile API reference",
 };
 
-const specUrl = "/api/openapi/tracking";
+const specUrl = "/api/openapi/mobile";
 const swaggerPageStyles = `
   html,
   body {
