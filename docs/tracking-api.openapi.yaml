@@ -30,8 +30,13 @@ paths:
         - Mobile Tracking
       summary: Login for mobile tracking
       description: |
-        Authenticates a line supervisor and returns a short-lived mobile bearer token.
-        Only users with the `line_supervisor` role can use this endpoint.
+        Authenticates a **line supervisor** and returns a short-lived mobile bearer token.
+        **Only** users whose role is `line_supervisor` can use this endpoint.
+        Dashboard accounts (e.g. `organization_admin`, `branch_admin`, `super_admin`) cannot log in here
+        even with a correct password — assign the `line_supervisor` role to a user or create a dedicated supervisor account.
+
+        - **401** = wrong email/password.
+        - **403** with `MOBILE_LOGIN_ROLE_NOT_ALLOWED` = credentials OK but role is not `line_supervisor`.
       operationId: mobileTrackingLogin
       requestBody:
         required: true
@@ -78,7 +83,7 @@ paths:
                   value:
                     error: Email and password are required
         '401':
-          description: Invalid credentials
+          description: Invalid email or password (wrong credentials — not the same as wrong role)
           content:
             application/json:
               schema:
@@ -86,9 +91,11 @@ paths:
               examples:
                 invalidCredentials:
                   value:
-                    error: Invalid credentials
+                    error: Invalid email or password
+                    errorAr: البريد الإلكتروني أو كلمة المرور غير صحيحة
+                    code: MOBILE_LOGIN_INVALID_CREDENTIALS
         '403':
-          description: User is not allowed to use mobile tracking login
+          description: Account disabled, or user role is not line_supervisor
           content:
             application/json:
               schema:
@@ -96,7 +103,10 @@ paths:
               examples:
                 wrongRole:
                   value:
-                    error: Mobile tracking login is available only for line supervisors
+                    error: Mobile tracking login is only available for accounts with the line_supervisor role.
+                    errorAr: تسجيل دخول تتبع الجوال متاح لمشرفي الخط فقط...
+                    code: MOBILE_LOGIN_ROLE_NOT_ALLOWED
+                    role: organization_admin
                 disabledUser:
                   value:
                     error: User account is disabled

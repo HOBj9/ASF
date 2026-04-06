@@ -11,7 +11,7 @@ import Branch from "@/models/Branch";
 /**
  * GET /api/organizations/:id/points
  * - بدون query: نقاط على مستوى المؤسسة (branchId فارغ).
- * - ?scope=branches: نقاط فروع المؤسسة (لعرض النسخ في الفروع).
+ * - ?scope=branches: نقاط فروع المؤسسة النشطة.
  */
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -28,7 +28,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     await connectDB();
 
     if (scope === "branches") {
-      const branches = await Branch.find({ organizationId }).select("_id").lean();
+      const branches = await Branch.find({ organizationId, isActive: true }).select("_id").lean().exec();
       const branchIds = branches.map((b) => b._id);
       if (branchIds.length === 0) {
         return NextResponse.json({ points: [] });

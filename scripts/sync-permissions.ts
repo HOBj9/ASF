@@ -8,8 +8,7 @@
  *
  * التشغيل:
  *   npm run sync:permissions
- *   أو ضمن Docker: docker compose exec app npm run sync:permissions
- *   أو: docker compose --profile tools run --rm sync-permissions
+ *   أو داخل Docker (prod): docker compose -f docker-compose.prod.yml --profile tools run --rm tools npm run sync:permissions
  */
 
 import connectDB from "@/lib/mongodb";

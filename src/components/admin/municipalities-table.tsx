@@ -466,15 +466,41 @@ export function MunicipalitiesTable() {
                 </div>
                 <div>
                   <Label>اسم المستخدم</Label>
-                  <Input value={adminUser.adminUserName} onChange={(e) => setAdminUser({ ...adminUser, adminUserName: e.target.value })} />
+                  <Input
+                    name="branch-create-admin-display-name"
+                    autoComplete="off"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    data-1p-ignore
+                    data-lpignore="true"
+                    value={adminUser.adminUserName}
+                    onChange={(e) => setAdminUser({ ...adminUser, adminUserName: e.target.value })}
+                  />
                 </div>
                 <div>
                   <Label>البريد الإلكتروني</Label>
-                  <Input type="email" value={adminUser.adminUserEmail} onChange={(e) => setAdminUser({ ...adminUser, adminUserEmail: e.target.value })} />
+                  <Input
+                    type="email"
+                    name="branch-create-admin-contact-email"
+                    autoComplete="off"
+                    inputMode="email"
+                    data-1p-ignore
+                    data-lpignore="true"
+                    value={adminUser.adminUserEmail}
+                    onChange={(e) => setAdminUser({ ...adminUser, adminUserEmail: e.target.value })}
+                  />
                 </div>
                 <div>
                   <Label>كلمة المرور</Label>
-                  <Input type="password" value={adminUser.adminUserPassword} onChange={(e) => setAdminUser({ ...adminUser, adminUserPassword: e.target.value })} />
+                  <Input
+                    type="password"
+                    name="branch-create-admin-secret"
+                    autoComplete="new-password"
+                    data-1p-ignore
+                    data-lpignore="true"
+                    value={adminUser.adminUserPassword}
+                    onChange={(e) => setAdminUser({ ...adminUser, adminUserPassword: e.target.value })}
+                  />
                 </div>
               </>
             )}
@@ -486,7 +512,14 @@ export function MunicipalitiesTable() {
                 <div>
                   <Label>البريد الإلكتروني</Label>
                   <Input
+                    key={editing ? `branch-edit-email-${editing._id}` : "branch-edit-email"}
                     type="email"
+                    name={`branch-manager-email-${editing?._id ?? "new"}`}
+                    autoComplete="off"
+                    inputMode="email"
+                    data-form-type="other"
+                    data-1p-ignore
+                    data-lpignore="true"
                     value={adminUser.adminUserEmail}
                     onChange={(e) => setAdminUser({ ...adminUser, adminUserEmail: e.target.value })}
                   />
@@ -494,7 +527,13 @@ export function MunicipalitiesTable() {
                 <div>
                   <Label>كلمة المرور الجديدة (اختياري)</Label>
                   <Input
+                    key={editing ? `branch-edit-password-${editing._id}` : "branch-edit-password"}
                     type="password"
+                    name={`branch-manager-new-secret-${editing?._id ?? "new"}`}
+                    autoComplete="new-password"
+                    data-form-type="other"
+                    data-1p-ignore
+                    data-lpignore="true"
                     value={adminUser.adminUserPassword}
                     onChange={(e) => setAdminUser({ ...adminUser, adminUserPassword: e.target.value })}
                   />

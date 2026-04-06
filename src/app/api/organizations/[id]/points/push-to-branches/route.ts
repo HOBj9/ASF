@@ -28,7 +28,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     }
 
     const pushed = await pointService.pushPointToAllBranches(organizationId, String(pointId).trim());
-    return NextResponse.json({ pushed, message: pushed > 0 ? `تم النسخ إلى ${pushed} فرع` : "لا توجد فروع جديدة للنسخ" });
+    return NextResponse.json({
+      pushed,
+      message: pushed > 0 ? `تم النسخ إلى ${pushed} فرع` : "لا توجد فروع جديدة للنسخ",
+    });
   } catch (error: unknown) {
     return handleApiError(error);
   }

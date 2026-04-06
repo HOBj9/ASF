@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
+import mongoose from "mongoose";
 import { requirePermission, handleApiError } from "@/lib/middleware/api-auth.middleware";
 import { permissionActions, permissionResources } from "@/constants/permissions";
 import { resolveOrganizationId } from "@/lib/utils/organization.util";
@@ -59,14 +60,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       $or: [{ zoneId: null }, { zoneId: "" }],
     };
 
-    if (pointIdSet) {
-      baseQuery._id = { $in: Array.from(pointIdSet) };
+    if (pointIdSet && pointIdSet.size > 0) {
+      const valid = [...pointIdSet].filter((id) => mongoose.Types.ObjectId.isValid(id));
+      if (valid.length === 0) {
+        return NextResponse.json({ error: "لا توجد معرّفات صالحة" }, { status: 400 });
+      }
+      baseQuery._id = { $in: valid.map((id) => new mongoose.Types.ObjectId(id)) };
     }
 
     const branchPoints = await Point.find(baseQuery).lean().exec();
 
     const results: TransferResult[] = [];
-    const radiusMeters = 500;
 
     for (const branchPoint of branchPoints) {
       const bpId = String(branchPoint._id);
@@ -79,17 +83,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         continue;
       }
 
-      const orgPointName =
+      const orgPointName = (
         (branchPoint as { nameAr?: string; name?: string }).nameAr ||
         (branchPoint as { name?: string }).name ||
-        "نقطة";
+        "نقطة"
+      ).trim();
+      const radiusMeters = (branchPoint as { radiusMeters?: number }).radiusMeters ?? 500;
 
       try {
         const atharService = await AtharService.forBranch(branchId);
         const zoneId = await atharService.createZone(
           orgPointName,
           { lat: branchPoint.lat, lng: branchPoint.lng },
-          (branchPoint as { radiusMeters?: number }).radiusMeters ?? radiusMeters,
+          radiusMeters,
         );
         if (zoneId) {
           await Point.findByIdAndUpdate(branchPoint._id, { zoneId });

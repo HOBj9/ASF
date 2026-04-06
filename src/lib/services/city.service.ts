@@ -53,7 +53,11 @@ export class CityService {
     const city = await City.findOne({ _id: id, organizationId });
     if (!city) return null;
     const updateData: any = {};
-    if (data.governorateId !== undefined) updateData.governorateId = data.governorateId;
+    if (data.governorateId !== undefined) {
+      const gov = await Governorate.findOne({ _id: data.governorateId, organizationId }).lean();
+      if (!gov) throw new Error('المحافظة غير موجودة');
+      updateData.governorateId = data.governorateId;
+    }
     if (data.name !== undefined) updateData.name = data.name.trim();
     if (data.nameAr !== undefined) updateData.nameAr = data.nameAr?.trim() || null;
     if (data.order !== undefined) updateData.order = data.order;
