@@ -1,10 +1,13 @@
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
-import { handleApiError } from '@/lib/middleware/api-auth.middleware';
 import { requireMobileLineSupervisorAuth } from '@/lib/middleware/mobile-line-supervisor-auth.middleware';
 import { SurveyService } from '@/lib/services/survey.service';
 import { PointClassificationService } from '@/lib/services/point-classification.service';
+import {
+  handleMobileApiError,
+  mobileErrorResponse,
+} from '@/lib/utils/mobile-api-error.util';
 
 const surveyService = new SurveyService();
 const pointClassificationService = new PointClassificationService();
@@ -46,9 +49,10 @@ export async function GET(
 
     const { user } = authResult;
     if (!user.organizationId) {
-      return NextResponse.json(
-        { error: 'لا توجد مؤسسة مرتبطة بحساب مشرف الخط' },
-        { status: 403 }
+      return mobileErrorResponse(
+        'لا توجد مؤسسة مرتبطة بحساب مشرف الخط',
+        'MOBILE_ORGANIZATION_NOT_ASSIGNED',
+        403
       );
     }
 
@@ -60,9 +64,10 @@ export async function GET(
     );
 
     if (!survey) {
-      return NextResponse.json(
-        { error: 'الاستبيان غير موجود أو غير نشط' },
-        { status: 404 }
+      return mobileErrorResponse(
+        'الاستبيان غير موجود أو غير نشط',
+        'MOBILE_SURVEY_NOT_FOUND',
+        404
       );
     }
 
@@ -108,7 +113,7 @@ export async function GET(
         },
       },
     });
-  } catch (error: any) {
-    return handleApiError(error);
+  } catch (error) {
+    return handleMobileApiError(error);
   }
 }

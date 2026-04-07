@@ -3,10 +3,13 @@ export const dynamic = 'force-dynamic';
 import { getServerSession } from 'next-auth';
 import { NextResponse } from 'next/server';
 import { authOptions } from '@/lib/auth';
-import { handleApiError } from '@/lib/middleware/api-auth.middleware';
 import { isLineSupervisor } from '@/lib/permissions';
 import { MobileTrackingService } from '@/lib/services/mobile-tracking.service';
 import { verifyMobileAuthToken } from '@/lib/trackingcore/mobile-auth-token';
+import {
+  handleMobileApiError,
+  mobileErrorResponse,
+} from '@/lib/utils/mobile-api-error.util';
 
 const mobileTrackingService = new MobileTrackingService();
 
@@ -22,19 +25,31 @@ export async function POST(request: Request) {
 
     if (session?.user?.id) {
       if (!isLineSupervisor(session.user?.role as any)) {
-        return NextResponse.json({ error: 'Only line supervisors can activate mobile tracking' }, { status: 403 });
+        return mobileErrorResponse(
+          'تفعيل تتبع الموبايل متاح لمشرفي الخط فقط',
+          'MOBILE_ACTIVATION_ROLE_NOT_ALLOWED',
+          403
+        );
       }
       userId = String(session.user.id);
     } else if (bearerToken) {
       const payload = verifyMobileAuthToken(bearerToken);
       if (!isLineSupervisor(payload.role as any)) {
-        return NextResponse.json({ error: 'Only line supervisors can activate mobile tracking' }, { status: 403 });
+        return mobileErrorResponse(
+          'تفعيل تتبع الموبايل متاح لمشرفي الخط فقط',
+          'MOBILE_ACTIVATION_ROLE_NOT_ALLOWED',
+          403
+        );
       }
       userId = String(payload.sub);
     }
 
     if (!userId) {
-      return NextResponse.json({ error: 'You must login first' }, { status: 401 });
+      return mobileErrorResponse(
+        'يجب تسجيل الدخول أولاً',
+        'MOBILE_AUTH_REQUIRED',
+        401
+      );
     }
 
     const body = await request.json().catch(() => ({}));
@@ -47,7 +62,7 @@ export async function POST(request: Request) {
     });
 
     return NextResponse.json(activation, { status: 201 });
-  } catch (error: any) {
-    return handleApiError(error);
+  } catch (error) {
+    return handleMobileApiError(error);
   }
 }

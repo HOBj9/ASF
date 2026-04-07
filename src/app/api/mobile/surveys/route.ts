@@ -2,8 +2,11 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { requireMobileLineSupervisorAuth } from '@/lib/middleware/mobile-line-supervisor-auth.middleware';
-import { handleApiError } from '@/lib/middleware/api-auth.middleware';
 import { SurveyService } from '@/lib/services/survey.service';
+import {
+  handleMobileApiError,
+  mobileErrorResponse,
+} from '@/lib/utils/mobile-api-error.util';
 
 const surveyService = new SurveyService();
 
@@ -29,9 +32,10 @@ export async function GET(request: Request) {
 
     const { user } = authResult;
     if (!user.organizationId) {
-      return NextResponse.json(
-        { error: 'لا توجد مؤسسة مرتبطة بحساب مشرف الخط' },
-        { status: 403 }
+      return mobileErrorResponse(
+        'لا توجد مؤسسة مرتبطة بحساب مشرف الخط',
+        'MOBILE_ORGANIZATION_NOT_ASSIGNED',
+        403
       );
     }
 
@@ -44,7 +48,7 @@ export async function GET(request: Request) {
     return NextResponse.json({
       surveys: surveys.map(toSurveySummary),
     });
-  } catch (error: any) {
-    return handleApiError(error);
+  } catch (error) {
+    return handleMobileApiError(error);
   }
 }

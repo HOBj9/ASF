@@ -7,6 +7,7 @@ info:
     Unified OpenAPI contract for the mobile app.
     It covers:
     - line supervisor mobile login
+    - line supervisor profile and assignment details
     - survey download and submission
     - mobile tracking status, ingestion, and deactivation
     - tracking admin monitoring endpoints
@@ -14,6 +15,7 @@ servers:
   - url: /
 tags:
   - name: Mobile Auth
+  - name: Mobile Profile
   - name: Mobile Surveys
   - name: Mobile Tracking
   - name: Tracking Admin
@@ -61,6 +63,60 @@ paths:
                   canActivate: true
         '400':
           $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '500':
+          $ref: '#/components/responses/Error500'
+
+  /api/mobile/me:
+    get:
+      tags: [Mobile Profile]
+      summary: Get the authenticated line supervisor profile
+      description: |
+        Returns the current line supervisor information together with the linked organization,
+        branch, and assigned vehicle details when available.
+      operationId: getMobileLineSupervisorProfile
+      security:
+        - bearerAuth: []
+        - sessionCookieAuth: []
+        - secureSessionCookieAuth: []
+      responses:
+        '200':
+          description: Authenticated line supervisor profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MobileLineSupervisorProfileResponse'
+              example:
+                user:
+                  id: 67ea5cd0d2f9b54dd82b4310
+                  name: Ahmed Supervisor
+                  email: supervisor@example.com
+                  role: line_supervisor
+                  organizationId: 67ea5ab9d2f9b54dd82b4301
+                  branchId: 67ea5b11d2f9b54dd82b4307
+                  trackingVehicleId: 67ea5d5dd2f9b54dd82b4323
+                  isActive: true
+                organization:
+                  id: 67ea5ab9d2f9b54dd82b4301
+                  name: Damascus Cleanliness Directorate
+                  slug: damascus-cleanliness
+                branch:
+                  id: 67ea5b11d2f9b54dd82b4307
+                  name: Branch 01
+                  nameAr: فرع 01
+                  branchTypeLabel: Urban
+                vehicle:
+                  id: 67ea5d5dd2f9b54dd82b4323
+                  name: Route 12 Vehicle
+                  plateNumber: '123456'
+                  trackingProvider: mobile_app
+                  acceptedTrackingProviders:
+                    - athar
+                    - mobile_app
+                  zoneEventProvider: mobile_app
         '401':
           $ref: '#/components/responses/Error401'
         '403':
@@ -547,37 +603,61 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
+          example:
+            message: الطلب غير صالح
+            code: BAD_REQUEST
+            status: 400
     Error401:
       description: Unauthorized
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
+          example:
+            message: يجب تسجيل الدخول أولاً
+            code: MOBILE_AUTH_REQUIRED
+            status: 401
     Error403:
       description: Forbidden
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
+          example:
+            message: هذه الواجهة متاحة لمشرف الخط فقط
+            code: MOBILE_ROLE_NOT_ALLOWED
+            status: 403
     Error404:
       description: Not found
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
+          example:
+            message: المورد المطلوب غير موجود
+            code: NOT_FOUND
+            status: 404
     Error500:
       description: Internal server error
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
+          example:
+            message: حدث خطأ غير متوقع في الخادم
+            code: INTERNAL_SERVER_ERROR
+            status: 500
   schemas:
     ErrorResponse:
       type: object
-      required: [error]
+      required: [message, code, status]
       properties:
-        error:
+        message:
           type: string
+        code:
+          type: string
+        status:
+          type: integer
 
     MobileLoginRequest:
       type: object
@@ -604,6 +684,64 @@ components:
           type: [string, 'null']
         trackingVehicleId:
           type: [string, 'null']
+    MobileLineSupervisorUser:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        email:
+          type: string
+          format: email
+        role: { type: string }
+        organizationId:
+          type: [string, 'null']
+        branchId:
+          type: [string, 'null']
+        trackingVehicleId:
+          type: [string, 'null']
+        isActive:
+          type: boolean
+    MobileProfileOrganization:
+      type: [object, 'null']
+      properties:
+        id: { type: string }
+        name: { type: string }
+        slug: { type: string }
+    MobileProfileBranch:
+      type: [object, 'null']
+      properties:
+        id: { type: string }
+        name: { type: string }
+        nameAr:
+          type: [string, 'null']
+        branchTypeLabel:
+          type: [string, 'null']
+    MobileProfileVehicle:
+      type: [object, 'null']
+      properties:
+        id: { type: string }
+        name: { type: string }
+        plateNumber:
+          type: [string, 'null']
+        trackingProvider:
+          $ref: '#/components/schemas/TrackingProvider'
+        acceptedTrackingProviders:
+          type: array
+          items:
+            $ref: '#/components/schemas/TrackingProvider'
+        zoneEventProvider:
+          type: [string, 'null']
+    MobileLineSupervisorProfileResponse:
+      type: object
+      properties:
+        user:
+          $ref: '#/components/schemas/MobileLineSupervisorUser'
+        organization:
+          $ref: '#/components/schemas/MobileProfileOrganization'
+        branch:
+          $ref: '#/components/schemas/MobileProfileBranch'
+        vehicle:
+          $ref: '#/components/schemas/MobileProfileVehicle'
     MobileLoginResponse:
       type: object
       properties:

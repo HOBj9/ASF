@@ -8,6 +8,7 @@ import Survey, { ISurveyQuestion } from '@/models/Survey';
 import SurveySubmission from '@/models/SurveySubmission';
 import Organization from '@/models/Organization';
 import { PointService } from '@/lib/services/point.service';
+import { createMobileApiError } from '@/lib/utils/mobile-api-error.util';
 
 const pointService = new PointService();
 
@@ -93,9 +94,11 @@ export class SurveyService {
     }
 
     if (surveyBranchId !== currentBranchId) {
-      const error: any = new Error('الاستبيان غير متاح لهذا الفرع');
-      error.status = 403;
-      throw error;
+      throw createMobileApiError(
+        'الاستبيان غير متاح لهذا الفرع',
+        'MOBILE_SURVEY_BRANCH_FORBIDDEN',
+        403
+      );
     }
   }
 
@@ -165,9 +168,11 @@ export class SurveyService {
 
         const locationAnswer = this.parseLocationAnswer(value, input.mapLat, input.mapLng);
         if (!locationAnswer) {
-          const error: any = new Error(`الإجابة مطلوبة للسؤال: ${label}`);
-          error.status = 400;
-          throw error;
+          throw createMobileApiError(
+            `الإجابة مطلوبة للسؤال: ${label}`,
+            'MOBILE_SURVEY_REQUIRED_ANSWER_MISSING',
+            400
+          );
         }
         return;
       }
@@ -177,9 +182,11 @@ export class SurveyService {
       }
 
       if (required && (value === undefined || value === null || String(value).trim() === '')) {
-        const error: any = new Error(`الإجابة مطلوبة للسؤال: ${label}`);
-        error.status = 400;
-        throw error;
+        throw createMobileApiError(
+          `الإجابة مطلوبة للسؤال: ${label}`,
+          'MOBILE_SURVEY_REQUIRED_ANSWER_MISSING',
+          400
+        );
       }
 
       if (question?.type === 'choice' && value != null) {
@@ -187,9 +194,11 @@ export class SurveyService {
         const allowedOptions = Array.isArray(question?.options) ? question.options : [];
 
         if (!allowedOptions.includes(normalizedValue)) {
-          const error: any = new Error(`الإجابة غير صالحة للسؤال: ${label}`);
-          error.status = 400;
-          throw error;
+          throw createMobileApiError(
+            `الإجابة غير صالحة للسؤال: ${label}`,
+            'MOBILE_SURVEY_INVALID_ANSWER',
+            400
+          );
         }
       }
     });
@@ -381,9 +390,11 @@ export class SurveyService {
   ) {
     const survey = await this.getActiveForLineSupervisor(surveyId, organizationId, branchId);
     if (!survey) {
-      const error: any = new Error('الاستبيان غير موجود أو غير نشط');
-      error.status = 404;
-      throw error;
+      throw createMobileApiError(
+        'الاستبيان غير موجود أو غير نشط',
+        'MOBILE_SURVEY_NOT_FOUND',
+        404
+      );
     }
 
     const point = data?.point || ({} as SubmitMobileSurveyData['point']);
@@ -399,9 +410,11 @@ export class SurveyService {
         : null;
 
     if (!Number.isFinite(mapLat) || !Number.isFinite(mapLng)) {
-      const error: any = new Error('إحداثيات موقع النقطة مطلوبة');
-      error.status = 400;
-      throw error;
+      throw createMobileApiError(
+        'إحداثيات موقع النقطة مطلوبة',
+        'MOBILE_SURVEY_POINT_LOCATION_REQUIRED',
+        400
+      );
     }
 
     const pointName = String(point.name || '').trim();
@@ -410,11 +423,11 @@ export class SurveyService {
     const otherIdentifier = String(point.otherIdentifier || '').trim();
 
     if (!pointName || !primaryClassificationId || !secondaryClassificationId || !otherIdentifier) {
-      const error: any = new Error(
-        'اسم النقطة والتصنيفات والرقم التعريفي الآخر مطلوبة'
+      throw createMobileApiError(
+        'اسم النقطة والتصنيفات والرقم التعريفي الآخر مطلوبة',
+        'MOBILE_SURVEY_POINT_FIELDS_REQUIRED',
+        400
       );
-      error.status = 400;
-      throw error;
     }
 
     const normalizedAnswers: Record<string, unknown> = {

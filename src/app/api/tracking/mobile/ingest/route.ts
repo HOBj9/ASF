@@ -1,9 +1,9 @@
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
-import { handleApiError } from '@/lib/middleware/api-auth.middleware';
 import { requireMobileLineSupervisorAuth } from '@/lib/middleware/mobile-line-supervisor-auth.middleware';
 import { MobileTrackingService } from '@/lib/services/mobile-tracking.service';
+import { handleMobileApiError } from '@/lib/utils/mobile-api-error.util';
 
 const mobileTrackingService = new MobileTrackingService();
 
@@ -39,7 +39,7 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json(result, { status: 200 });
-  } catch (error: any) {
-    return handleApiError(error);
+  } catch (error) {
+    return handleMobileApiError(error);
   }
 }

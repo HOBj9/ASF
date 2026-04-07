@@ -5,6 +5,11 @@ import { authOptions } from '@/lib/auth';
 import User from '@/models/User';
 import { isLineSupervisor } from '@/lib/permissions';
 import { verifyMobileAuthToken } from '@/lib/trackingcore/mobile-auth-token';
+import {
+  createMobileApiError,
+  handleMobileApiError,
+  mobileErrorResponse,
+} from '@/lib/utils/mobile-api-error.util';
 
 export interface MobileLineSupervisorUser {
   id: string;
@@ -72,17 +77,19 @@ export async function requireMobileLineSupervisorAuth(
     if (bearerToken) {
       const payload = verifyMobileAuthToken(bearerToken);
       if (!isLineSupervisor(payload.role as any)) {
-        return NextResponse.json(
-          { error: 'Mobile APIs are available only for line supervisors' },
-          { status: 403 }
+        return mobileErrorResponse(
+          'واجهات الموبايل متاحة لمشرفي الخط فقط',
+          'MOBILE_ROLE_NOT_ALLOWED',
+          403
         );
       }
 
       const user = await loadLineSupervisorUser(String(payload.sub));
       if (!user) {
-        return NextResponse.json(
-          { error: 'User account is disabled or no longer eligible' },
-          { status: 403 }
+        return mobileErrorResponse(
+          'حساب مشرف الخط معطل أو لم يعد مؤهلاً للوصول',
+          'MOBILE_USER_NOT_ELIGIBLE',
+          403
         );
       }
 
@@ -94,21 +101,27 @@ export async function requireMobileLineSupervisorAuth(
 
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
-      return NextResponse.json({ error: 'You must login first' }, { status: 401 });
+      return mobileErrorResponse(
+        'يجب تسجيل الدخول أولاً',
+        'MOBILE_AUTH_REQUIRED',
+        401
+      );
     }
 
     if (!isLineSupervisor(session.user.role as any)) {
-      return NextResponse.json(
-        { error: 'Mobile APIs are available only for line supervisors' },
-        { status: 403 }
+      return mobileErrorResponse(
+        'واجهات الموبايل متاحة لمشرفي الخط فقط',
+        'MOBILE_ROLE_NOT_ALLOWED',
+        403
       );
     }
 
     const user = await loadLineSupervisorUser(String(session.user.id));
     if (!user) {
-      return NextResponse.json(
-        { error: 'User account is disabled or no longer eligible' },
-        { status: 403 }
+      return mobileErrorResponse(
+        'حساب مشرف الخط معطل أو لم يعد مؤهلاً للوصول',
+        'MOBILE_USER_NOT_ELIGIBLE',
+        403
       );
     }
 
@@ -117,9 +130,22 @@ export async function requireMobileLineSupervisorAuth(
       authSource: 'session',
     };
   } catch (error: any) {
-    return NextResponse.json(
-      { error: error?.message || 'Authentication failed' },
-      { status: Number.isInteger(error?.status) ? error.status : 401 }
-    );
+    if (error instanceof Error && error.message === 'Invalid or expired mobile auth token') {
+      return mobileErrorResponse(
+        'رمز دخول الموبايل غير صالح أو منتهي الصلاحية',
+        'MOBILE_AUTH_TOKEN_INVALID',
+        401
+      );
+    }
+
+    if (!(error instanceof Error) || !('code' in error)) {
+      error = createMobileApiError(
+        'فشل التحقق من هوية المستخدم',
+        'MOBILE_AUTH_FAILED',
+        Number.isInteger(error?.status) ? error.status : 401
+      );
+    }
+
+    return handleMobileApiError(error);
   }
 }

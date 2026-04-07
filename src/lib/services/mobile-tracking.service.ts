@@ -13,6 +13,7 @@ import { resolveTrackingConnectivityStatus } from '@/lib/trackingcore/connectivi
 import { TrackingEventProcessorService } from '@/lib/services/tracking-event-processor.service';
 import { trackingEventDefinitionService } from '@/lib/services/tracking-event-definition.service';
 import type { TrackingProvider, ZoneEventProvider } from '@/lib/tracking/types';
+import { createMobileApiError } from '@/lib/utils/mobile-api-error.util';
 
 const MAX_BATCH_SAMPLES = 300;
 
@@ -70,7 +71,11 @@ function normalizeExternalId(userId: string, deviceId?: string | null): string {
 function parseSampleRecordedAt(recordedAt: string): Date {
   const parsed = new Date(recordedAt);
   if (Number.isNaN(parsed.getTime())) {
-    throw new Error('Sample recordedAt is invalid');
+    throw createMobileApiError(
+      'وقت تسجيل العينة غير صالح',
+      'MOBILE_TRACKING_INVALID_RECORDED_AT',
+      400
+    );
   }
   return parsed;
 }
@@ -78,20 +83,36 @@ function parseSampleRecordedAt(recordedAt: string): Date {
 function normalizeNumeric(value: unknown, fieldName: string): number {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) {
-    throw new Error(`Field ${fieldName} is invalid`);
+    throw createMobileApiError(
+      `قيمة الحقل ${fieldName} غير صالحة`,
+      'MOBILE_TRACKING_INVALID_FIELD',
+      400
+    );
   }
   return numeric;
 }
 
 function ensureValidBatch(input: MobileTrackingBatchInput): MobileTrackingBatchInput {
   if (!input.batchId || !String(input.batchId).trim()) {
-    throw new Error('batchId is required');
+    throw createMobileApiError(
+      'رقم الدفعة batchId مطلوب',
+      'MOBILE_TRACKING_BATCH_ID_REQUIRED',
+      400
+    );
   }
   if (!Array.isArray(input.samples) || input.samples.length === 0) {
-    throw new Error('samples are required');
+    throw createMobileApiError(
+      'يجب إرسال عينات التتبع',
+      'MOBILE_TRACKING_SAMPLES_REQUIRED',
+      400
+    );
   }
   if (input.samples.length > MAX_BATCH_SAMPLES) {
-    throw new Error(`The maximum batch size is ${MAX_BATCH_SAMPLES} samples`);
+    throw createMobileApiError(
+      `الحد الأقصى لعدد العينات في الدفعة هو ${MAX_BATCH_SAMPLES}`,
+      'MOBILE_TRACKING_BATCH_TOO_LARGE',
+      400
+    );
   }
   return input;
 }
@@ -206,20 +227,36 @@ export class MobileTrackingService {
       .lean();
 
     if (!user || user.isActive === false) {
-      throw new Error('User is not eligible for mobile tracking');
+      throw createMobileApiError(
+        'حساب مشرف الخط معطل أو لم يعد مؤهلاً لإرسال التتبع',
+        'MOBILE_USER_NOT_ELIGIBLE',
+        403
+      );
     }
     if (!user.branchId) {
-      throw new Error('No branch is assigned to this user');
+      throw createMobileApiError(
+        'لا يوجد فرع مرتبط بحساب مشرف الخط',
+        'MOBILE_TRACKING_BRANCH_NOT_ASSIGNED',
+        403
+      );
     }
     if (!user.trackingVehicleId) {
-      throw new Error('A vehicle must be assigned to the line supervisor before sending tracking');
+      throw createMobileApiError(
+        'يجب ربط مركبة بمشرف الخط قبل إرسال التتبع',
+        'MOBILE_TRACKING_VEHICLE_NOT_ASSIGNED',
+        403
+      );
     }
 
     const branchId = String(user.branchId);
     const vehicleId = String(user.trackingVehicleId);
     const vehicle = await Vehicle.findOne({ _id: vehicleId, branchId, isActive: true }).lean();
     if (!vehicle) {
-      throw new Error('Assigned vehicle does not exist or is inactive');
+      throw createMobileApiError(
+        'المركبة المرتبطة غير موجودة أو غير مفعلة',
+        'MOBILE_TRACKING_ASSIGNED_VEHICLE_NOT_FOUND',
+        404
+      );
     }
 
     const acceptedProviders = normalizeAcceptedProviders(vehicle);
@@ -343,20 +380,36 @@ export class MobileTrackingService {
       .lean();
 
     if (!user || user.isActive === false) {
-      throw new Error('User is not eligible for activation');
+      throw createMobileApiError(
+        'حساب مشرف الخط معطل أو لم يعد مؤهلاً لتفعيل التتبع',
+        'MOBILE_USER_NOT_ELIGIBLE',
+        403
+      );
     }
     if (!user.branchId) {
-      throw new Error('No branch is assigned to this user');
+      throw createMobileApiError(
+        'لا يوجد فرع مرتبط بحساب مشرف الخط',
+        'MOBILE_TRACKING_BRANCH_NOT_ASSIGNED',
+        403
+      );
     }
     if (!user.trackingVehicleId) {
-      throw new Error('A vehicle must be assigned to the line supervisor before activation');
+      throw createMobileApiError(
+        'يجب ربط مركبة بمشرف الخط قبل تفعيل التتبع',
+        'MOBILE_TRACKING_VEHICLE_NOT_ASSIGNED',
+        403
+      );
     }
 
     const branchId = String(user.branchId);
     const vehicleId = String(user.trackingVehicleId);
     const vehicle = await Vehicle.findOne({ _id: vehicleId, branchId, isActive: true }).lean();
     if (!vehicle) {
-      throw new Error('Assigned vehicle does not exist or is inactive');
+      throw createMobileApiError(
+        'المركبة المرتبطة غير موجودة أو غير مفعلة',
+        'MOBILE_TRACKING_ASSIGNED_VEHICLE_NOT_FOUND',
+        404
+      );
     }
 
     const acceptedProviders = normalizeAcceptedProviders(vehicle);
@@ -468,7 +521,11 @@ export class MobileTrackingService {
     });
 
     if (!binding) {
-      throw new Error('Unable to create or resolve a mobile tracking binding');
+      throw createMobileApiError(
+        'تعذر إنشاء أو العثور على ربط تتبع الموبايل',
+        'MOBILE_TRACKING_BINDING_RESOLUTION_FAILED',
+        500
+      );
     }
 
     return this.ingestWithBinding(binding, payload);
@@ -479,9 +536,11 @@ export class MobileTrackingService {
 
     const normalizedToken = String(token || '').trim();
     if (!normalizedToken) {
-      const error: any = new Error('Tracking token is missing');
-      error.status = 401;
-      throw error;
+      throw createMobileApiError(
+        'رمز التتبع مفقود',
+        'MOBILE_TRACKING_TOKEN_MISSING',
+        401
+      );
     }
 
     ensureValidBatch(payload);
@@ -494,9 +553,11 @@ export class MobileTrackingService {
     }).lean();
 
     if (!binding) {
-      const error: any = new Error('Tracking token is invalid');
-      error.status = 401;
-      throw error;
+      throw createMobileApiError(
+        'رمز التتبع غير صالح',
+        'MOBILE_TRACKING_TOKEN_INVALID',
+        401
+      );
     }
 
     return this.ingestWithBinding(binding, payload);
@@ -545,8 +606,12 @@ export class MobileTrackingService {
       }).lean();
 
       if (!vehicle) {
-        await this.updateIngressStatus(ingress._id, 'rejected', 'Vehicle does not exist or is inactive');
-        throw new Error('Vehicle does not exist or is inactive');
+        await this.updateIngressStatus(ingress._id, 'rejected', 'المركبة غير موجودة أو غير مفعلة');
+        throw createMobileApiError(
+          'المركبة غير موجودة أو غير مفعلة',
+          'MOBILE_TRACKING_VEHICLE_NOT_FOUND',
+          404
+        );
       }
 
       const acceptedProviders = normalizeAcceptedProviders(vehicle);
@@ -554,9 +619,13 @@ export class MobileTrackingService {
         await this.updateIngressStatus(
           ingress._id,
           'rejected',
-          'Vehicle is not accepting mobile_app tracking'
+          'المركبة لا تقبل تتبع mobile_app'
         );
-        throw new Error('Vehicle is not accepting mobile_app tracking');
+        throw createMobileApiError(
+          'المركبة لا تقبل تتبع الموبايل حالياً',
+          'MOBILE_TRACKING_PROVIDER_NOT_ALLOWED',
+          403
+        );
       }
 
       const zoneEventProvider = normalizeZoneEventProvider(vehicle);
@@ -792,7 +861,11 @@ export class MobileTrackingService {
       .lean();
 
     if (!user || user.isActive === false) {
-      throw new Error('User is not eligible for mobile tracking');
+      throw createMobileApiError(
+        'حساب مشرف الخط معطل أو لم يعد مؤهلاً للوصول',
+        'MOBILE_USER_NOT_ELIGIBLE',
+        403
+      );
     }
 
     const branchId = user.branchId ? String(user.branchId) : null;
