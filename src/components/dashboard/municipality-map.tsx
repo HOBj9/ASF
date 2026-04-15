@@ -1229,7 +1229,23 @@ export function MunicipalityMap({
           </Marker>
         )}
 
-        {liveMarkersLayer}
+        {activeTab === "live" ? (
+          <MarkerClusterGroup
+            disableClusteringAtZoom={17}
+            showCoverageOnHover={false}
+            animate={false}
+            animateAddingMarkers={false}
+            removeOutsideVisibleBounds={true}
+            chunkedLoading={true}
+            maxClusterRadius={70}
+            spiderfyOnMaxZoom={false}
+            zoomToBoundsOnClick={true}
+          >
+            {liveMarkersLayer}
+          </MarkerClusterGroup>
+        ) : (
+          liveMarkersLayer
+        )}
         {historyPathLayer}
 
         <MarkerClusterGroup

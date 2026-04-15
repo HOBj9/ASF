@@ -379,10 +379,10 @@ export function TrackingMonitor() {
     if (!canLoad) return
     const interval = setInterval(() => {
       void loadOverview(true)
-    }, 30000)
+    }, resolvedBranchId ? 5000 : 15000)
 
     return () => clearInterval(interval)
-  }, [canLoad, loadOverview])
+  }, [canLoad, loadOverview, resolvedBranchId])
 
   useEffect(() => {
     if (!canLoadBranchExperience) return
@@ -392,6 +392,37 @@ export function TrackingMonitor() {
 
     return () => clearInterval(interval)
   }, [canLoadBranchExperience, loadBranchExperience])
+
+  useEffect(() => {
+    if (!resolvedBranchId) return
+
+    const source = new EventSource(`/api/vehicles/locations/websocket?branchId=${encodeURIComponent(resolvedBranchId)}`)
+
+    source.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(event.data)
+        if (payload?.type !== "bus_locations" || !Array.isArray(payload?.data)) {
+          return
+        }
+
+        const nextLiveVehicles = payload.data as Record<string, any>[]
+
+        setBranchExperience((current) => {
+          if (!current) return current
+          return {
+            ...current,
+            liveVehicles: nextLiveVehicles as Record<string, any>[],
+          }
+        })
+      } catch {
+        // Ignore malformed SSE payloads
+      }
+    }
+
+    return () => {
+      source.close()
+    }
+  }, [resolvedBranchId])
 
   const handleRevokeBinding = useCallback(
     async (bindingId: string) => {

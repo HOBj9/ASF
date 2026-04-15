@@ -224,7 +224,7 @@ export class TrackingMonitorService {
         const state = stateByVehicleId.get(String(item.id));
         const binding = primaryBindingByVehicleId.get(String(item.id));
         const user = binding?.userId ? userMap.get(String(binding.userId)) : null;
-        const provider = (vehicle?.trackingProvider || 'athar') as TrackingProvider;
+        const provider = (item.provider || vehicle?.trackingProvider || 'athar') as TrackingProvider;
 
         liveConnectivityCounts[item.status] += 1;
 
@@ -240,11 +240,11 @@ export class TrackingMonitorService {
           driverName: item.driverName || (vehicle?.driverId ? driverNameMap.get(String(vehicle.driverId)) : null) || 'غير محدد',
           lineSupervisorName: user?.name || null,
           lastUpdateLabel: item.lastUpdate || 'غير متصل',
-          lastReceivedAt: state?.lastReceivedAt || null,
-          lastRecordedAt: state?.lastRecordedAt || null,
+          lastReceivedAt: item.lastReceivedAt || state?.lastReceivedAt || null,
+          lastRecordedAt: item.lastRecordedAt || state?.lastRecordedAt || null,
           speed: Number(item.speed || state?.speed || 0),
           heading: Number(item.heading || state?.heading || 0),
-          accuracy: state?.accuracy ?? null,
+          accuracy: item.accuracy ?? state?.accuracy ?? null,
           coordinates: Array.isArray(item.coordinates) ? item.coordinates : null,
           insidePointCount: Array.isArray(state?.insidePointIds) ? state.insidePointIds.length : 0,
         };

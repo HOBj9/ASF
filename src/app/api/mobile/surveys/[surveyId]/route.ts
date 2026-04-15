@@ -8,6 +8,7 @@ import {
   handleMobileApiError,
   mobileErrorResponse,
 } from '@/lib/utils/mobile-api-error.util';
+import { listMobilePointClassifications } from '@/lib/utils/mobile-point-classification.util';
 
 const surveyService = new SurveyService();
 const pointClassificationService = new PointClassificationService();
@@ -22,20 +23,6 @@ function toMobileQuestion(question: any, index: number) {
     questionTextAr: question?.questionTextAr || null,
     options: Array.isArray(question?.options) ? question.options : [],
     required: Boolean(question?.required),
-  };
-}
-
-function normalizeClassification(item: any) {
-  return {
-    id: String(item._id),
-    name: item.name,
-    nameAr: item.nameAr || null,
-    primaryClassificationId: item.primaryClassificationId
-      ? String(item.primaryClassificationId)
-      : null,
-    branchId: item.branchId ? String(item.branchId) : null,
-    organizationId: item.organizationId ? String(item.organizationId) : null,
-    order: typeof item.order === 'number' ? item.order : 0,
   };
 }
 
@@ -71,9 +58,11 @@ export async function GET(
       );
     }
 
-    const classifications = user.branchId
-      ? await pointClassificationService.listForBranch(user.branchId)
-      : await pointClassificationService.listForOrganization(user.organizationId);
+    const classifications = await listMobilePointClassifications(
+      pointClassificationService,
+      user.organizationId,
+      user.branchId
+    );
 
     return NextResponse.json({
       survey: {
@@ -104,12 +93,8 @@ export async function GET(
           ],
         },
         classifications: {
-          primaries: Array.isArray(classifications.primaries)
-            ? classifications.primaries.map(normalizeClassification)
-            : [],
-          secondaries: Array.isArray(classifications.secondaries)
-            ? classifications.secondaries.map(normalizeClassification)
-            : [],
+          primaries: classifications.primaries,
+          secondaries: classifications.secondaries,
         },
       },
     });

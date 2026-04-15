@@ -166,6 +166,131 @@ paths:
         '500':
           $ref: '#/components/responses/Error500'
 
+  /api/mobile/point-classifications:
+    get:
+      tags: [Mobile Surveys]
+      summary: Get point primary and secondary classifications for the authenticated line supervisor
+      description: |
+        Returns the point classifications that the mobile user can assign while creating a point.
+        The result is scoped automatically by the authenticated supervisor organization and branch.
+
+        The API resolves the supervisor organization and branch from the bearer token.
+        The client must not send organizationId or branchId.
+
+        Use `primaryClassificationId` when you want the API to return only the secondary
+        classifications that belong to a specific primary classification.
+      operationId: listMobilePointClassifications
+      security:
+        - bearerAuth: []
+        - sessionCookieAuth: []
+        - secureSessionCookieAuth: []
+      parameters:
+        - in: query
+          name: primaryClassificationId
+          required: false
+          schema:
+            type: string
+          description: Optional filter for returning only secondaries under the selected primary classification
+      responses:
+        '200':
+          description: Point classifications for point creation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MobilePointClassificationsResponse'
+              example:
+                primaries:
+                  - id: 68010001d2f9b54dd82b6001
+                    name: container
+                    nameAr: Ø­Ø§ÙˆÙŠØ©
+                    primaryClassificationId: null
+                    branchId: 69afecf2a6a0fb6ab38efa36
+                    organizationId: 69afecbba6a0fb6ab38efa05
+                    order: 1
+                secondaries:
+                  - id: 68010001d2f9b54dd82b6002
+                    name: household
+                    nameAr: Ù…Ù†Ø²Ù„ÙŠ
+                    primaryClassificationId: 68010001d2f9b54dd82b6001
+                    branchId: 69afecf2a6a0fb6ab38efa36
+                    organizationId: 69afecbba6a0fb6ab38efa05
+                    order: 1
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '500':
+          $ref: '#/components/responses/Error500'
+
+  /api/mobile/point-classifications/primary:
+    get:
+      tags: [Mobile Surveys]
+      summary: List primary classifications from the authenticated line supervisor token
+      description: |
+        Returns only the primary classifications available to the authenticated line supervisor.
+        The organization and branch are derived from `Authorization: Bearer <token>`.
+      operationId: listMobilePrimaryPointClassifications
+      security:
+        - bearerAuth: []
+        - sessionCookieAuth: []
+        - secureSessionCookieAuth: []
+      responses:
+        '200':
+          description: Primary classifications
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  primaries:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PointClassificationSummary'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '500':
+          $ref: '#/components/responses/Error500'
+
+  /api/mobile/point-classifications/secondary:
+    get:
+      tags: [Mobile Surveys]
+      summary: List secondary classifications from the authenticated line supervisor token
+      description: |
+        Returns only the secondary classifications available to the authenticated line supervisor.
+        The organization and branch are derived from `Authorization: Bearer <token>`.
+      operationId: listMobileSecondaryPointClassifications
+      security:
+        - bearerAuth: []
+        - sessionCookieAuth: []
+        - secureSessionCookieAuth: []
+      parameters:
+        - in: query
+          name: primaryClassificationId
+          required: false
+          schema:
+            type: string
+          description: Optional filter for returning only secondaries under the selected primary classification
+      responses:
+        '200':
+          description: Secondary classifications
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  secondaries:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PointClassificationSummary'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '500':
+          $ref: '#/components/responses/Error500'
+
   /api/mobile/surveys/{surveyId}:
     get:
       tags: [Mobile Surveys]
@@ -176,6 +301,8 @@ paths:
         - `answerKey` for each question
         - classification lists required for point creation
         - required point fields
+
+        The same classification lists are also available from `/api/mobile/point-classifications`.
 
         Answering rules:
         - send either `questionId` or `answerKey` for each answer item
@@ -311,8 +438,6 @@ paths:
                 otherIdentifier: CNT-A12
                 mapLat: 33.5138
                 mapLng: 36.2765
-                deviceLat: 33.5139
-                deviceLng: 36.2766
               answers:
                 - questionId: 67fe0101d2f9b54dd82b5101
                   answerKey: question_0
@@ -341,8 +466,6 @@ paths:
                   branchId: 69afecf2a6a0fb6ab38efa36
                   mapLat: 33.5138
                   mapLng: 36.2765
-                  deviceLat: 33.5139
-                  deviceLng: 36.2766
                   pointId: 68020001d2f9b54dd82b7002
                   createdAt: '2026-04-06T09:10:00.000Z'
                 point:
@@ -828,6 +951,17 @@ components:
           type: [string, 'null']
         order:
           type: integer
+    MobilePointClassificationsResponse:
+      type: object
+      properties:
+        primaries:
+          type: array
+          items:
+            $ref: '#/components/schemas/PointClassificationSummary'
+        secondaries:
+          type: array
+          items:
+            $ref: '#/components/schemas/PointClassificationSummary'
     MobileSurveyDetailResponse:
       type: object
       properties:
@@ -897,10 +1031,6 @@ components:
             otherIdentifier: { type: string }
             mapLat: { type: number }
             mapLng: { type: number }
-            deviceLat:
-              type: [number, 'null']
-            deviceLng:
-              type: [number, 'null']
         answers:
           type: array
           description: Ordered or unordered answers mapped by questionId or answerKey

@@ -35,29 +35,99 @@ export interface UpdateSecondaryData {
 }
 
 export class PointClassificationService {
+  private async ensureOrganizationExists(organizationId: string) {
+    const org = await Organization.findById(organizationId).lean();
+    if (!org) throw new Error('المؤسسة غير موجودة');
+    return org;
+  }
+
+  private async resolveBranchScope(branchId: string) {
+    const branch = await Branch.findById(branchId).select('organizationId').lean();
+    if (!branch) throw new Error('الفرع غير موجود');
+
+    return {
+      branch,
+      organizationId: String(branch.organizationId),
+    };
+  }
+
+  async listPrimariesForOrganization(organizationId: string): Promise<any[]> {
+    await connectDB();
+    await this.ensureOrganizationExists(organizationId);
+
+    return PointPrimaryClassification.find({
+      organizationId,
+      branchId: null,
+    })
+      .sort({ order: 1, name: 1 })
+      .lean();
+  }
+
+  async listSecondariesForOrganization(
+    organizationId: string,
+    primaryClassificationId?: string | null
+  ): Promise<any[]> {
+    await connectDB();
+    await this.ensureOrganizationExists(organizationId);
+
+    const normalizedPrimaryId = String(primaryClassificationId || '').trim();
+    const query: Record<string, unknown> = {
+      organizationId,
+      branchId: null,
+    };
+
+    if (normalizedPrimaryId) {
+      query.primaryClassificationId = normalizedPrimaryId;
+    }
+
+    return PointSecondaryClassification.find(query)
+      .sort({ order: 1, name: 1 })
+      .lean();
+  }
+
+  async listPrimariesForBranch(branchId: string): Promise<any[]> {
+    await connectDB();
+
+    const { organizationId } = await this.resolveBranchScope(branchId);
+    return PointPrimaryClassification.find({
+      organizationId,
+      $or: [{ branchId: null }, { branchId }],
+    })
+      .sort({ order: 1, name: 1 })
+      .lean();
+  }
+
+  async listSecondariesForBranch(
+    branchId: string,
+    primaryClassificationId?: string | null
+  ): Promise<any[]> {
+    await connectDB();
+
+    const { organizationId } = await this.resolveBranchScope(branchId);
+    const normalizedPrimaryId = String(primaryClassificationId || '').trim();
+    const query: Record<string, unknown> = {
+      organizationId,
+      $or: [{ branchId: null }, { branchId }],
+    };
+
+    if (normalizedPrimaryId) {
+      query.primaryClassificationId = normalizedPrimaryId;
+    }
+
+    return PointSecondaryClassification.find(query)
+      .sort({ order: 1, name: 1 })
+      .lean();
+  }
+
   /** List org-level classifications only (for org admin management) */
   async listForOrganization(organizationId: string): Promise<{
     primaries: any[];
     secondaries: any[];
   }> {
-    await connectDB();
-
-    const org = await Organization.findById(organizationId).lean();
-    if (!org) throw new Error('المؤسسة غير موجودة');
-
-    const primaries = await PointPrimaryClassification.find({
-      organizationId,
-      branchId: null,
-    })
-      .sort({ order: 1, name: 1 })
-      .lean();
-
-    const secondaries = await PointSecondaryClassification.find({
-      organizationId,
-      branchId: null,
-    })
-      .sort({ order: 1, name: 1 })
-      .lean();
+    const [primaries, secondaries] = await Promise.all([
+      this.listPrimariesForOrganization(organizationId),
+      this.listSecondariesForOrganization(organizationId),
+    ]);
 
     return { primaries, secondaries };
   }
@@ -67,26 +137,10 @@ export class PointClassificationService {
     primaries: any[];
     secondaries: any[];
   }> {
-    await connectDB();
-
-    const branch = await Branch.findById(branchId).select('organizationId').lean();
-    if (!branch) throw new Error('الفرع غير موجود');
-
-    const organizationId = String(branch.organizationId);
-
-    const primaries = await PointPrimaryClassification.find({
-      organizationId,
-      $or: [{ branchId: null }, { branchId }],
-    })
-      .sort({ order: 1, name: 1 })
-      .lean();
-
-    const secondaries = await PointSecondaryClassification.find({
-      organizationId,
-      $or: [{ branchId: null }, { branchId }],
-    })
-      .sort({ order: 1, name: 1 })
-      .lean();
+    const [primaries, secondaries] = await Promise.all([
+      this.listPrimariesForBranch(branchId),
+      this.listSecondariesForBranch(branchId),
+    ]);
 
     return { primaries, secondaries };
   }
@@ -98,9 +152,7 @@ export class PointClassificationService {
     branchId?: string | null
   ): Promise<any> {
     await connectDB();
-
-    const org = await Organization.findById(organizationId).lean();
-    if (!org) throw new Error('المؤسسة غير موجودة');
+    await this.ensureOrganizationExists(organizationId);
 
     if (branchId) {
       const branch = await Branch.findById(branchId).lean();

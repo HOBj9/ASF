@@ -55,8 +55,6 @@ export interface SubmitMobileSurveyData {
     otherIdentifier: string;
     mapLat: number;
     mapLng: number;
-    deviceLat?: number | null;
-    deviceLng?: number | null;
   };
   answers: MobileSurveyAnswerData[];
 }
@@ -400,15 +398,6 @@ export class SurveyService {
     const point = data?.point || ({} as SubmitMobileSurveyData['point']);
     const mapLat = Number(point.mapLat);
     const mapLng = Number(point.mapLng);
-    const deviceLat =
-      point.deviceLat != null && Number.isFinite(Number(point.deviceLat))
-        ? Number(point.deviceLat)
-        : null;
-    const deviceLng =
-      point.deviceLng != null && Number.isFinite(Number(point.deviceLng))
-        ? Number(point.deviceLng)
-        : null;
-
     if (!Number.isFinite(mapLat) || !Number.isFinite(mapLng)) {
       throw createMobileApiError(
         'إحداثيات موقع النقطة مطلوبة',
@@ -465,19 +454,32 @@ export class SurveyService {
       normalizedAnswers[answerKey] = answerItem.value;
     }
 
-    return this.submit(
+    const result = await this.submit(
       surveyId,
       userId,
       organizationId,
       {
         mapLat,
         mapLng,
-        deviceLat,
-        deviceLng,
         answers: normalizedAnswers,
       },
       branchId
     );
+
+    if (result?.submission && typeof result.submission === 'object') {
+      const {
+        deviceLat: _deviceLat,
+        deviceLng: _deviceLng,
+        ...submission
+      } = result.submission as Record<string, unknown>;
+
+      return {
+        ...result,
+        submission,
+      };
+    }
+
+    return result;
   }
 
   /**

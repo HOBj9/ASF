@@ -27,7 +27,7 @@ export interface CreateOrganizationData {
 export interface UpdateOrganizationData {
   name?: string;
   slug?: string;
-  type?: string;
+  type?: string | null;
   labels?: {
     branchLabel?: string;
     pointLabel?: string;
