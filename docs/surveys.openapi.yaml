@@ -180,21 +180,24 @@ paths:
         '500':
           $ref: '#/components/responses/Error500'
 
-  /api/mobile/point-classifications/primary:
+  /api/mobile/point-classifications:
     get:
       tags: [Mobile Surveys]
-      summary: List primary classifications from the authenticated supervisor token
+      summary: Nested primary + secondary point classifications (line supervisor token)
       description: |
-        The API resolves the supervisor organization and branch from `Authorization: Bearer <token>`.
-        The client must not send organizationId or branchId.
-      operationId: listMobilePrimaryPointClassifications
+        Returns `primaries`; each item includes `secondaries` for that primary.
+        Organization and branch are taken from `Authorization: Bearer <token>`.
+        Optional query `primaryClassificationId` returns only the matching primary (with its secondaries).
+      operationId: listMobilePointClassifications
       security:
         - bearerAuth: []
         - sessionCookieAuth: []
         - secureSessionCookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PrimaryClassificationIdQuery'
       responses:
         '200':
-          description: Primary classifications for the authenticated supervisor scope
+          description: Nested classifications for the authenticated supervisor scope
           content:
             application/json:
               schema:
@@ -203,7 +206,7 @@ paths:
                   primaries:
                     type: array
                     items:
-                      $ref: '#/components/schemas/PointClassificationSummary'
+                      $ref: '#/components/schemas/MobilePrimaryClassificationNested'
         '401':
           $ref: '#/components/responses/Error401'
         '403':
@@ -216,39 +219,6 @@ paths:
                 message: لا توجد مؤسسة مرتبطة بحساب مشرف الخط
                 code: MOBILE_ORGANIZATION_NOT_ASSIGNED
                 status: 403
-        '500':
-          $ref: '#/components/responses/Error500'
-
-  /api/mobile/point-classifications/secondary:
-    get:
-      tags: [Mobile Surveys]
-      summary: List secondary classifications from the authenticated supervisor token
-      description: |
-        The API resolves the supervisor organization and branch from the bearer token.
-        Use `primaryClassificationId` to load only the secondaries under one primary classification.
-      operationId: listMobileSecondaryPointClassifications
-      security:
-        - bearerAuth: []
-        - sessionCookieAuth: []
-        - secureSessionCookieAuth: []
-      parameters:
-        - $ref: '#/components/parameters/PrimaryClassificationIdQuery'
-      responses:
-        '200':
-          description: Secondary classifications for the authenticated supervisor scope
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  secondaries:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/PointClassificationSummary'
-        '401':
-          $ref: '#/components/responses/Error401'
-        '403':
-          $ref: '#/components/responses/MobileOrganizationNotAssigned'
         '500':
           $ref: '#/components/responses/Error500'
 
@@ -773,6 +743,16 @@ components:
           type: [string, 'null']
         order:
           type: integer
+    MobilePrimaryClassificationNested:
+      allOf:
+        - $ref: '#/components/schemas/PointClassificationSummary'
+        - type: object
+          required: [secondaries]
+          properties:
+            secondaries:
+              type: array
+              items:
+                $ref: '#/components/schemas/PointClassificationSummary'
     PointClassificationCreateRequest:
       type: object
       required: [name]
@@ -1020,11 +1000,7 @@ components:
                 primaries:
                   type: array
                   items:
-                    $ref: '#/components/schemas/PointClassificationSummary'
-                secondaries:
-                  type: array
-                  items:
-                    $ref: '#/components/schemas/PointClassificationSummary'
+                    $ref: '#/components/schemas/MobilePrimaryClassificationNested'
     MobileSurveySubmitResponse:
       type: object
       properties:

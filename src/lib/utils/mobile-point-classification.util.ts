@@ -94,3 +94,35 @@ export function filterMobileSecondariesByPrimary(
     (item) => String(item.primaryClassificationId || '') === normalizedPrimaryId
   );
 }
+
+/** Primary row plus its secondary classifications (same shape as flat list, nested for convenience). */
+export type MobilePrimaryClassificationNested = MobilePointClassificationItem & {
+  secondaries: MobilePointClassificationItem[];
+};
+
+/**
+ * Group secondaries under their primary classification, ordered by `order`.
+ */
+export function nestMobilePointClassifications(
+  primaries: MobilePointClassificationItem[],
+  secondaries: MobilePointClassificationItem[]
+): MobilePrimaryClassificationNested[] {
+  const byPrimary = new Map<string, MobilePointClassificationItem[]>();
+  for (const s of secondaries) {
+    const pid = String(s.primaryClassificationId || '').trim();
+    if (!pid) continue;
+    if (!byPrimary.has(pid)) byPrimary.set(pid, []);
+    byPrimary.get(pid)!.push(s);
+  }
+  for (const arr of byPrimary.values()) {
+    arr.sort((a, b) => a.order - b.order);
+  }
+
+  return primaries
+    .slice()
+    .sort((a, b) => a.order - b.order)
+    .map((p) => ({
+      ...p,
+      secondaries: byPrimary.get(String(p.id)) ?? [],
+    }));
+}

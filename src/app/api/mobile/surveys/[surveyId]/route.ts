@@ -8,7 +8,10 @@ import {
   handleMobileApiError,
   mobileErrorResponse,
 } from '@/lib/utils/mobile-api-error.util';
-import { listMobilePointClassifications } from '@/lib/utils/mobile-point-classification.util';
+import {
+  listMobilePointClassifications,
+  nestMobilePointClassifications,
+} from '@/lib/utils/mobile-point-classification.util';
 
 const surveyService = new SurveyService();
 const pointClassificationService = new PointClassificationService();
@@ -63,6 +66,10 @@ export async function GET(
       user.organizationId,
       user.branchId
     );
+    const primariesNested = nestMobilePointClassifications(
+      classifications.primaries,
+      classifications.secondaries
+    );
 
     return NextResponse.json({
       survey: {
@@ -93,8 +100,7 @@ export async function GET(
           ],
         },
         classifications: {
-          primaries: classifications.primaries,
-          secondaries: classifications.secondaries,
+          primaries: primariesNested,
         },
       },
     });
