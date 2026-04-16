@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useLabels } from '@/hooks/use-labels';
 import type { VisitLogRow, VisitLogTab } from '@/app/api/visit-log/preview/route';
@@ -76,15 +77,18 @@ export function VisitLogPanel({
   organizationId,
   sessionBranchId,
 }: VisitLogPanelProps) {
+  const searchParams = useSearchParams();
   const { labels } = useLabels();
   const [activeTab, setActiveTab] = useState<VisitLogTab>('visits');
   const [organizations, setOrganizations] = useState<OptionItem[]>([]);
   const [branches, setBranches] = useState<OptionItem[]>([]);
   const [points, setPoints] = useState<OptionItem[]>([]);
+  const [vehicles, setVehicles] = useState<OptionItem[]>([]);
 
   const [selectedOrganizationId, setSelectedOrganizationId] = useState('');
   const [selectedBranchId, setSelectedBranchId] = useState('');
   const [selectedPointId, setSelectedPointId] = useState('');
+  const [selectedVehicleId, setSelectedVehicleId] = useState('');
 
   const todayRange = useMemo(() => getTodayRange(), []);
   const [fromDateTime, setFromDateTime] = useState(todayRange.from);
@@ -95,6 +99,8 @@ export function VisitLogPanel({
   const [loadingPoints, setLoadingPoints] = useState(false);
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [error, setError] = useState('');
+  const [deepLinkApplied, setDeepLinkApplied] = useState(false);
+  const [autoLoadedFromParams, setAutoLoadedFromParams] = useState(false);
 
   const resolvedBranchId = useMemo(() => {
     if (isSystemAdmin || isOrganizationAdmin) return selectedBranchId;
@@ -172,34 +178,87 @@ export function VisitLogPanel({
   useEffect(() => {
     if (!resolvedBranchId) {
       setPoints([]);
+      setVehicles([]);
       setSelectedPointId('');
+      setSelectedVehicleId('');
       return;
     }
     let cancelled = false;
     setLoadingPoints(true);
-    fetch(`/api/points?branchId=${encodeURIComponent(resolvedBranchId)}`)
-      .then((res) => res.json())
-      .then((data) => {
+    Promise.all([
+      fetch(`/api/points?branchId=${encodeURIComponent(resolvedBranchId)}`).then((res) => res.json()),
+      fetch(`/api/vehicles?branchId=${encodeURIComponent(resolvedBranchId)}`).then((res) => res.json()),
+    ])
+      .then(([pointsData, vehiclesData]) => {
         if (cancelled) return;
-        const list = Array.isArray(data?.points) ? data.points : [];
+        const list = Array.isArray(pointsData?.points) ? pointsData.points : [];
+        const vehicleList = Array.isArray(vehiclesData?.vehicles) ? vehiclesData.vehicles : [];
         setPoints(
           list.map((item: any) => ({
             _id: String(item._id),
             name: String(item.nameAr || item.name || item.zoneId || '-'),
           }))
         );
+        setVehicles(
+          vehicleList.map((item: any) => ({
+            _id: String(item._id),
+            name: String(item.name || item.plateNumber || item.imei || labels.vehicleLabel || 'مركبة'),
+          }))
+        );
         setSelectedPointId((current) => (current && list.some((p: any) => String(p._id) === current) ? current : ''));
+        setSelectedVehicleId((current) => (current && vehicleList.some((v: any) => String(v._id) === current) ? current : ''));
       })
       .catch(() => {
-        if (!cancelled) setPoints([]);
+        if (!cancelled) {
+          setPoints([]);
+          setVehicles([]);
+        }
       })
       .finally(() => {
         if (!cancelled) setLoadingPoints(false);
       });
     return () => { cancelled = true; };
-  }, [resolvedBranchId]);
+  }, [labels.vehicleLabel, resolvedBranchId]);
 
-  function buildRequestParams(page: number): URLSearchParams {
+  useEffect(() => {
+    if (deepLinkApplied) return;
+
+    const organizationParam = searchParams.get('organizationId') || '';
+    const branchParam = searchParams.get('branchId') || '';
+    const pointParam = searchParams.get('pointId') || '';
+    const vehicleParam = searchParams.get('vehicleId') || '';
+    const tabParam = searchParams.get('tab') as VisitLogTab | null;
+    const fromParam = searchParams.get('from') || '';
+    const toParam = searchParams.get('to') || '';
+
+    if (isSystemAdmin && organizationParam) {
+      setSelectedOrganizationId(organizationParam);
+    }
+
+    if ((isSystemAdmin || isOrganizationAdmin) && branchParam) {
+      setSelectedBranchId(branchParam);
+    }
+
+    if (pointParam) setSelectedPointId(pointParam);
+    if (vehicleParam) setSelectedVehicleId(vehicleParam);
+    if (tabParam && TAB_OPTIONS.some((option) => option.value === tabParam)) {
+      setActiveTab(tabParam);
+    }
+
+    if (fromParam) {
+      const parsedFrom = new Date(fromParam);
+      if (!Number.isNaN(parsedFrom.getTime())) setFromDateTime(toLocalDateTimeInput(parsedFrom));
+    }
+
+    if (toParam) {
+      const parsedTo = new Date(toParam);
+      if (!Number.isNaN(parsedTo.getTime())) setToDateTime(toLocalDateTimeInput(parsedTo));
+    }
+
+    setDeepLinkApplied(true);
+  }, [deepLinkApplied, isOrganizationAdmin, isSystemAdmin, searchParams]);
+
+  const buildRequestParams = useCallback((page: number): URLSearchParams => {
     const params = new URLSearchParams();
     if (resolvedBranchId) params.set('branchId', resolvedBranchId);
     params.set('from', fromDateTime);
@@ -208,15 +267,16 @@ export function VisitLogPanel({
     params.set('page', String(page));
     params.set('pageSize', String(PAGE_SIZE));
     if (selectedPointId) params.set('pointId', selectedPointId);
+    if (selectedVehicleId) params.set('vehicleId', selectedVehicleId);
     return params;
-  }
+  }, [activeTab, fromDateTime, resolvedBranchId, selectedPointId, selectedVehicleId, toDateTime]);
 
-  function validateScope(): string | null {
+  const validateScope = useCallback((): string | null => {
     if (!resolvedBranchId) return 'يرجى تحديد الفرع';
     return null;
-  }
+  }, [resolvedBranchId]);
 
-  async function loadPreview(page: number): Promise<void> {
+  const loadPreview = useCallback(async (page: number): Promise<void> => {
     const scopeError = validateScope();
     if (scopeError) {
       setError(scopeError);
@@ -246,7 +306,20 @@ export function VisitLogPanel({
     } finally {
       setLoadingPreview(false);
     }
-  }
+  }, [buildRequestParams, fromDateTime, toDateTime, validateScope]);
+
+  useEffect(() => {
+    if (autoLoadedFromParams || !deepLinkApplied || !resolvedBranchId || loadingScopeOptions || loadingPoints || loadingPreview) return;
+    const hasDeepLinkTarget =
+      Boolean(searchParams.get('vehicleId')) ||
+      Boolean(searchParams.get('pointId')) ||
+      Boolean(searchParams.get('from')) ||
+      Boolean(searchParams.get('to')) ||
+      Boolean(searchParams.get('tab'));
+    if (!hasDeepLinkTarget) return;
+    setAutoLoadedFromParams(true);
+    void loadPreview(1);
+  }, [autoLoadedFromParams, deepLinkApplied, loadPreview, loadingPoints, loadingPreview, loadingScopeOptions, resolvedBranchId, searchParams]);
 
   const exportUrl = (() => {
     if (validateScope()) return '';
@@ -372,6 +445,24 @@ export function VisitLogPanel({
             <option value="">الكل</option>
             {points.map((p) => (
               <option key={p._id} value={p._id}>{p.name}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-sm">{labels.vehicleLabel || 'المركبة'} (اختياري)</label>
+          <select
+            value={selectedVehicleId}
+            onChange={(e) => {
+              setSelectedVehicleId(e.target.value);
+              setPreview(null);
+            }}
+            className="w-full rounded-lg border bg-background px-3 py-2"
+            disabled={loadingPoints || !resolvedBranchId}
+          >
+            <option value="">الكل</option>
+            {vehicles.map((vehicle) => (
+              <option key={vehicle._id} value={vehicle._id}>{vehicle.name}</option>
             ))}
           </select>
         </div>

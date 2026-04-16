@@ -342,6 +342,11 @@ export type MapEventItem = {
   pointId?: string;
 };
 
+type TrackingSelection = {
+  type: "vehicle" | "event" | null;
+  id: string | null;
+};
+
 type VehicleHistoryTrackPoint = {
   provider: LiveVehicle["provider"];
   source: "tracking_sample" | "athar_route";
@@ -403,6 +408,13 @@ export function MunicipalityMap({
   eventsHasMore = false,
   eventsLoadingMore = false,
   eventsLoadMoreSentinelRef,
+  trackingSource = "all",
+  trackingSourceLabel,
+  reportsBranchId = null,
+  reportsOrganizationId = null,
+  defaultRightPanel = null,
+  fixedLiveProviderFilter = "all",
+  onTrackingSelectionChange,
 }: {
   municipality: MunicipalityInfo | null;
   liveVehicles?: LiveVehicle[];
@@ -428,15 +440,22 @@ export function MunicipalityMap({
   eventsHasMore?: boolean;
   eventsLoadingMore?: boolean;
   eventsLoadMoreSentinelRef?: React.MutableRefObject<HTMLDivElement | null>;
+  trackingSource?: LiveVehicle["provider"] | "all";
+  trackingSourceLabel?: string;
+  reportsBranchId?: string | null;
+  reportsOrganizationId?: string | null;
+  defaultRightPanel?: Exclude<RightPanelType, null> | null;
+  fixedLiveProviderFilter?: LiveVehicle["provider"] | "all";
+  onTrackingSelectionChange?: (selection: TrackingSelection) => void;
 }) {
   const [fullscreenOpen, setFullscreenOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [rightPanel, setRightPanel] = useState<RightPanelType>(null);
-  const [lastOpenedPanel, setLastOpenedPanel] = useState<Exclude<RightPanelType, null>>("system-points");
+  const [rightPanel, setRightPanel] = useState<RightPanelType>(defaultRightPanel);
+  const [lastOpenedPanel, setLastOpenedPanel] = useState<Exclude<RightPanelType, null>>(defaultRightPanel || "system-points");
   const [showVehicleNamesOnMap, setShowVehicleNamesOnMap] = useState(true);
   const [atharCarsSearchQuery, setAtharCarsSearchQuery] = useState("");
   const [liveVehiclesSearchQuery, setLiveVehiclesSearchQuery] = useState("");
-  const [liveProviderFilter, setLiveProviderFilter] = useState<LiveVehicle["provider"] | "all">("all");
+  const [liveProviderFilter, setLiveProviderFilter] = useState<LiveVehicle["provider"] | "all">(fixedLiveProviderFilter);
   const [liveStatusFilter, setLiveStatusFilter] = useState<LiveVehicle["status"] | "all">("all");
   const [historyVehicleId, setHistoryVehicleId] = useState<string | null>(null);
   const [historyFrom, setHistoryFrom] = useState(() => createDefaultHistoryFromInput());
@@ -456,6 +475,7 @@ export function MunicipalityMap({
   const [selectedPoint, setSelectedPoint] = useState<MapPoint | null>(null);
   const [selectedMarker, setSelectedMarker] = useState<AtharMarker | null>(null);
   const [selectedZone, setSelectedZone] = useState<MapZone | null>(null);
+  const [selectedEventItem, setSelectedEventItem] = useState<MapEventItem | null>(null);
   const [trackingObjectId, setTrackingObjectId] = useState<string | null>(null);
   const trackingLastPosRef = useRef<{ lat: number; lng: number } | null>(null);
   const [layersVisibleLimit, setLayersVisibleLimit] = useState(MAP_LAYER_BATCH_SIZE);
@@ -476,6 +496,20 @@ export function MunicipalityMap({
     setHistoryPlaybackIndex(0);
     setHistoryPlaybackPlaying(false);
   }, [municipality?._id]);
+
+  useEffect(() => {
+    setLiveProviderFilter(fixedLiveProviderFilter);
+  }, [fixedLiveProviderFilter]);
+
+  useEffect(() => {
+    if (!defaultRightPanel) return;
+    setRightPanel(defaultRightPanel);
+    setLastOpenedPanel(defaultRightPanel);
+  }, [defaultRightPanel]);
+
+  useEffect(() => {
+    setSelectedEventItem(null);
+  }, [municipality?._id, trackingSource]);
 
   const liveVehicleInventory = useMemo(
     () => liveVehicles.filter((v) => Array.isArray(v.coordinates) && v.coordinates.length === 2),
@@ -602,6 +636,33 @@ export function MunicipalityMap({
     );
   }, [liveVehiclesSearchQuery, visibleLiveVehicles]);
 
+  const selectedLiveVehicle = useMemo(() => {
+    const selectedId = historyTrack?.vehicle.id || historyVehicleId;
+    if (!selectedId) return null;
+    return liveVehicleInventory.find((vehicle) => vehicle.id === selectedId) || null;
+  }, [historyTrack, historyVehicleId, liveVehicleInventory]);
+
+  const normalizeLookupText = useCallback((value?: string | null) => {
+    return (value || "").trim().toLowerCase();
+  }, []);
+
+  const selectedEventVehicle = useMemo(() => {
+    if (!selectedEventItem?.vehicleName) return null;
+    const target = normalizeLookupText(selectedEventItem.vehicleName);
+    if (!target) return null;
+    return (
+      liveVehicleInventory.find((vehicle) => {
+        const names = [
+          vehicle.vehicleName,
+          vehicle.busNumber,
+          vehicle.plateNumber,
+          vehicle.driverName,
+        ].map((value) => normalizeLookupText(value));
+        return names.some((candidate) => candidate && (candidate === target || candidate.includes(target) || target.includes(candidate)));
+      }) || null
+    );
+  }, [liveVehicleInventory, normalizeLookupText, selectedEventItem?.vehicleName]);
+
   const activeHistoryVehicle = useMemo(() => {
     const candidateId = historyTrack?.vehicle.id || historyVehicleId;
     if (!candidateId) return null;
@@ -614,7 +675,67 @@ export function MunicipalityMap({
     return historyTrack.points[safeIndex] || null;
   }, [historyPlaybackIndex, historyTrack]);
 
+  const reportTimeRange = useMemo(() => {
+    const fromValue = historyFrom ? new Date(historyFrom) : null;
+    const toValue = historyTo ? new Date(historyTo) : null;
+    const now = new Date();
+    const defaultFrom = new Date(now);
+    defaultFrom.setHours(0, 0, 0, 0);
+    const defaultTo = new Date(now);
+    defaultTo.setHours(23, 59, 59, 999);
+    return {
+      from: fromValue && !Number.isNaN(fromValue.getTime()) ? fromValue.toISOString() : defaultFrom.toISOString(),
+      to: toValue && !Number.isNaN(toValue.getTime()) ? toValue.toISOString() : defaultTo.toISOString(),
+    };
+  }, [historyFrom, historyTo]);
+
+  const buildTrackingLink = useCallback((pathname: string, params: Record<string, string | null | undefined>) => {
+    const searchParams = new URLSearchParams();
+    if (reportsOrganizationId) searchParams.set("organizationId", reportsOrganizationId);
+    if (reportsBranchId) searchParams.set("branchId", reportsBranchId);
+    if (trackingSource !== "all") searchParams.set("source", trackingSource);
+    searchParams.set("from", reportTimeRange.from);
+    searchParams.set("to", reportTimeRange.to);
+    Object.entries(params).forEach(([key, value]) => {
+      if (value) searchParams.set(key, value);
+    });
+    return `${pathname}?${searchParams.toString()}`;
+  }, [reportTimeRange.from, reportTimeRange.to, reportsBranchId, reportsOrganizationId, trackingSource]);
+
+  const getVehicleReportsHref = useCallback((vehicleId: string) => {
+    return buildTrackingLink("/dashboard/event-reports", { vehicleId });
+  }, [buildTrackingLink]);
+
+  const getVehicleVisitLogHref = useCallback((vehicleId: string) => {
+    return buildTrackingLink("/dashboard/visit-log", { vehicleId, tab: "visits" });
+  }, [buildTrackingLink]);
+
+  const getVehicleGeneralReportHref = useCallback((vehicleId: string) => {
+    return buildTrackingLink("/dashboard/reports", { vehicleId, period: "custom" });
+  }, [buildTrackingLink]);
+
+  const getPointEventReportHref = useCallback((pointId: string) => {
+    return buildTrackingLink("/dashboard/event-reports", { pointId });
+  }, [buildTrackingLink]);
+
+  const getPointVisitLogHref = useCallback((pointId: string) => {
+    return buildTrackingLink("/dashboard/visit-log", { pointId, tab: "visits" });
+  }, [buildTrackingLink]);
+
   const isHistoryViewMode = activeTab === "live" && liveDisplayMode === "history" && !!historyTrack?.points?.length;
+
+  useEffect(() => {
+    if (!onTrackingSelectionChange) return;
+    if (selectedEventItem?._id) {
+      onTrackingSelectionChange({ type: "event", id: selectedEventItem._id });
+      return;
+    }
+    if (selectedLiveVehicle?.id) {
+      onTrackingSelectionChange({ type: "vehicle", id: selectedLiveVehicle.id });
+      return;
+    }
+    onTrackingSelectionChange({ type: null, id: null });
+  }, [onTrackingSelectionChange, selectedEventItem?._id, selectedLiveVehicle?.id]);
 
   useEffect(() => {
     if (focusPointId && points.length > 0) {
@@ -759,6 +880,8 @@ export function MunicipalityMap({
     if (!vehicle || !Array.isArray(vehicle.coordinates) || vehicle.coordinates.length !== 2) return;
     setLiveDisplayMode("fleet");
     setHistoryPlaybackPlaying(false);
+    setHistoryVehicleId(vehicle.id);
+    setSelectedEventItem(null);
     showPanel("live");
     onTabChange("live");
     if (mapRef.current) {
@@ -770,6 +893,7 @@ export function MunicipalityMap({
     if (!mapRef.current || filteredLiveVehicles.length === 0) return;
     setLiveDisplayMode("fleet");
     setHistoryPlaybackPlaying(false);
+    setSelectedEventItem(null);
     const bounds = L.latLngBounds(filteredLiveVehicles.map((vehicle) => vehicle.coordinates as [number, number]));
     mapRef.current.fitBounds(bounds, { padding: [36, 36], maxZoom: 16 });
   }, [filteredLiveVehicles]);
@@ -1645,6 +1769,13 @@ export function MunicipalityMap({
                     </div>
                   </div>
 
+                  {trackingSource !== "all" ? (
+                    <div className="rounded-lg border border-dashed px-3 py-2 text-[11px] text-muted-foreground">
+                      {`أنت الآن داخل مساحة ${trackingSourceLabel || liveProviderFilterLabels[trackingSource]} فقط. ابدأ من قائمة المركبات، ثم افتح السجل أو التقرير المناسب من نفس البطاقة.`}
+                    </div>
+                  ) : null}
+
+                  {fixedLiveProviderFilter === "all" ? (
                   <div className="space-y-2 rounded-xl border p-3">
                     <div className="text-xs font-medium text-muted-foreground">فلتر المصدر</div>
                     <div className="flex flex-wrap gap-1.5">
@@ -1669,6 +1800,7 @@ export function MunicipalityMap({
                       ))}
                     </div>
                   </div>
+                  ) : null}
 
                   <div className="space-y-2 rounded-xl border p-3">
                     <div className="text-xs font-medium text-muted-foreground">فلتر الحالة</div>
@@ -1930,6 +2062,40 @@ export function MunicipalityMap({
                     ) : null}
                   </div>
 
+                  {selectedLiveVehicle ? (
+                    <div className="rounded-xl border border-dashed p-3 text-xs">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="space-y-1 text-right">
+                          <div className="font-semibold">{selectedLiveVehicle.vehicleName || selectedLiveVehicle.busNumber}</div>
+                          <div className="text-muted-foreground">
+                            {selectedLiveVehicle.providerLabel} • {statusLabel[selectedLiveVehicle.status]} • {selectedLiveVehicle.lastUpdate}
+                          </div>
+                        </div>
+                        <span
+                          className="inline-block h-2.5 w-2.5 rounded-full"
+                          style={{ backgroundColor: getLiveProviderColor(selectedLiveVehicle.provider) }}
+                        />
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <Button size="sm" className="h-8" onClick={() => focusOnLiveVehicle(selectedLiveVehicle)}>
+                          تركيز على الخريطة
+                        </Button>
+                        <Button size="sm" variant="outline" className="h-8" onClick={() => void loadVehicleHistory(selectedLiveVehicle)}>
+                          عرض سجل الحركة
+                        </Button>
+                        <Button size="sm" variant="outline" className="h-8" asChild>
+                          <Link href={getVehicleReportsHref(selectedLiveVehicle.id)}>فتح تقرير الأحداث</Link>
+                        </Button>
+                        <Button size="sm" variant="outline" className="h-8" asChild>
+                          <Link href={getVehicleVisitLogHref(selectedLiveVehicle.id)}>فتح سجل الزيارات</Link>
+                        </Button>
+                        <Button size="sm" variant="ghost" className="h-8" asChild>
+                          <Link href={getVehicleGeneralReportHref(selectedLiveVehicle.id)}>التقرير العام</Link>
+                        </Button>
+                      </div>
+                    </div>
+                  ) : null}
+
                   <div className="max-h-[540px] space-y-2 overflow-y-auto">
                     {filteredLiveVehicles.map((vehicle) => (
                       <div
@@ -2093,6 +2259,45 @@ export function MunicipalityMap({
                     )}
                   </div>
                   <div className="space-y-3">
+                    {selectedEventItem ? (
+                      <div className="rounded-xl border border-dashed p-3 text-xs">
+                        <div className="space-y-1 text-right">
+                          <div className="font-semibold">{selectedEventItem.displayText || selectedEventItem.pointName || selectedEventItem.name || "حدث"}</div>
+                          <div className="text-muted-foreground">
+                            {selectedEventItem.eventTimestamp || "بدون وقت"} {selectedEventItem.vehicleName ? `• ${selectedEventItem.vehicleName}` : ""}
+                          </div>
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <Button
+                            size="sm"
+                            className="h-8"
+                            onClick={() => {
+                              showPanel("events");
+                              onTabChange("points");
+                              onEventClick?.(selectedEventItem);
+                            }}
+                          >
+                            اذهب للنقطة
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-8"
+                            onClick={() => selectedEventVehicle && focusOnLiveVehicle(selectedEventVehicle)}
+                            disabled={!selectedEventVehicle}
+                          >
+                            افتح المركبة المرتبطة
+                          </Button>
+                          <Button size="sm" variant="outline" className="h-8" asChild>
+                            <Link href={getPointEventReportHref(selectedEventItem.pointId || focusPointId || "")}>فتح تقرير الأحداث</Link>
+                          </Button>
+                          <Button size="sm" variant="outline" className="h-8" asChild>
+                            <Link href={getPointVisitLogHref(selectedEventItem.pointId || focusPointId || "")}>فتح سجل الزيارات</Link>
+                          </Button>
+                        </div>
+                      </div>
+                    ) : null}
+
                     {filteredEvents.length === 0 && (
                       <div className="text-sm text-muted-foreground">
                         {events.length === 0 ? "لا توجد أحداث حالياً." : "لا توجد نتائج للبحث."}
@@ -2104,6 +2309,7 @@ export function MunicipalityMap({
                         role="button"
                         tabIndex={0}
                         onClick={() => {
+                          setSelectedEventItem(event);
                           showPanel("events");
                           onTabChange("points");
                           onEventClick?.(event);
@@ -2111,6 +2317,7 @@ export function MunicipalityMap({
                         onKeyDown={(e) => {
                           if (e.key !== "Enter" && e.key !== " ") return;
                           e.preventDefault();
+                          setSelectedEventItem(event);
                           showPanel("events");
                           onTabChange("points");
                           onEventClick?.(event);

@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { MultiSelectWithSearch } from '@/components/ui/multi-select-with-search';
 import { useLabels } from '@/hooks/use-labels';
@@ -69,6 +70,7 @@ export function EventReportsPanel({
   organizationId,
   sessionBranchId,
 }: EventReportsPanelProps) {
+  const searchParams = useSearchParams();
   const { labels } = useLabels();
   const [activeTab, setActiveTab] = useState<ActiveTab>('vehicle');
   const [organizations, setOrganizations] = useState<OptionItem[]>([]);
@@ -90,6 +92,8 @@ export function EventReportsPanel({
   const [loadingReportOptions, setLoadingReportOptions] = useState(false);
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [error, setError] = useState('');
+  const [deepLinkApplied, setDeepLinkApplied] = useState(false);
+  const [autoLoadedFromParams, setAutoLoadedFromParams] = useState(false);
 
   const resolvedBranchId = useMemo(() => {
     if (isSystemAdmin || isOrganizationAdmin) return selectedBranchId;
@@ -268,7 +272,51 @@ export function EventReportsPanel({
     };
   }, [resolvedBranchId, labels.pointLabel, labels.vehicleLabel]);
 
-  function validateScope(): string | null {
+  useEffect(() => {
+    if (deepLinkApplied) return;
+
+    const organizationParam = searchParams.get('organizationId') || '';
+    const branchParam = searchParams.get('branchId') || '';
+    const vehicleId = searchParams.get('vehicleId') || '';
+    const pointId = searchParams.get('pointId') || '';
+    const vehicleIds = searchParams.getAll('vehicleIds');
+    const pointIds = searchParams.getAll('pointIds');
+    const fromParam = searchParams.get('from') || '';
+    const toParam = searchParams.get('to') || '';
+
+    if (isSystemAdmin && organizationParam) {
+      setSelectedOrganizationId(organizationParam);
+    }
+
+    if ((isSystemAdmin || isOrganizationAdmin) && branchParam) {
+      setSelectedBranchId(branchParam);
+    }
+
+    const resolvedVehicleIds = vehicleIds.length > 0 ? vehicleIds : vehicleId ? [vehicleId] : [];
+    const resolvedPointIds = pointIds.length > 0 ? pointIds : pointId ? [pointId] : [];
+
+    if (resolvedVehicleIds.length > 0) {
+      setActiveTab('vehicle');
+      setSelectedVehicleIds(resolvedVehicleIds);
+    } else if (resolvedPointIds.length > 0) {
+      setActiveTab('point');
+      setSelectedPointIds(resolvedPointIds);
+    }
+
+    if (fromParam) {
+      const parsedFrom = new Date(fromParam);
+      if (!Number.isNaN(parsedFrom.getTime())) setFromDateTime(toLocalDateTimeInput(parsedFrom));
+    }
+
+    if (toParam) {
+      const parsedTo = new Date(toParam);
+      if (!Number.isNaN(parsedTo.getTime())) setToDateTime(toLocalDateTimeInput(parsedTo));
+    }
+
+    setDeepLinkApplied(true);
+  }, [deepLinkApplied, isOrganizationAdmin, isSystemAdmin, searchParams]);
+
+  const validateScope = useCallback((): string | null => {
     if (isSystemAdmin) {
       if (!selectedOrganizationId) return 'يرجى اختيار المؤسسة';
       if (!selectedBranchId) return 'يرجى اختيار الفرع';
@@ -284,9 +332,9 @@ export function EventReportsPanel({
     }
 
     return null;
-  }
+  }, [isOrganizationAdmin, isSystemAdmin, selectedBranchId, selectedOrganizationId, sessionBranchId]);
 
-  function buildRequestParams(page: number): URLSearchParams {
+  const buildRequestParams = useCallback((page: number): URLSearchParams => {
     const params = new URLSearchParams();
 
     if (isSystemAdmin && selectedOrganizationId) {
@@ -314,9 +362,9 @@ export function EventReportsPanel({
     }
 
     return params;
-  }
+  }, [activeTab, fromDateTime, isSystemAdmin, resolvedBranchId, selectedOrganizationId, selectedPointIds, selectedVehicleIds, toDateTime]);
 
-  async function loadPreview(page = 1): Promise<void> {
+  const loadPreview = useCallback(async (page = 1): Promise<void> => {
     const scopeValidationError = validateScope();
     if (scopeValidationError) {
       setError(scopeValidationError);
@@ -364,7 +412,52 @@ export function EventReportsPanel({
     } finally {
       setLoadingPreview(false);
     }
-  }
+  }, [
+    activeTab,
+    buildRequestParams,
+    fromDateTime,
+    labels.pointLabel,
+    labels.vehicleLabel,
+    selectedPointIds,
+    selectedVehicleIds,
+    toDateTime,
+    validateScope,
+  ]);
+
+  useEffect(() => {
+    if (
+      autoLoadedFromParams ||
+      !deepLinkApplied ||
+      !resolvedBranchId ||
+      loadingScopeOptions ||
+      loadingReportOptions ||
+      loadingPreview
+    ) {
+      return;
+    }
+
+    const hasDeepLinkTarget =
+      Boolean(searchParams.get('vehicleId')) ||
+      Boolean(searchParams.get('pointId')) ||
+      searchParams.getAll('vehicleIds').length > 0 ||
+      searchParams.getAll('pointIds').length > 0 ||
+      Boolean(searchParams.get('from')) ||
+      Boolean(searchParams.get('to'));
+
+    if (!hasDeepLinkTarget) return;
+
+    setAutoLoadedFromParams(true);
+    void loadPreview(1);
+  }, [
+    autoLoadedFromParams,
+    deepLinkApplied,
+    loadPreview,
+    loadingPreview,
+    loadingReportOptions,
+    loadingScopeOptions,
+    resolvedBranchId,
+    searchParams,
+  ]);
 
   const exportUrl = (() => {
     const scopeValidationError = validateScope();

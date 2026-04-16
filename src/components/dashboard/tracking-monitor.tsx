@@ -12,6 +12,7 @@ import { useOrganizations } from "@/hooks/queries/use-organizations"
 import { isAdmin, isOrganizationAdmin } from "@/lib/permissions"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { ConfirmationDialog } from "@/components/ui/confirmation-dialog"
 import { Loading } from "@/components/ui/loading"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -27,6 +28,7 @@ const MunicipalityMap = dynamic(
 
 type TrackingProvider = "athar" | "mobile_app" | "traccar"
 type TrackingConnectivityStatus = "moving" | "stopped" | "offline"
+type TrackingSourceView = TrackingProvider | "overview"
 type TrackingIngressStatus =
   | "processed"
   | "duplicate"
@@ -34,6 +36,10 @@ type TrackingIngressStatus =
   | "rejected"
   | "error"
   | "received"
+type TrackingSelection = {
+  type: "vehicle" | "event" | null
+  id: string | null
+}
 
 type OrganizationOption = {
   _id: string
@@ -153,6 +159,9 @@ type BranchTrackingExperience = {
   liveVehicles: Record<string, any>[]
 }
 
+const TRACKING_SOURCE_STORAGE_KEY = "tracking-monitor-source-view"
+const TRACKING_PROVIDERS: TrackingProvider[] = ["athar", "mobile_app", "traccar"]
+
 function getProviderLabel(provider: TrackingProvider) {
   if (provider === "mobile_app") return "تطبيق الموبايل"
   if (provider === "traccar") return "تراكار"
@@ -229,20 +238,46 @@ async function fetchJson<T>(url: string): Promise<T> {
   return payload as T
 }
 
+function getSourceViewLabel(sourceView: TrackingSourceView) {
+  if (sourceView === "mobile_app") return "تتبع GPS"
+  if (sourceView === "traccar") return "تتبع Traccar"
+  if (sourceView === "athar") return "تتبع أثر"
+  return "مركز المراقبة"
+}
+
+function getSourceViewDescription(sourceView: TrackingSourceView) {
+  if (sourceView === "athar") {
+    return "لوحة تشغيلية تركز على مركبات أثر، مع الانتقال السريع من المركبة إلى التفاصيل ثم التقارير المرتبطة."
+  }
+  if (sourceView === "mobile_app") {
+    return "عرض مباشر لمركبات GPS الموبايل مع سجل الحركة، حالة الاتصال، والجهاز والتطبيق عند توفرهما."
+  }
+  if (sourceView === "traccar") {
+    return "عرض مباشر لمركبات Traccar مع نفس رحلة المشغل: مباشر الآن، ثم تفاصيل، ثم التقارير."
+  }
+  return "مساحة إدارية تعرض الصورة الشاملة للربوط، الرسائل الواردة، وحالة المزودات ضمن النطاق الحالي."
+}
+
 export function TrackingMonitor() {
   const { data: session } = useSession()
   const { labels } = useLabels()
 
   const [selectedOrganizationId, setSelectedOrganizationId] = useState("")
   const [selectedBranchId, setSelectedBranchId] = useState("")
-  const [activeTab, setActiveTab] = useState("map")
+  const [sourceView, setSourceView] = useState<TrackingSourceView>("overview")
+  const [sourceViewInitialized, setSourceViewInitialized] = useState(false)
+  const [overviewTab, setOverviewTab] = useState("map")
   const [mapTab, setMapTab] = useState<MapTab>("live")
   const [loading, setLoading] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [revokingBindingId, setRevokingBindingId] = useState<string | null>(null)
+  const [bindingToRevoke, setBindingToRevoke] = useState<string | null>(null)
   const [overview, setOverview] = useState<OverviewResponse | null>(null)
   const [branchExperience, setBranchExperience] = useState<BranchTrackingExperience | null>(null)
   const [branchExperienceLoading, setBranchExperienceLoading] = useState(false)
+  const [trackingSelection, setTrackingSelection] = useState<TrackingSelection>({ type: null, id: null })
+  const activeTab = overviewTab
+  const setActiveTab = setOverviewTab
 
   const userIsAdmin = useMemo(() => isAdmin(session?.user?.role as any), [session?.user?.role])
   const userIsOrgAdmin = useMemo(
@@ -448,6 +483,17 @@ export function TrackingMonitor() {
     [loadBranchExperience, loadOverview, resolvedBranchId],
   )
 
+  const confirmBindingRevoke = useCallback(async () => {
+    if (!bindingToRevoke) return
+    await handleRevokeBinding(bindingToRevoke)
+    setBindingToRevoke(null)
+  }, [bindingToRevoke, handleRevokeBinding])
+
+  const selectedBindingToRevoke = useMemo(
+    () => overview?.bindings.find((binding) => binding._id === bindingToRevoke) || null,
+    [bindingToRevoke, overview?.bindings],
+  )
+
   const manualRefresh = useCallback(async () => {
     setRefreshing(true)
     try {
@@ -477,6 +523,644 @@ export function TrackingMonitor() {
     return Object.values(overview.summary.activeBindingCounts).reduce((sum, value) => sum + value, 0)
   }, [overview])
 
+  const sourceAvailability = useMemo(() => {
+    return TRACKING_PROVIDERS.reduce(
+      (acc, provider) => {
+        const liveCount = overview?.liveVehicles.filter((item) => item.provider === provider).length || 0
+        acc[provider] =
+          liveCount > 0 ||
+          (overview?.summary.providerVehicleCounts[provider] || 0) > 0 ||
+          (overview?.summary.activeBindingCounts[provider] || 0) > 0 ||
+          (overview?.summary.providerEnabledBranches[provider] || 0) > 0
+        return acc
+      },
+      { athar: false, mobile_app: false, traccar: false } as Record<TrackingProvider, boolean>,
+    )
+  }, [overview])
+
+  const defaultSourceView = useMemo<TrackingSourceView>(() => {
+    for (const provider of TRACKING_PROVIDERS) {
+      if (sourceAvailability[provider]) {
+        return provider
+      }
+    }
+    return "overview"
+  }, [sourceAvailability])
+
+  const sourceMetrics = useMemo(() => {
+    return TRACKING_PROVIDERS.reduce(
+      (acc, provider) => {
+        const liveItems = overview?.liveVehicles.filter((item) => item.provider === provider) || []
+        acc[provider] = {
+          liveItems,
+          totalVehicles: overview?.summary.providerVehicleCounts[provider] || 0,
+          activeBindings: overview?.summary.activeBindingCounts[provider] || 0,
+          primaryBindings: overview?.summary.primaryBindingCounts[provider] || 0,
+          enabledBranches: overview?.summary.providerEnabledBranches[provider] || 0,
+          moving: liveItems.filter((item) => item.connectivityStatus === "moving").length,
+          stopped: liveItems.filter((item) => item.connectivityStatus === "stopped").length,
+          offline: liveItems.filter((item) => item.connectivityStatus === "offline").length,
+        }
+        return acc
+      },
+      {} as Record<
+        TrackingProvider,
+        {
+          liveItems: OverviewResponse["liveVehicles"]
+          totalVehicles: number
+          activeBindings: number
+          primaryBindings: number
+          enabledBranches: number
+          moving: number
+          stopped: number
+          offline: number
+        }
+      >,
+    )
+  }, [overview])
+
+  useEffect(() => {
+    setSourceViewInitialized(false)
+  }, [resolvedBranchId, resolvedOrganizationId])
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !overview || sourceViewInitialized) return
+
+    const storedSourceView = window.localStorage.getItem(TRACKING_SOURCE_STORAGE_KEY) as TrackingSourceView | null
+    const nextSourceView =
+      storedSourceView &&
+      (storedSourceView === "overview" || sourceAvailability[storedSourceView as TrackingProvider])
+        ? storedSourceView
+        : defaultSourceView
+
+    setSourceView(nextSourceView)
+    setSourceViewInitialized(true)
+  }, [defaultSourceView, overview, sourceAvailability, sourceViewInitialized])
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    window.localStorage.setItem(TRACKING_SOURCE_STORAGE_KEY, sourceView)
+  }, [sourceView])
+
+  useEffect(() => {
+    if (sourceView !== "overview" && !sourceAvailability[sourceView]) {
+      setSourceView(defaultSourceView)
+    }
+  }, [defaultSourceView, sourceAvailability, sourceView])
+
+  useEffect(() => {
+    if (sourceView !== "athar" && mapTab === "objects") {
+      setMapTab("live")
+    }
+  }, [mapTab, sourceView])
+
+  const renderSourceWorkspace = useCallback(
+    (provider: TrackingProvider) => {
+      const metrics = sourceMetrics[provider]
+      const branchLiveVehicles = (branchExperience?.liveVehicles || []).filter(
+        (item: any) => item?.provider === provider,
+      )
+
+      if (!resolvedBranchId) {
+        return (
+          <EmptyState
+            text={`اختر ${labels.branchLabel || "الفرع"} الواحد الذي تريد متابعته لفتح ${getSourceViewLabel(provider)} بخريطة مباشرة ولوحة تفاصيل واضحة.`}
+          />
+        )
+      }
+
+      if (branchExperienceLoading && !branchExperience) {
+        return <Loading text={`جارٍ تجهيز ${getSourceViewLabel(provider)}...`} />
+      }
+
+      if (!branchExperience?.branch) {
+        return <EmptyState text={`تعذر تحميل بيانات ${getSourceViewLabel(provider)} لهذا النطاق.`} />
+      }
+
+      return (
+        <div className="space-y-4">
+          <Card>
+            <CardContent className="space-y-3 p-4">
+              <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+                <div className="space-y-1">
+                  <div className="text-base font-semibold">{getSourceViewLabel(provider)}</div>
+                  <p className="text-sm text-muted-foreground">{getSourceViewDescription(provider)}</p>
+                </div>
+                <div className="rounded-full bg-primary/10 px-3 py-1 text-xs text-primary">
+                  {metrics.enabledBranches} فرع مفعّل
+                </div>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <SummaryCard
+                  title={`مركبات ${getProviderLabel(provider)}`}
+                  value={metrics.totalVehicles}
+                  subtitle="ضمن النطاق الحالي"
+                  icon={Truck}
+                />
+                <SummaryCard
+                  title="ربوط نشطة"
+                  value={metrics.activeBindings}
+                  subtitle={`ربوط أساسية: ${metrics.primaryBindings}`}
+                  icon={Link2}
+                />
+                <SummaryCard
+                  title="تتبع مباشر"
+                  value={metrics.liveItems.length}
+                  subtitle={`متحركة: ${metrics.moving} | متوقفة: ${metrics.stopped}`}
+                  icon={Activity}
+                />
+                <SummaryCard
+                  title="تحتاج متابعة"
+                  value={metrics.offline}
+                  subtitle="غير متصلة الآن"
+                  icon={ShieldCheck}
+                />
+              </div>
+            </CardContent>
+          </Card>
+
+          {metrics.enabledBranches === 0 ? (
+            <EmptyState text={`المزوّد ${getProviderLabel(provider)} غير مفعّل حالياً ضمن هذا النطاق.`} />
+          ) : null}
+
+          <MunicipalityMap
+            municipality={branchExperience.branch as any}
+            liveVehicles={branchLiveVehicles as any}
+            atharObjects={provider === "athar" ? (branchExperience.objects as any) : []}
+            vehicles={branchExperience.vehicles as any}
+            routes={branchExperience.routes as any}
+            zones={provider === "athar" ? (branchExperience.zones as any) : []}
+            points={branchExperience.points as any}
+            atharMarkers={provider === "athar" ? (branchExperience.markers as any) : []}
+            activeTab={mapTab}
+            onTabChange={setMapTab}
+            events={branchExperience.events as any}
+            trackingSource={provider}
+            trackingSourceLabel={getSourceViewLabel(provider)}
+            reportsBranchId={resolvedBranchId}
+            reportsOrganizationId={resolvedOrganizationId || null}
+            defaultRightPanel="live"
+            fixedLiveProviderFilter={provider}
+            onTrackingSelectionChange={setTrackingSelection}
+            onEventClick={(event) => {
+              setTrackingSelection({ type: "event", id: event._id })
+            }}
+          />
+        </div>
+      )
+    },
+    [
+      branchExperience,
+      branchExperienceLoading,
+      labels.branchLabel,
+      mapTab,
+      resolvedBranchId,
+      resolvedOrganizationId,
+      setTrackingSelection,
+      sourceMetrics,
+    ],
+  )
+
+  return (
+    <div className="space-y-6 text-right">
+      <Card>
+        <CardContent className="space-y-4 p-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="text-sm text-muted-foreground">
+                تبدأ التجربة من مصدر التتبع نفسه: مباشر الآن، ثم تفاصيل المركبة أو الحدث، ثم الانتقال السريع إلى السجل أو التقرير المناسب.
+              </p>
+              {trackingSelection.type ? (
+                <p className="mt-2 text-xs text-primary">
+                  العنصر المحدد الآن: {trackingSelection.type === "vehicle" ? "مركبة" : "حدث"} {trackingSelection.id || ""}
+                </p>
+              ) : null}
+            </div>
+            <Button
+              variant="outline"
+              onClick={() => void manualRefresh()}
+              disabled={loading || refreshing || branchExperienceLoading}
+            >
+              <RefreshCw className={`ml-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+              تحديث
+            </Button>
+          </div>
+
+          {(userIsAdmin || (userIsOrgAdmin && !sessionBranchId)) && (
+            <div className="flex flex-wrap items-center gap-3 rounded-lg border p-3">
+              {userIsAdmin && (
+                <>
+                  <span className="text-sm text-muted-foreground">المؤسسة:</span>
+                  <Select value={selectedOrganizationId} onValueChange={setSelectedOrganizationId}>
+                    <SelectTrigger className="w-[220px] text-right">
+                      <SelectValue placeholder="اختر المؤسسة" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {organizations.map((organization) => (
+                        <SelectItem key={organization._id} value={organization._id}>
+                          {organization.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </>
+              )}
+
+              <span className="text-sm text-muted-foreground">{labels.branchLabel || "الفرع"}:</span>
+              <Select
+                value={selectedBranchId || "all"}
+                onValueChange={(value) => setSelectedBranchId(value === "all" ? "" : value)}
+                disabled={userIsAdmin && !selectedOrganizationId}
+              >
+                <SelectTrigger className="w-[240px] text-right">
+                  <SelectValue placeholder={`اختر ${labels.branchLabel || "الفرع"}`} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">كل الفروع</SelectItem>
+                  {branches.map((branch) => (
+                    <SelectItem key={branch._id} value={branch._id}>
+                      {branch.nameAr || branch.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <span className="text-xs text-muted-foreground">
+                {resolvedBranchId
+                  ? "أنت الآن داخل فرع واحد، لذلك ستظهر لك لوحات التتبع التشغيلية كاملة."
+                  : "للمتابعة التشغيلية الدقيقة اختر فرعاً واحداً، وإلا سيبقى مركز المراقبة هو العرض الأنسب."}
+              </span>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {!canLoad ? (
+        <EmptyState text="يرجى تحديد المؤسسة أولاً لتحميل بيانات التتبع." />
+      ) : loading && !overview ? (
+        <Loading text="جارٍ تحميل لوحة التتبع..." />
+      ) : !overview ? (
+        <EmptyState text="لا توجد بيانات متاحة ضمن هذا النطاق." />
+      ) : (
+        <>
+          <Tabs value={sourceView} onValueChange={(value) => setSourceView(value as TrackingSourceView)} dir="rtl">
+            <TabsList className="grid h-auto grid-cols-1 gap-3 bg-transparent p-0 md:grid-cols-4">
+              {([...TRACKING_PROVIDERS, "overview"] as TrackingSourceView[]).map((view) => {
+                const metrics = view === "overview" ? null : sourceMetrics[view as TrackingProvider]
+                const badgeValue =
+                  view === "overview"
+                    ? overview.summary.totalVehicles
+                    : metrics!.liveItems.length > 0
+                      ? metrics!.liveItems.length
+                      : metrics!.totalVehicles
+
+                return (
+                  <TabsTrigger
+                    key={view}
+                    value={view}
+                    className="h-auto rounded-2xl border bg-card px-4 py-3 text-right data-[state=active]:border-primary data-[state=active]:bg-primary/5"
+                  >
+                    <div className="w-full space-y-2 text-right">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="font-semibold">{getSourceViewLabel(view)}</span>
+                        <span className="rounded-full bg-primary/10 px-2 py-1 text-xs text-primary">
+                          {badgeValue}
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {view === "overview"
+                          ? "الصورة الشاملة والجداول الإدارية."
+                          : `مباشر الآن ثم تفاصيل ${getProviderLabel(view as TrackingProvider)}.`}
+                      </p>
+                    </div>
+                  </TabsTrigger>
+                )
+              })}
+            </TabsList>
+
+            {TRACKING_PROVIDERS.map((provider) => (
+              <TabsContent key={provider} value={provider} className="mt-4 space-y-4">
+                {renderSourceWorkspace(provider)}
+              </TabsContent>
+            ))}
+
+            <TabsContent value="overview" className="mt-4 space-y-4">
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+                <SummaryCard
+                  title={`إجمالي ${labels.vehicleLabel || "المركبات"}`}
+                  value={overview.summary.totalVehicles}
+                  subtitle={`ضمن ${overview.summary.branchCount} ${overview.summary.branchCount === 1 ? "فرع" : "فروع"}`}
+                  icon={Truck}
+                />
+                <SummaryCard
+                  title="الربوط النشطة"
+                  value={activeBindingTotal}
+                  subtitle={`أثر: ${overview.summary.activeBindingCounts.athar} | GPS: ${overview.summary.activeBindingCounts.mobile_app}`}
+                  icon={Link2}
+                />
+                <SummaryCard
+                  title="مركبات متحركة"
+                  value={overview.summary.liveConnectivityCounts.moving}
+                  subtitle="بحسب الحالة الحية الحالية"
+                  icon={Activity}
+                />
+                <SummaryCard
+                  title="مركبات متوقفة"
+                  value={overview.summary.liveConnectivityCounts.stopped}
+                  subtitle="بحسب الحالة الحية الحالية"
+                  icon={ShieldCheck}
+                />
+                <SummaryCard
+                  title="مركبات غير متصلة"
+                  value={overview.summary.liveConnectivityCounts.offline}
+                  subtitle="بحسب الحالة الحية الحالية"
+                  icon={Smartphone}
+                />
+                <SummaryCard
+                  title="رسائل آخر 24 ساعة"
+                  value={overview.summary.ingressLast24h.total}
+                  subtitle={`أخطاء: ${overview.summary.ingressLast24h.error} | مرفوضة: ${overview.summary.ingressLast24h.rejected}`}
+                  icon={Webhook}
+                />
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-3">
+                {TRACKING_PROVIDERS.map((provider) => (
+                  <Card key={provider}>
+                    <CardContent className="space-y-2 p-4">
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold">{getProviderLabel(provider)}</span>
+                        <span className="rounded-full bg-primary/10 px-2 py-1 text-xs text-primary">
+                          {overview.summary.providerEnabledBranches[provider]} فرع مفعّل
+                        </span>
+                      </div>
+                      <div className="text-sm text-muted-foreground">
+                        <div>مركبات على هذا المزود: {overview.summary.providerVehicleCounts[provider]}</div>
+                        <div>ربوط نشطة: {overview.summary.activeBindingCounts[provider]}</div>
+                        <div>ربوط أساسية: {overview.summary.primaryBindingCounts[provider]}</div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+
+              <Tabs value={overviewTab} onValueChange={setOverviewTab}>
+                <TabsList className="mb-4 flex h-auto flex-wrap gap-2">
+                  <TabsTrigger value="map">خريطة النطاق</TabsTrigger>
+                  <TabsTrigger value="live">الحالة الحية</TabsTrigger>
+                  <TabsTrigger value="bindings">الربوط</TabsTrigger>
+                  <TabsTrigger value="messages">الدفعات الواردة</TabsTrigger>
+                  <TabsTrigger value="providers">المزودات</TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="map" className="space-y-4">
+                  {!resolvedBranchId ? (
+                    <EmptyState text={`اختر ${labels.branchLabel || "فرعًا"} واحدًا لعرض خريطة النطاق التفصيلية.`} />
+                  ) : branchExperienceLoading && !branchExperience ? (
+                    <Loading text="جارٍ تجهيز خريطة النطاق..." />
+                  ) : !branchExperience?.branch ? (
+                    <EmptyState text="تعذر تحميل بيانات الخريطة لهذا الفرع." />
+                  ) : (
+                    <MunicipalityMap
+                      municipality={branchExperience.branch as any}
+                      liveVehicles={branchExperience.liveVehicles as any}
+                      atharObjects={branchExperience.objects as any}
+                      vehicles={branchExperience.vehicles as any}
+                      routes={branchExperience.routes as any}
+                      zones={branchExperience.zones as any}
+                      points={branchExperience.points as any}
+                      atharMarkers={branchExperience.markers as any}
+                      activeTab={mapTab}
+                      onTabChange={setMapTab}
+                      events={branchExperience.events as any}
+                      trackingSource="all"
+                      trackingSourceLabel="مركز المراقبة"
+                      reportsBranchId={resolvedBranchId}
+                      reportsOrganizationId={resolvedOrganizationId || null}
+                      defaultRightPanel="live"
+                      onTrackingSelectionChange={setTrackingSelection}
+                    />
+                  )}
+                </TabsContent>
+
+                <TabsContent value="live">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>الحالة الحية للمركبات</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {liveVehicles.length === 0 ? <EmptyState text="لا توجد حالات حية ضمن النطاق الحالي." /> : null}
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+
+                <TabsContent value="bindings">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>الربوط والأجهزة</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {overview.bindings.length === 0 ? (
+                        <EmptyState text="لا توجد ربوط تتبع ضمن النطاق الحالي." />
+                      ) : (
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="border-b text-right">
+                                <th className="p-2">{labels.branchLabel || "الفرع"}</th>
+                                <th className="p-2">{labels.vehicleLabel || "المركبة"}</th>
+                                <th className="p-2">المزوّد</th>
+                                <th className="p-2">الجهاز</th>
+                                <th className="p-2">الإمكانات</th>
+                                <th className="p-2">آخر ظهور</th>
+                                <th className="p-2">الحالة</th>
+                                <th className="p-2">الإجراء</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {overview.bindings.map((binding) => (
+                                <tr key={binding._id} className="border-b align-top">
+                                  <td className="p-2">{binding.branchName}</td>
+                                  <td className="p-2">
+                                    <div className="font-medium">{binding.vehicleName}</div>
+                                    <div className="text-xs text-muted-foreground">{binding.plateNumber || "—"}</div>
+                                  </td>
+                                  <td className="p-2">{binding.providerLabel}</td>
+                                  <td className="p-2">{binding.deviceName || "—"}</td>
+                                  <td className="p-2">
+                                    <div className="flex flex-wrap gap-1">
+                                      {binding.capabilities.length > 0 ? (
+                                        binding.capabilities.map((capability) => (
+                                          <span
+                                            key={`${binding._id}-${capability}`}
+                                            className="rounded-full bg-muted px-2 py-1 text-xs text-muted-foreground"
+                                          >
+                                            {capability}
+                                          </span>
+                                        ))
+                                      ) : (
+                                        <span className="text-xs text-muted-foreground">—</span>
+                                      )}
+                                    </div>
+                                  </td>
+                                  <td className="p-2">{formatDateTime(binding.lastSeenAt)}</td>
+                                  <td className="p-2">
+                                    <span
+                                      className={`inline-flex rounded-full px-2 py-1 text-xs ${
+                                        binding.isActive ? "bg-emerald-500/15 text-emerald-700" : "bg-slate-500/15 text-slate-700"
+                                      }`}
+                                    >
+                                      {binding.isActive ? "نشط" : "متوقف"}
+                                    </span>
+                                  </td>
+                                  <td className="p-2">
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => setBindingToRevoke(binding._id)}
+                                      disabled={revokingBindingId === binding._id}
+                                    >
+                                      {revokingBindingId === binding._id ? "جارٍ الإبطال..." : "إبطال الربط"}
+                                    </Button>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+
+                <TabsContent value="messages">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>الدفعات الواردة</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {overview.recentMessages.length === 0 ? (
+                        <EmptyState text="لا توجد رسائل تتبع واردة ضمن النطاق الحالي." />
+                      ) : (
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="border-b text-right">
+                                <th className="p-2">وقت الوصول</th>
+                                <th className="p-2">المزوّد</th>
+                                <th className="p-2">{labels.branchLabel || "الفرع"}</th>
+                                <th className="p-2">{labels.vehicleLabel || "المركبة"}</th>
+                                <th className="p-2">الحالة</th>
+                                <th className="p-2">حجم الدفعة</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {overview.recentMessages.map((message) => (
+                                <tr key={message._id} className="border-b align-top">
+                                  <td className="p-2">{formatDateTime(message.receivedAt)}</td>
+                                  <td className="p-2">{message.providerLabel}</td>
+                                  <td className="p-2">{message.branchName}</td>
+                                  <td className="p-2">{message.vehicleName || "—"}</td>
+                                  <td className="p-2">
+                                    <span className={`inline-flex rounded-full px-2 py-1 text-xs ${getIngressStatusClasses(message.status)}`}>
+                                      {message.status}
+                                    </span>
+                                  </td>
+                                  <td className="p-2">{message.batchSize ?? "—"}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+
+                <TabsContent value="providers">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>تفعيل المزودات حسب الفروع</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {overview.branchProviders.length === 0 ? (
+                        <EmptyState text="لا توجد إعدادات مزودات ضمن النطاق الحالي." />
+                      ) : (
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="border-b text-right">
+                                <th className="p-2">{labels.branchLabel || "الفرع"}</th>
+                                <th className="p-2">أثر</th>
+                                <th className="p-2">تطبيق الموبايل</th>
+                                <th className="p-2">تراكار</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {overview.branchProviders.map((branch) => (
+                                <tr key={branch.branchId} className="border-b align-top">
+                                  <td className="p-2 font-medium">{branch.branchName}</td>
+                                  {TRACKING_PROVIDERS.map((provider) => {
+                                    const providerState = branch.providers[provider]
+                                    return (
+                                      <td key={provider} className="p-2">
+                                        <div className="space-y-1">
+                                          <span
+                                            className={`inline-flex rounded-full px-2 py-1 text-xs ${
+                                              providerState.enabled
+                                                ? "bg-emerald-500/15 text-emerald-700"
+                                                : "bg-slate-500/15 text-slate-700"
+                                            }`}
+                                          >
+                                            {providerState.enabled ? "مفعّل" : "غير مفعّل"}
+                                          </span>
+                                          <div className="text-xs text-muted-foreground">
+                                            {getProviderSourceLabel(
+                                              providerState.source,
+                                              provider === "athar" ? branch.providers.athar.legacyFallback : undefined,
+                                            )}
+                                          </div>
+                                        </div>
+                                      </td>
+                                    )
+                                  })}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+              </Tabs>
+            </TabsContent>
+          </Tabs>
+
+          <ConfirmationDialog
+            open={Boolean(bindingToRevoke)}
+            onOpenChange={(open) => {
+              if (!open) setBindingToRevoke(null)
+            }}
+            title="إبطال ربط التتبع"
+            description={
+              selectedBindingToRevoke
+                ? `سيتم إيقاف استقبال التتبع للمركبة ${selectedBindingToRevoke.vehicleName} من ${selectedBindingToRevoke.providerLabel}.`
+                : "سيتم إيقاف استقبال التتبع لهذا الربط."
+            }
+            confirmLabel="إبطال الربط"
+            cancelLabel="إلغاء"
+            onConfirm={confirmBindingRevoke}
+            loading={Boolean(bindingToRevoke && revokingBindingId === bindingToRevoke)}
+            variant="destructive"
+          />
+        </>
+      )}
+    </div>
+  )
+
+  /*
   return (
     <div className="space-y-6 text-right">
       <Card>
@@ -955,4 +1639,5 @@ export function TrackingMonitor() {
       )}
     </div>
   )
+  */
 }

@@ -71,6 +71,7 @@ export async function GET(request: Request) {
     const from = parseDateTime(searchParams.get('from'));
     const to = parseDateTime(searchParams.get('to'));
     const pointId = searchParams.get('pointId')?.trim() || null;
+    const vehicleId = searchParams.get('vehicleId')?.trim() || null;
     const tabParam = searchParams.get('tab') || 'visits';
     const tab: VisitLogTab = (() => {
       if (['entries', 'exits', 'visits', 'repeated-entries', 'repeated-exits', 'repeated-points'].includes(tabParam))
@@ -101,6 +102,7 @@ export async function GET(request: Request) {
         type: typeFilter,
         eventTimestamp: dateFilter,
       };
+      if (vehicleId) eventFilter.vehicleId = vehicleId;
       if (pointId) {
         const selectedPoint = await Point.findOne({ _id: pointId, branchId })
           .select('_id zoneId name nameAr nameEn')
@@ -163,6 +165,7 @@ export async function GET(request: Request) {
         exitTime: dateFilter,
       };
       if (pointId) visitFilter.pointId = pointId;
+      if (vehicleId) visitFilter.vehicleId = vehicleId;
 
       const agg = await PointVisit.aggregate([
         { $match: visitFilter },
@@ -203,6 +206,7 @@ export async function GET(request: Request) {
         exitTime: dateFilter,
       };
       if (pointId) filter.pointId = pointId;
+      if (vehicleId) filter.vehicleId = vehicleId;
 
       const [count, visits] = await Promise.all([
         PointVisit.countDocuments(filter),
@@ -254,6 +258,7 @@ export async function GET(request: Request) {
         branchId,
         from: from.toISOString(),
         to: to.toISOString(),
+        vehicleId,
         tab,
         page,
         pageSize,

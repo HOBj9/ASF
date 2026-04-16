@@ -95,6 +95,7 @@ export function ReportsPanel({ isSystemAdmin = false, isOrganizationAdmin = fals
   const [error, setError] = useState("")
   const [preview, setPreview] = useState<PreviewResponse | null>(null)
   const [vehicleParamApplied, setVehicleParamApplied] = useState(false)
+  const [autoLoadedFromParams, setAutoLoadedFromParams] = useState(false)
 
   const columnOptions: Array<{ key: ColumnKey; label: string }> = useMemo(
     () => [
@@ -165,12 +166,36 @@ export function ReportsPanel({ isSystemAdmin = false, isOrganizationAdmin = fals
 
   useEffect(() => {
     if (vehicleParamApplied) return
+    const paramBranchId = searchParams.get("branchId")
     const paramVehicleId = searchParams.get("vehicleId")
+    const paramPointId = searchParams.get("pointId")
+    const paramFrom = searchParams.get("from")
+    const paramTo = searchParams.get("to")
+    if (paramBranchId && showBranchSelector) {
+      setSelectedBranchId(paramBranchId)
+    }
     if (paramVehicleId) {
       setVehicleId(paramVehicleId)
     }
+    if (paramPointId) {
+      setPointId(paramPointId)
+    }
+    if (paramFrom) {
+      const parsedFrom = new Date(paramFrom)
+      if (!Number.isNaN(parsedFrom.getTime())) {
+        setPeriod("custom")
+        setFrom(parsedFrom.toISOString().slice(0, 10))
+      }
+    }
+    if (paramTo) {
+      const parsedTo = new Date(paramTo)
+      if (!Number.isNaN(parsedTo.getTime())) {
+        setPeriod("custom")
+        setTo(parsedTo.toISOString().slice(0, 10))
+      }
+    }
     setVehicleParamApplied(true)
-  }, [searchParams, vehicleParamApplied])
+  }, [searchParams, showBranchSelector, vehicleParamApplied])
 
   const branchParam = showBranchSelector && selectedBranchId ? selectedBranchId : ""
 
@@ -239,7 +264,7 @@ export function ReportsPanel({ isSystemAdmin = false, isOrganizationAdmin = fals
     return params
   }, [durationUnit, period, pointId, selectedBranchId, selectedColumns, showBranchSelector, status, to, from, vehicleId])
 
-  async function loadPreview(nextPage = 1) {
+  const loadPreview = useCallback(async (nextPage = 1) => {
     if (isSystemAdmin && !selectedBranchId) {
       setError("يرجى اختيار الفرع أولاً")
       return
@@ -268,7 +293,29 @@ export function ReportsPanel({ isSystemAdmin = false, isOrganizationAdmin = fals
     } finally {
       setLoadingPreview(false)
     }
-  }
+  }, [buildParams, from, isSystemAdmin, period, selectedBranchId, to])
+
+  useEffect(() => {
+    if (autoLoadedFromParams || !vehicleParamApplied || loadingOptions || loadingPreview) return
+    const hasDeepLinkTarget =
+      Boolean(searchParams.get("vehicleId")) ||
+      Boolean(searchParams.get("pointId")) ||
+      Boolean(searchParams.get("from")) ||
+      Boolean(searchParams.get("to"))
+    if (!hasDeepLinkTarget) return
+    if (showBranchSelector && !selectedBranchId) return
+    setAutoLoadedFromParams(true)
+    void loadPreview(1)
+  }, [
+    autoLoadedFromParams,
+    loadPreview,
+    loadingOptions,
+    loadingPreview,
+    searchParams,
+    selectedBranchId,
+    showBranchSelector,
+    vehicleParamApplied,
+  ])
 
   const exportUrl = useMemo(() => {
     if (isSystemAdmin && !selectedBranchId) return ""
