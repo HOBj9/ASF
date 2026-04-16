@@ -5,6 +5,7 @@ import { requireMobileLineSupervisorAuth } from '@/lib/middleware/mobile-line-su
 import { PointClassificationService } from '@/lib/services/point-classification.service';
 import {
   listMobilePointClassifications,
+  nestMobilePointClassifications,
 } from '@/lib/utils/mobile-point-classification.util';
 import {
   handleMobileApiError,
@@ -28,21 +29,24 @@ export async function GET(request: Request) {
     }
 
     const { searchParams } = new URL(request.url);
-    const primaryClassificationId = searchParams.get('primaryClassificationId');
+    const primaryClassificationId = searchParams.get('primaryClassificationId')?.trim() || null;
+
     const classifications = await listMobilePointClassifications(
       pointClassificationService,
       user.organizationId,
       user.branchId
     );
 
-    return NextResponse.json({
-      primaries: classifications.primaries,
-      secondaries: primaryClassificationId
-        ? classifications.secondaries.filter(
-            (item) => String(item.primaryClassificationId || '') === String(primaryClassificationId)
-          )
-        : classifications.secondaries,
-    });
+    let primaries = nestMobilePointClassifications(
+      classifications.primaries,
+      classifications.secondaries
+    );
+
+    if (primaryClassificationId) {
+      primaries = primaries.filter((p) => String(p.id) === primaryClassificationId);
+    }
+
+    return NextResponse.json({ primaries });
   } catch (error) {
     return handleMobileApiError(error);
   }

@@ -169,16 +169,14 @@ paths:
   /api/mobile/point-classifications:
     get:
       tags: [Mobile Surveys]
-      summary: Get point primary and secondary classifications for the authenticated line supervisor
+      summary: Get nested point classifications for the authenticated line supervisor
       description: |
-        Returns the point classifications that the mobile user can assign while creating a point.
-        The result is scoped automatically by the authenticated supervisor organization and branch.
+        Returns primary classifications; each item includes a `secondaries` array for that primary.
+        Scoped by the authenticated supervisor organization and branch (from the bearer token).
+        Do not send organizationId or branchId.
 
-        The API resolves the supervisor organization and branch from the bearer token.
-        The client must not send organizationId or branchId.
-
-        Use `primaryClassificationId` when you want the API to return only the secondary
-        classifications that belong to a specific primary classification.
+        Optional query `primaryClassificationId`: return only the primary whose `id` matches
+        (still nested, with its `secondaries`).
       operationId: listMobilePointClassifications
       security:
         - bearerAuth: []
@@ -190,10 +188,10 @@ paths:
           required: false
           schema:
             type: string
-          description: Optional filter for returning only secondaries under the selected primary classification
+          description: Optional filter — return only one primary (with its secondaries)
       responses:
         '200':
-          description: Point classifications for point creation
+          description: Nested point classifications for point creation
           content:
             application/json:
               schema:
@@ -207,83 +205,14 @@ paths:
                     branchId: 69afecf2a6a0fb6ab38efa36
                     organizationId: 69afecbba6a0fb6ab38efa05
                     order: 1
-                secondaries:
-                  - id: 68010001d2f9b54dd82b6002
-                    name: household
-                    nameAr: Ù…Ù†Ø²Ù„ÙŠ
-                    primaryClassificationId: 68010001d2f9b54dd82b6001
-                    branchId: 69afecf2a6a0fb6ab38efa36
-                    organizationId: 69afecbba6a0fb6ab38efa05
-                    order: 1
-        '401':
-          $ref: '#/components/responses/Error401'
-        '403':
-          $ref: '#/components/responses/Error403'
-        '500':
-          $ref: '#/components/responses/Error500'
-
-  /api/mobile/point-classifications/primary:
-    get:
-      tags: [Mobile Surveys]
-      summary: List primary classifications from the authenticated line supervisor token
-      description: |
-        Returns only the primary classifications available to the authenticated line supervisor.
-        The organization and branch are derived from `Authorization: Bearer <token>`.
-      operationId: listMobilePrimaryPointClassifications
-      security:
-        - bearerAuth: []
-        - sessionCookieAuth: []
-        - secureSessionCookieAuth: []
-      responses:
-        '200':
-          description: Primary classifications
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  primaries:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/PointClassificationSummary'
-        '401':
-          $ref: '#/components/responses/Error401'
-        '403':
-          $ref: '#/components/responses/Error403'
-        '500':
-          $ref: '#/components/responses/Error500'
-
-  /api/mobile/point-classifications/secondary:
-    get:
-      tags: [Mobile Surveys]
-      summary: List secondary classifications from the authenticated line supervisor token
-      description: |
-        Returns only the secondary classifications available to the authenticated line supervisor.
-        The organization and branch are derived from `Authorization: Bearer <token>`.
-      operationId: listMobileSecondaryPointClassifications
-      security:
-        - bearerAuth: []
-        - sessionCookieAuth: []
-        - secureSessionCookieAuth: []
-      parameters:
-        - in: query
-          name: primaryClassificationId
-          required: false
-          schema:
-            type: string
-          description: Optional filter for returning only secondaries under the selected primary classification
-      responses:
-        '200':
-          description: Secondary classifications
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  secondaries:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/PointClassificationSummary'
+                    secondaries:
+                      - id: 68010001d2f9b54dd82b6002
+                        name: household
+                        nameAr: Ù…Ù†Ø²Ù„ÙŠ
+                        primaryClassificationId: 68010001d2f9b54dd82b6001
+                        branchId: 69afecf2a6a0fb6ab38efa36
+                        organizationId: 69afecbba6a0fb6ab38efa05
+                        order: 1
         '401':
           $ref: '#/components/responses/Error401'
         '403':
@@ -302,7 +231,7 @@ paths:
         - classification lists required for point creation
         - required point fields
 
-        The same classification lists are also available from `/api/mobile/point-classifications`.
+        Nested classification lists (`primaries` with `secondaries` under each) match `/api/mobile/point-classifications`.
 
         Answering rules:
         - send either `questionId` or `answerKey` for each answer item
@@ -383,14 +312,14 @@ paths:
                         branchId: 69afecf2a6a0fb6ab38efa36
                         organizationId: 69afecbba6a0fb6ab38efa05
                         order: 1
-                    secondaries:
-                      - id: 68010001d2f9b54dd82b6002
-                        name: household
-                        nameAr: منزلي
-                        primaryClassificationId: 68010001d2f9b54dd82b6001
-                        branchId: 69afecf2a6a0fb6ab38efa36
-                        organizationId: 69afecbba6a0fb6ab38efa05
-                        order: 1
+                        secondaries:
+                          - id: 68010001d2f9b54dd82b6002
+                            name: household
+                            nameAr: منزلي
+                            primaryClassificationId: 68010001d2f9b54dd82b6001
+                            branchId: 69afecf2a6a0fb6ab38efa36
+                            organizationId: 69afecbba6a0fb6ab38efa05
+                            order: 1
         '401':
           $ref: '#/components/responses/Error401'
         '403':
@@ -957,11 +886,17 @@ components:
         primaries:
           type: array
           items:
-            $ref: '#/components/schemas/PointClassificationSummary'
-        secondaries:
-          type: array
-          items:
-            $ref: '#/components/schemas/PointClassificationSummary'
+            $ref: '#/components/schemas/MobilePrimaryClassificationNested'
+    MobilePrimaryClassificationNested:
+      allOf:
+        - $ref: '#/components/schemas/PointClassificationSummary'
+        - type: object
+          required: [secondaries]
+          properties:
+            secondaries:
+              type: array
+              items:
+                $ref: '#/components/schemas/PointClassificationSummary'
     MobileSurveyDetailResponse:
       type: object
       properties:
@@ -1005,11 +940,7 @@ components:
                 primaries:
                   type: array
                   items:
-                    $ref: '#/components/schemas/PointClassificationSummary'
-                secondaries:
-                  type: array
-                  items:
-                    $ref: '#/components/schemas/PointClassificationSummary'
+                    $ref: '#/components/schemas/MobilePrimaryClassificationNested'
 
     MobileSurveySubmitRequest:
       type: object
