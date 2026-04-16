@@ -9,7 +9,7 @@ import MarkerClusterGroup from "react-leaflet-cluster";
 import "react-leaflet-cluster/lib/assets/MarkerCluster.css";
 import "react-leaflet-cluster/lib/assets/MarkerCluster.Default.css";
 import L from "leaflet";
-import { Maximize2, BusFront, MapPin, Hexagon, CarFront, X, BarChart2, CalendarDays, Layers, PanelRightOpen, PanelRightClose, Search, Play, Pause, SkipBack, SkipForward, SlidersHorizontal, History } from "lucide-react";
+import { Maximize2, BusFront, MapPin, Hexagon, CarFront, X, BarChart2, CalendarDays, Layers, PanelRightOpen, PanelRightClose, Search, Play, Pause, SkipBack, SkipForward, SlidersHorizontal, History, Navigation } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -140,6 +140,47 @@ L.Icon.Default.mergeOptions({
   iconUrl: defaultIconUrl,
   shadowUrl: defaultShadowUrl,
 });
+
+/**
+ * Defers fitBounds so MarkerClusterGroup / map panes are ready.
+ * Immediate fitBounds after history load can fire moveend while cluster internals are null (getBounds).
+ */
+function scheduleMapFitBounds(
+  getMap: () => L.Map | null,
+  bounds: L.LatLngBounds,
+  options: L.FitBoundsOptions,
+  delayMs = 80
+): () => void {
+  let cancelled = false;
+  let t1 = 0;
+  let t2 = 0;
+  t1 = window.setTimeout(() => {
+    if (cancelled) return;
+    const map = getMap();
+    if (!map) return;
+    try {
+      map.invalidateSize({ animate: false });
+      map.fitBounds(bounds, options);
+    } catch {
+      t2 = window.setTimeout(() => {
+        if (cancelled) return;
+        const m = getMap();
+        if (!m) return;
+        try {
+          m.invalidateSize({ animate: false });
+          m.fitBounds(bounds, options);
+        } catch {
+          /* cluster / map still settling */
+        }
+      }, 150);
+    }
+  }, delayMs);
+  return () => {
+    cancelled = true;
+    window.clearTimeout(t1);
+    window.clearTimeout(t2);
+  };
+}
 
 function escapeHtml(s: string) {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -467,6 +508,9 @@ export function MunicipalityMap({
   const [historyPlaybackIndex, setHistoryPlaybackIndex] = useState(0);
   const [historyPlaybackPlaying, setHistoryPlaybackPlaying] = useState(false);
   const [historyPlaybackSpeedMs, setHistoryPlaybackSpeedMs] = useState(800);
+  const [enhancedTrackGeometry, setEnhancedTrackGeometry] = useState<{ type: "LineString"; coordinates: number[][] } | null>(null);
+  const [enhancedTrackLoading, setEnhancedTrackLoading] = useState(false);
+  const [enhancedTrackMode, setEnhancedTrackMode] = useState<"raw" | "enhanced" | "both">("raw");
   const [eventsSearchQuery, setEventsSearchQuery] = useState("");
   const [pointTypeFilter, setPointTypeFilter] = useState<string | null>(null);
   const [pointPanelSearch, setPointPanelSearch] = useState("");
@@ -895,7 +939,7 @@ export function MunicipalityMap({
     setHistoryPlaybackPlaying(false);
     setSelectedEventItem(null);
     const bounds = L.latLngBounds(filteredLiveVehicles.map((vehicle) => vehicle.coordinates as [number, number]));
-    mapRef.current.fitBounds(bounds, { padding: [36, 36], maxZoom: 16 });
+    scheduleMapFitBounds(() => mapRef.current, bounds, { padding: [36, 36], maxZoom: 16 }, 50);
   }, [filteredLiveVehicles]);
 
   const jumpToHistoryPoint = useCallback((index: number) => {
@@ -916,7 +960,45 @@ export function MunicipalityMap({
     setLiveDisplayMode("fleet");
     setHistoryPlaybackIndex(0);
     setHistoryPlaybackPlaying(false);
+    setEnhancedTrackGeometry(null);
+    setEnhancedTrackMode("raw");
   }, []);
+
+  const loadEnhancedTrack = useCallback(async () => {
+    if (!historyTrack?.points?.length || !historyTrack.vehicle.id) return;
+
+    setEnhancedTrackLoading(true);
+    try {
+      const payload = {
+        points: historyTrack.points.map((p) => ({
+          lat: p.lat,
+          lng: p.lng,
+          timestamp: p.recordedAt || null,
+          accuracy: p.accuracy ?? null,
+        })),
+      };
+
+      const response = await fetch(
+        `/api/vehicles/${encodeURIComponent(historyTrack.vehicle.id)}/match-track`,
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }
+      );
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok || !data?.geometry?.coordinates?.length) {
+        setEnhancedTrackGeometry(null);
+        setEnhancedTrackMode("raw");
+        return;
+      }
+
+      setEnhancedTrackGeometry(data.geometry);
+      setEnhancedTrackMode("both");
+    } catch {
+      setEnhancedTrackGeometry(null);
+      setEnhancedTrackMode("raw");
+    } finally {
+      setEnhancedTrackLoading(false);
+    }
+  }, [historyTrack]);
 
   const loadVehicleHistory = useCallback(async (vehicle: LiveVehicle) => {
     if (!municipality?._id) {
@@ -997,14 +1079,16 @@ export function MunicipalityMap({
   }, [trackingObjectId, atharObjects]);
 
   useEffect(() => {
-    if (!mapRef.current || !isHistoryViewMode || !historyTrack?.points?.length) return;
+    if (!isHistoryViewMode || !historyTrack?.points?.length) return;
     const bounds = L.latLngBounds(
       historyTrack.points.map((point) => [point.lat, point.lng] as [number, number])
     );
-    mapRef.current.fitBounds(bounds, {
-      padding: [40, 40],
-      maxZoom: 17,
-    });
+    return scheduleMapFitBounds(
+      () => mapRef.current,
+      bounds,
+      { padding: [40, 40], maxZoom: 17 },
+      100
+    );
   }, [historyTrack, isHistoryViewMode]);
 
   useEffect(() => {
@@ -1109,6 +1193,9 @@ export function MunicipalityMap({
     });
   }, [activeTab, filteredLiveVehicles, historyTrack?.vehicle.id, isHistoryViewMode, objectByImei, vehicleZoneMap, showVehicleNamesOnMap]);
 
+  const showRawTrail = enhancedTrackMode === "raw" || enhancedTrackMode === "both";
+  const showEnhancedTrail = enhancedTrackGeometry && (enhancedTrackMode === "enhanced" || enhancedTrackMode === "both");
+
   const historyPathLayer = useMemo(() => {
     if (!isHistoryViewMode || !historyTrack?.points?.length) return null;
     const positions = historyTrack.points.map((point) => [point.lat, point.lng] as [number, number]);
@@ -1122,36 +1209,40 @@ export function MunicipalityMap({
 
     return (
       <>
-        <Polyline
-          positions={positions}
-          pathOptions={{
-            color: "#052e16",
-            weight: 10,
-            opacity: 0.18,
-            lineCap: "round",
-            lineJoin: "round",
-          }}
-        />
-        <Polyline
-          positions={positions}
-          pathOptions={{
-            color: historyTrackColor,
-            weight: 6,
-            opacity: 0.92,
-            lineCap: "round",
-            lineJoin: "round",
-          }}
-        />
-        <Polyline
-          positions={playedPositions}
-          pathOptions={{
-            color: "#22c55e",
-            weight: 8,
-            opacity: 0.96,
-            lineCap: "round",
-            lineJoin: "round",
-          }}
-        />
+        {showRawTrail ? (
+          <>
+            <Polyline
+              positions={positions}
+              pathOptions={{
+                color: "#052e16",
+                weight: 10,
+                opacity: 0.18,
+                lineCap: "round",
+                lineJoin: "round",
+              }}
+            />
+            <Polyline
+              positions={positions}
+              pathOptions={{
+                color: historyTrackColor,
+                weight: 6,
+                opacity: 0.92,
+                lineCap: "round",
+                lineJoin: "round",
+              }}
+            />
+            <Polyline
+              positions={playedPositions}
+              pathOptions={{
+                color: "#22c55e",
+                weight: 8,
+                opacity: 0.96,
+                lineCap: "round",
+                lineJoin: "round",
+              }}
+            />
+          </>
+        ) : null}
         {startPoint ? (
           <Marker
             position={[startPoint.lat, startPoint.lng]}
@@ -1223,7 +1314,28 @@ export function MunicipalityMap({
         ) : null}
       </>
     );
-  }, [currentPlaybackPoint, historyPlaybackIndex, historyTrack, isHistoryViewMode]);
+  }, [currentPlaybackPoint, historyPlaybackIndex, historyTrack, isHistoryViewMode, showRawTrail]);
+
+  const enhancedPathLayer = useMemo(() => {
+    if (!isHistoryViewMode || !showEnhancedTrail || !enhancedTrackGeometry?.coordinates?.length) return null;
+    const positions = enhancedTrackGeometry.coordinates.map(
+      (coord) => [coord[1], coord[0]] as [number, number]
+    );
+
+    return (
+      <Polyline
+        positions={positions}
+        smoothFactor={2}
+        pathOptions={{
+          color: "#2563eb",
+          weight: 5,
+          opacity: 0.92,
+          lineCap: "round",
+          lineJoin: "round",
+        }}
+      />
+    );
+  }, [enhancedTrackGeometry, isHistoryViewMode, showEnhancedTrail]);
 
   const pointsMarkersLayer = useMemo(() => {
     if (activeTab !== "points") return null;
@@ -1370,6 +1482,7 @@ export function MunicipalityMap({
         ) : (
           liveMarkersLayer
         )}
+        {enhancedPathLayer}
         {historyPathLayer}
 
         <MarkerClusterGroup
@@ -1494,9 +1607,11 @@ export function MunicipalityMap({
       <div className="relative flex w-full flex-row overflow-hidden rounded-2xl border bg-card" dir="ltr" style={{ minHeight: "520px" }}>
         <div className="relative min-w-0 flex-1">
           {renderMap("h-[820px] min-h-[820px]", true)}
-          {currentTabLoading && (
-            <div className="absolute inset-0 z-[500] rounded-2xl">
+          {(currentTabLoading || historyLoading || enhancedTrackLoading) && (
+            <div className="absolute inset-0 z-[500] flex flex-col items-center justify-center rounded-2xl bg-background/60 backdrop-blur-sm">
               <LoadingOverlay />
+              {historyLoading && <p className="mt-2 text-xs text-muted-foreground">جارٍ تحميل سجل الحركة...</p>}
+              {enhancedTrackLoading && <p className="mt-2 text-xs text-muted-foreground">جارٍ تحسين المسار عبر OSRM...</p>}
             </div>
           )}
         </div>
@@ -1930,6 +2045,44 @@ export function MunicipalityMap({
                             {historyLoading ? "جارٍ التحميل..." : "تحميل / تحديث السجل"}
                           </Button>
 
+                          {historyTrack?.points?.length ? (
+                            <div className="space-y-2">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="w-full gap-1.5 text-xs"
+                                onClick={() => void loadEnhancedTrack()}
+                                disabled={enhancedTrackLoading}
+                              >
+                                <Navigation className="h-3.5 w-3.5" />
+                                {enhancedTrackLoading ? "جارٍ التحسين..." : enhancedTrackGeometry ? "إعادة تحسين المسار" : "سجل الحركة المحسن"}
+                              </Button>
+                              {enhancedTrackGeometry ? (
+                                <div className="flex items-center gap-1 rounded-lg border bg-muted/20 p-1">
+                                  {([
+                                    { key: "raw" as const, label: "خام" },
+                                    { key: "enhanced" as const, label: "محسن" },
+                                    { key: "both" as const, label: "كلاهما" },
+                                  ]).map((opt) => (
+                                    <button
+                                      key={opt.key}
+                                      type="button"
+                                      onClick={() => setEnhancedTrackMode(opt.key)}
+                                      className={`flex-1 rounded px-2 py-1 text-[11px] transition-colors ${
+                                        enhancedTrackMode === opt.key
+                                          ? "bg-background font-medium shadow-sm"
+                                          : "text-muted-foreground hover:text-foreground"
+                                      }`}
+                                    >
+                                      {opt.label}
+                                    </button>
+                                  ))}
+                                </div>
+                              ) : null}
+                            </div>
+                          ) : null}
+
                           {historyError ? (
                             <div className="rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-2 text-[11px] text-red-700 dark:text-red-300">{historyError}</div>
                           ) : null}
@@ -2271,9 +2424,11 @@ export function MunicipalityMap({
       <div className="flex w-full rounded-2xl border bg-card overflow-hidden relative" style={{ minHeight: "520px" }}>
         <div className="flex-1 min-w-0 relative">
           {renderMap("h-[820px] min-h-[820px]", true)}
-          {currentTabLoading && (
-            <div className="absolute inset-0 z-[500] rounded-2xl">
+          {(currentTabLoading || historyLoading || enhancedTrackLoading) && (
+            <div className="absolute inset-0 z-[500] flex flex-col items-center justify-center rounded-2xl bg-background/60 backdrop-blur-sm">
               <LoadingOverlay />
+              {historyLoading && <p className="mt-2 text-xs text-muted-foreground">جارٍ تحميل سجل الحركة...</p>}
+              {enhancedTrackLoading && <p className="mt-2 text-xs text-muted-foreground">جارٍ تحسين المسار عبر OSRM...</p>}
             </div>
           )}
         </div>
@@ -2887,9 +3042,11 @@ export function MunicipalityMap({
 
             <div className="relative flex-1 p-3">
               {renderMap("h-full")}
-              {currentTabLoading && (
-                <div className="absolute inset-3 z-[500] rounded-2xl">
+              {(currentTabLoading || historyLoading || enhancedTrackLoading) && (
+                <div className="absolute inset-3 z-[500] flex flex-col items-center justify-center rounded-2xl bg-background/60 backdrop-blur-sm">
                   <LoadingOverlay />
+                  {historyLoading && <p className="mt-2 text-xs text-muted-foreground">جارٍ تحميل سجل الحركة...</p>}
+                  {enhancedTrackLoading && <p className="mt-2 text-xs text-muted-foreground">جارٍ تحسين المسار عبر OSRM...</p>}
                 </div>
               )}
             </div>
