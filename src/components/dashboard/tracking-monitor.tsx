@@ -1,10 +1,10 @@
 "use client"
 
 import dynamic from "next/dynamic"
-import { useCallback, useEffect, useMemo, useState, type ComponentType } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { useSession } from "next-auth/react"
 import toast from "react-hot-toast"
-import { Activity, Link2, RefreshCw, ShieldCheck, Smartphone, Truck, Webhook } from "lucide-react"
+import { RefreshCw } from "lucide-react"
 import { apiClient } from "@/lib/api/client"
 import { useLabels } from "@/hooks/use-labels"
 import { useBranches } from "@/hooks/queries/use-branches"
@@ -206,27 +206,72 @@ function SummaryCard(props: {
   title: string
   value: string | number
   subtitle?: string
-  icon: ComponentType<{ className?: string }>
+  accent?: "default" | "success" | "warning" | "danger"
 }) {
-  const Icon = props.icon
+  const accentDot =
+    props.accent === "success"
+      ? "bg-emerald-500"
+      : props.accent === "warning"
+        ? "bg-amber-500"
+        : props.accent === "danger"
+          ? "bg-rose-500"
+          : "bg-primary"
+
   return (
-    <Card>
-      <CardContent className="flex items-start justify-between p-4">
-        <div className="space-y-1 text-right">
-          <p className="text-sm text-muted-foreground">{props.title}</p>
-          <p className="text-2xl font-bold tabular-nums">{props.value}</p>
-          {props.subtitle ? <p className="text-xs text-muted-foreground">{props.subtitle}</p> : null}
-        </div>
-        <div className="rounded-lg bg-primary/10 p-2 text-primary">
-          <Icon className="h-5 w-5" />
-        </div>
-      </CardContent>
-    </Card>
+    <div className="flex flex-col gap-1 border-r border-border px-4 first:pr-0 first:border-r-0 last:pl-0">
+      <p className="text-xs font-medium text-muted-foreground">{props.title}</p>
+      <p className="text-3xl font-bold tabular-nums leading-none">{props.value}</p>
+      {props.subtitle ? (
+        <p className="flex items-center gap-1 text-xs text-muted-foreground">
+          <span className={`inline-block h-1.5 w-1.5 rounded-full ${accentDot}`} />
+          {props.subtitle}
+        </p>
+      ) : null}
+    </div>
+  )
+}
+
+function SummaryCardBox(props: {
+  title: string
+  value: string | number
+  subtitle?: string
+  accent?: "default" | "success" | "warning" | "danger"
+}) {
+  const accentDot =
+    props.accent === "success"
+      ? "bg-emerald-500"
+      : props.accent === "warning"
+        ? "bg-amber-500"
+        : props.accent === "danger"
+          ? "bg-rose-500"
+          : "bg-primary"
+
+  return (
+    <div className="flex flex-col gap-1 rounded-xl border border-border bg-card p-4">
+      <p className="text-xs font-medium text-muted-foreground">{props.title}</p>
+      <p className="text-2xl font-bold tabular-nums leading-none">{props.value}</p>
+      {props.subtitle ? (
+        <p className="flex items-center gap-1 text-xs text-muted-foreground">
+          <span className={`inline-block h-1.5 w-1.5 rounded-full ${accentDot}`} />
+          {props.subtitle}
+        </p>
+      ) : null}
+    </div>
   )
 }
 
 function EmptyState({ text }: { text: string }) {
-  return <div className="rounded-lg border p-6 text-center text-sm text-muted-foreground">{text}</div>
+  return (
+    <div className="flex items-center justify-center rounded-xl border border-dashed border-border p-8">
+      <p className="text-sm text-muted-foreground">{text}</p>
+    </div>
+  )
+}
+
+function StatusDot({ status }: { status: TrackingConnectivityStatus }) {
+  if (status === "moving") return <span className="inline-block h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_4px_0] shadow-emerald-500/60" />
+  if (status === "stopped") return <span className="inline-block h-2 w-2 rounded-full bg-amber-500" />
+  return <span className="inline-block h-2 w-2 rounded-full bg-slate-500" />
 }
 
 async function fetchJson<T>(url: string): Promise<T> {
@@ -639,46 +684,45 @@ export function TrackingMonitor() {
 
       return (
         <div className="space-y-4">
-          <Card>
-            <CardContent className="space-y-3 p-4">
-              <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
-                <div className="space-y-1">
-                  <div className="text-base font-semibold">{getSourceViewLabel(provider)}</div>
-                  <p className="text-sm text-muted-foreground">{getSourceViewDescription(provider)}</p>
-                </div>
-                <div className="rounded-full bg-primary/10 px-3 py-1 text-xs text-primary">
-                  {metrics.enabledBranches} فرع مفعّل
-                </div>
-              </div>
+          {/* Provider workspace header */}
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3">
+            <div>
+              <p className="text-sm font-medium">{getSourceViewLabel(provider)}</p>
+              <p className="text-xs text-muted-foreground">{getSourceViewDescription(provider)}</p>
+            </div>
+            {metrics.enabledBranches > 0 && (
+              <span className="flex items-center gap-1 rounded-full bg-emerald-500/10 px-2.5 py-1 text-xs text-emerald-600">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                {metrics.enabledBranches} فرع مفعّل
+              </span>
+            )}
+          </div>
 
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                <SummaryCard
-                  title={`مركبات ${getProviderLabel(provider)}`}
-                  value={metrics.totalVehicles}
-                  subtitle="ضمن النطاق الحالي"
-                  icon={Truck}
-                />
-                <SummaryCard
-                  title="ربوط نشطة"
-                  value={metrics.activeBindings}
-                  subtitle={`ربوط أساسية: ${metrics.primaryBindings}`}
-                  icon={Link2}
-                />
-                <SummaryCard
-                  title="تتبع مباشر"
-                  value={metrics.liveItems.length}
-                  subtitle={`متحركة: ${metrics.moving} | متوقفة: ${metrics.stopped}`}
-                  icon={Activity}
-                />
-                <SummaryCard
-                  title="تحتاج متابعة"
-                  value={metrics.offline}
-                  subtitle="غير متصلة الآن"
-                  icon={ShieldCheck}
-                />
-              </div>
-            </CardContent>
-          </Card>
+          {/* Provider KPI strip */}
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+            <SummaryCardBox
+              title={`مركبات ${getProviderLabel(provider)}`}
+              value={metrics.totalVehicles}
+              subtitle="ضمن النطاق"
+            />
+            <SummaryCardBox
+              title="ربوط نشطة"
+              value={metrics.activeBindings}
+              subtitle={`${metrics.primaryBindings} أساسي`}
+            />
+            <SummaryCardBox
+              title="متحركة الآن"
+              value={metrics.moving}
+              subtitle={`${metrics.liveItems.length} نشط إجمالاً`}
+              accent="success"
+            />
+            <SummaryCardBox
+              title="غير متصلة"
+              value={metrics.offline}
+              subtitle={`${metrics.stopped} متوقفة`}
+              accent={metrics.offline > 0 ? "danger" : "default"}
+            />
+          </div>
 
           {metrics.enabledBranches === 0 ? (
             <EmptyState text={`المزوّد ${getProviderLabel(provider)} غير مفعّل حالياً ضمن هذا النطاق.`} />
@@ -723,57 +767,32 @@ export function TrackingMonitor() {
   )
 
   return (
-    <div className="space-y-6 text-right">
-      <Card>
-        <CardContent className="space-y-4 p-4">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <p className="text-sm text-muted-foreground">
-                تبدأ التجربة من مصدر التتبع نفسه: مباشر الآن، ثم تفاصيل المركبة أو الحدث، ثم الانتقال السريع إلى السجل أو التقرير المناسب.
-              </p>
-              {trackingSelection.type ? (
-                <p className="mt-2 text-xs text-primary">
-                  العنصر المحدد الآن: {trackingSelection.type === "vehicle" ? "مركبة" : "حدث"} {trackingSelection.id || ""}
-                </p>
-              ) : null}
-            </div>
-            <Button
-              variant="outline"
-              onClick={() => void manualRefresh()}
-              disabled={loading || refreshing || branchExperienceLoading}
-            >
-              <RefreshCw className={`ml-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
-              تحديث
-            </Button>
-          </div>
-
+    <div className="space-y-4" dir="rtl">
+      {/* Scope filter bar */}
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3">
+        <div className="flex flex-wrap items-center gap-2">
           {(userIsAdmin || (userIsOrgAdmin && !sessionBranchId)) && (
-            <div className="flex flex-wrap items-center gap-3 rounded-lg border p-3">
+            <>
               {userIsAdmin && (
-                <>
-                  <span className="text-sm text-muted-foreground">المؤسسة:</span>
-                  <Select value={selectedOrganizationId} onValueChange={setSelectedOrganizationId}>
-                    <SelectTrigger className="w-[220px] text-right">
-                      <SelectValue placeholder="اختر المؤسسة" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {organizations.map((organization) => (
-                        <SelectItem key={organization._id} value={organization._id}>
-                          {organization.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </>
+                <Select value={selectedOrganizationId} onValueChange={setSelectedOrganizationId}>
+                  <SelectTrigger className="h-8 w-[180px] text-xs">
+                    <SelectValue placeholder="اختر المؤسسة" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {organizations.map((organization) => (
+                      <SelectItem key={organization._id} value={organization._id}>
+                        {organization.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               )}
-
-              <span className="text-sm text-muted-foreground">{labels.branchLabel || "الفرع"}:</span>
               <Select
                 value={selectedBranchId || "all"}
                 onValueChange={(value) => setSelectedBranchId(value === "all" ? "" : value)}
                 disabled={userIsAdmin && !selectedOrganizationId}
               >
-                <SelectTrigger className="w-[240px] text-right">
+                <SelectTrigger className="h-8 w-[200px] text-xs">
                   <SelectValue placeholder={`اختر ${labels.branchLabel || "الفرع"}`} />
                 </SelectTrigger>
                 <SelectContent>
@@ -785,16 +804,31 @@ export function TrackingMonitor() {
                   ))}
                 </SelectContent>
               </Select>
-
-              <span className="text-xs text-muted-foreground">
-                {resolvedBranchId
-                  ? "أنت الآن داخل فرع واحد، لذلك ستظهر لك لوحات التتبع التشغيلية كاملة."
-                  : "للمتابعة التشغيلية الدقيقة اختر فرعاً واحداً، وإلا سيبقى مركز المراقبة هو العرض الأنسب."}
-              </span>
-            </div>
+              {resolvedBranchId && (
+                <span className="flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-xs text-primary">
+                  <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+                  عرض فرع واحد
+                </span>
+              )}
+            </>
           )}
-        </CardContent>
-      </Card>
+          {trackingSelection.type && (
+            <span className="text-xs text-muted-foreground">
+              محدد: {trackingSelection.type === "vehicle" ? "مركبة" : "حدث"}
+            </span>
+          )}
+        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-8 gap-1.5 text-xs"
+          onClick={() => void manualRefresh()}
+          disabled={loading || refreshing || branchExperienceLoading}
+        >
+          <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
+          تحديث
+        </Button>
+      </div>
 
       {!canLoad ? (
         <EmptyState text="يرجى تحديد المؤسسة أولاً لتحميل بيانات التتبع." />
@@ -805,39 +839,40 @@ export function TrackingMonitor() {
       ) : (
         <>
           <Tabs value={sourceView} onValueChange={(value) => setSourceView(value as TrackingSourceView)} dir="rtl">
-            <TabsList className="grid h-auto grid-cols-1 gap-3 bg-transparent p-0 md:grid-cols-4">
-              {([...TRACKING_PROVIDERS, "overview"] as TrackingSourceView[]).map((view) => {
-                const metrics = view === "overview" ? null : sourceMetrics[view as TrackingProvider]
-                const badgeValue =
-                  view === "overview"
-                    ? overview.summary.totalVehicles
-                    : metrics!.liveItems.length > 0
-                      ? metrics!.liveItems.length
-                      : metrics!.totalVehicles
+            {/* Source selector — compact pill strip */}
+            <div className="rounded-xl border border-border bg-card p-1">
+              <TabsList className="flex h-auto w-full gap-1 bg-transparent p-0">
+                {([...TRACKING_PROVIDERS, "overview"] as TrackingSourceView[]).map((view) => {
+                  const metrics = view === "overview" ? null : sourceMetrics[view as TrackingProvider]
+                  const liveCount = view === "overview" ? overview.summary.liveConnectivityCounts.moving : metrics!.moving
+                  const totalCount =
+                    view === "overview"
+                      ? overview.summary.totalVehicles
+                      : metrics!.liveItems.length > 0
+                        ? metrics!.liveItems.length
+                        : metrics!.totalVehicles
+                  const hasLive = liveCount > 0
 
-                return (
-                  <TabsTrigger
-                    key={view}
-                    value={view}
-                    className="h-auto rounded-2xl border bg-card px-4 py-3 text-right data-[state=active]:border-primary data-[state=active]:bg-primary/5"
-                  >
-                    <div className="w-full space-y-2 text-right">
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="font-semibold">{getSourceViewLabel(view)}</span>
-                        <span className="rounded-full bg-primary/10 px-2 py-1 text-xs text-primary">
-                          {badgeValue}
+                  return (
+                    <TabsTrigger
+                      key={view}
+                      value={view}
+                      className="flex flex-1 items-center justify-between gap-2 rounded-lg px-3 py-2 text-right transition-colors data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=inactive]:hover:bg-muted"
+                    >
+                      <span className="text-sm font-medium">{getSourceViewLabel(view)}</span>
+                      <span className="flex items-center gap-1.5">
+                        {hasLive && view !== "overview" && (
+                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_4px] shadow-emerald-400/80" />
+                        )}
+                        <span className="rounded-full bg-background/20 px-1.5 py-0.5 text-xs tabular-nums">
+                          {totalCount}
                         </span>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        {view === "overview"
-                          ? "الصورة الشاملة والجداول الإدارية."
-                          : `مباشر الآن ثم تفاصيل ${getProviderLabel(view as TrackingProvider)}.`}
-                      </p>
-                    </div>
-                  </TabsTrigger>
-                )
-              })}
-            </TabsList>
+                      </span>
+                    </TabsTrigger>
+                  )
+                })}
+              </TabsList>
+            </div>
 
             {TRACKING_PROVIDERS.map((provider) => (
               <TabsContent key={provider} value={provider} className="mt-4 space-y-4">
@@ -845,73 +880,72 @@ export function TrackingMonitor() {
               </TabsContent>
             ))}
 
-            <TabsContent value="overview" className="mt-4 space-y-4">
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+            <TabsContent value="overview" className="mt-3 space-y-4">
+              {/* KPI strip */}
+              <div className="flex flex-wrap items-stretch gap-0 rounded-xl border border-border bg-card py-4">
                 <SummaryCard
                   title={`إجمالي ${labels.vehicleLabel || "المركبات"}`}
                   value={overview.summary.totalVehicles}
-                  subtitle={`ضمن ${overview.summary.branchCount} ${overview.summary.branchCount === 1 ? "فرع" : "فروع"}`}
-                  icon={Truck}
+                  subtitle={`${overview.summary.branchCount} ${overview.summary.branchCount === 1 ? "فرع" : "فروع"}`}
                 />
                 <SummaryCard
                   title="الربوط النشطة"
                   value={activeBindingTotal}
-                  subtitle={`أثر: ${overview.summary.activeBindingCounts.athar} | GPS: ${overview.summary.activeBindingCounts.mobile_app}`}
-                  icon={Link2}
+                  subtitle={`أثر ${overview.summary.activeBindingCounts.athar} · GPS ${overview.summary.activeBindingCounts.mobile_app}`}
                 />
                 <SummaryCard
-                  title="مركبات متحركة"
+                  title="متحركة الآن"
                   value={overview.summary.liveConnectivityCounts.moving}
-                  subtitle="بحسب الحالة الحية الحالية"
-                  icon={Activity}
+                  subtitle="نشطة"
+                  accent="success"
                 />
                 <SummaryCard
-                  title="مركبات متوقفة"
+                  title="متوقفة"
                   value={overview.summary.liveConnectivityCounts.stopped}
-                  subtitle="بحسب الحالة الحية الحالية"
-                  icon={ShieldCheck}
+                  subtitle="لا حركة"
+                  accent="warning"
                 />
                 <SummaryCard
-                  title="مركبات غير متصلة"
+                  title="غير متصلة"
                   value={overview.summary.liveConnectivityCounts.offline}
-                  subtitle="بحسب الحالة الحية الحالية"
-                  icon={Smartphone}
+                  subtitle="منقطعة"
+                  accent="danger"
                 />
                 <SummaryCard
-                  title="رسائل آخر 24 ساعة"
+                  title="رسائل / 24س"
                   value={overview.summary.ingressLast24h.total}
-                  subtitle={`أخطاء: ${overview.summary.ingressLast24h.error} | مرفوضة: ${overview.summary.ingressLast24h.rejected}`}
-                  icon={Webhook}
+                  subtitle={`${overview.summary.ingressLast24h.error} أخطاء`}
+                  accent={overview.summary.ingressLast24h.error > 0 ? "danger" : "default"}
                 />
               </div>
 
-              <div className="grid gap-3 md:grid-cols-3">
-                {TRACKING_PROVIDERS.map((provider) => (
-                  <Card key={provider}>
-                    <CardContent className="space-y-2 p-4">
-                      <div className="flex items-center justify-between">
-                        <span className="font-semibold">{getProviderLabel(provider)}</span>
-                        <span className="rounded-full bg-primary/10 px-2 py-1 text-xs text-primary">
-                          {overview.summary.providerEnabledBranches[provider]} فرع مفعّل
-                        </span>
+              {/* Provider summary row */}
+              <div className="grid gap-2 md:grid-cols-3">
+                {TRACKING_PROVIDERS.map((provider) => {
+                  const enabled = overview.summary.providerEnabledBranches[provider] > 0
+                  return (
+                    <div key={provider} className="flex items-center justify-between rounded-xl border border-border bg-card px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <span className={`h-2 w-2 rounded-full ${enabled ? "bg-emerald-500" : "bg-slate-600"}`} />
+                        <span className="text-sm font-medium">{getProviderLabel(provider)}</span>
                       </div>
-                      <div className="text-sm text-muted-foreground">
-                        <div>مركبات على هذا المزود: {overview.summary.providerVehicleCounts[provider]}</div>
-                        <div>ربوط نشطة: {overview.summary.activeBindingCounts[provider]}</div>
-                        <div>ربوط أساسية: {overview.summary.primaryBindingCounts[provider]}</div>
+                      <div className="flex items-center gap-3 text-xs text-muted-foreground tabular-nums">
+                        <span>{overview.summary.providerVehicleCounts[provider]} مركبة</span>
+                        <span className="text-border">·</span>
+                        <span>{overview.summary.activeBindingCounts[provider]} ربط</span>
                       </div>
-                    </CardContent>
-                  </Card>
-                ))}
+                    </div>
+                  )
+                })}
               </div>
 
               <Tabs value={overviewTab} onValueChange={setOverviewTab}>
-                <TabsList className="mb-4 flex h-auto flex-wrap gap-2">
-                  <TabsTrigger value="map">خريطة النطاق</TabsTrigger>
-                  <TabsTrigger value="live">الحالة الحية</TabsTrigger>
-                  <TabsTrigger value="bindings">الربوط</TabsTrigger>
-                  <TabsTrigger value="messages">الدفعات الواردة</TabsTrigger>
-                  <TabsTrigger value="providers">المزودات</TabsTrigger>
+                <TabsList className="mb-3 flex h-9 w-fit gap-0 rounded-lg border border-border bg-card p-1">
+                  <TabsTrigger value="map" className="rounded-md px-3 text-xs">خريطة النطاق</TabsTrigger>
+                  <TabsTrigger value="live" className="rounded-md px-3 text-xs">الحالة الحية</TabsTrigger>
+                  <TabsTrigger value="bindings" className="rounded-md px-3 text-xs">الربوط</TabsTrigger>
+                  <TabsTrigger value="messages" className="rounded-md px-3 text-xs">الدفعات</TabsTrigger>
+                  <TabsTrigger value="providers" className="rounded-md px-3 text-xs">المزودات</TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="map" className="space-y-4">
@@ -956,183 +990,153 @@ export function TrackingMonitor() {
                 </TabsContent>
 
                 <TabsContent value="bindings">
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>الربوط والأجهزة</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      {overview.bindings.length === 0 ? (
-                        <EmptyState text="لا توجد ربوط تتبع ضمن النطاق الحالي." />
-                      ) : (
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-sm">
-                            <thead>
-                              <tr className="border-b text-right">
-                                <th className="p-2">{labels.branchLabel || "الفرع"}</th>
-                                <th className="p-2">{labels.vehicleLabel || "المركبة"}</th>
-                                <th className="p-2">المزوّد</th>
-                                <th className="p-2">الجهاز</th>
-                                <th className="p-2">الإمكانات</th>
-                                <th className="p-2">آخر ظهور</th>
-                                <th className="p-2">الحالة</th>
-                                <th className="p-2">الإجراء</th>
+                  <div className="rounded-xl border border-border bg-card overflow-hidden">
+                    {overview.bindings.length === 0 ? (
+                      <div className="p-4"><EmptyState text="لا توجد ربوط تتبع ضمن النطاق الحالي." /></div>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b border-border bg-muted/40 text-right">
+                              <th className="px-4 py-2.5 text-xs font-medium text-muted-foreground">{labels.vehicleLabel || "المركبة"}</th>
+                              <th className="px-4 py-2.5 text-xs font-medium text-muted-foreground">المزوّد</th>
+                              <th className="px-4 py-2.5 text-xs font-medium text-muted-foreground">الجهاز</th>
+                              <th className="px-4 py-2.5 text-xs font-medium text-muted-foreground">آخر ظهور</th>
+                              <th className="px-4 py-2.5 text-xs font-medium text-muted-foreground">الحالة</th>
+                              <th className="px-4 py-2.5 text-xs font-medium text-muted-foreground"></th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-border">
+                            {overview.bindings.map((binding) => (
+                              <tr key={binding._id} className="transition-colors hover:bg-muted/30">
+                                <td className="px-4 py-3">
+                                  <div className="font-medium">{binding.vehicleName}</div>
+                                  <div className="text-xs text-muted-foreground">{binding.plateNumber || binding.branchName}</div>
+                                </td>
+                                <td className="px-4 py-3 text-sm">{binding.providerLabel}</td>
+                                <td className="px-4 py-3 text-sm text-muted-foreground">{binding.deviceName || "—"}</td>
+                                <td className="px-4 py-3 text-xs text-muted-foreground tabular-nums">{formatDateTime(binding.lastSeenAt)}</td>
+                                <td className="px-4 py-3">
+                                  <span
+                                    className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
+                                      binding.isActive
+                                        ? "bg-emerald-500/10 text-emerald-600"
+                                        : "bg-slate-500/10 text-slate-500"
+                                    }`}
+                                  >
+                                    <span className={`h-1.5 w-1.5 rounded-full ${binding.isActive ? "bg-emerald-500" : "bg-slate-500"}`} />
+                                    {binding.isActive ? "نشط" : "متوقف"}
+                                    {binding.isPrimary ? " · أساسي" : ""}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 text-xs text-muted-foreground hover:text-destructive"
+                                    onClick={() => setBindingToRevoke(binding._id)}
+                                    disabled={revokingBindingId === binding._id}
+                                  >
+                                    {revokingBindingId === binding._id ? "جارٍ..." : "إبطال"}
+                                  </Button>
+                                </td>
                               </tr>
-                            </thead>
-                            <tbody>
-                              {overview.bindings.map((binding) => (
-                                <tr key={binding._id} className="border-b align-top">
-                                  <td className="p-2">{binding.branchName}</td>
-                                  <td className="p-2">
-                                    <div className="font-medium">{binding.vehicleName}</div>
-                                    <div className="text-xs text-muted-foreground">{binding.plateNumber || "—"}</div>
-                                  </td>
-                                  <td className="p-2">{binding.providerLabel}</td>
-                                  <td className="p-2">{binding.deviceName || "—"}</td>
-                                  <td className="p-2">
-                                    <div className="flex flex-wrap gap-1">
-                                      {binding.capabilities.length > 0 ? (
-                                        binding.capabilities.map((capability) => (
-                                          <span
-                                            key={`${binding._id}-${capability}`}
-                                            className="rounded-full bg-muted px-2 py-1 text-xs text-muted-foreground"
-                                          >
-                                            {capability}
-                                          </span>
-                                        ))
-                                      ) : (
-                                        <span className="text-xs text-muted-foreground">—</span>
-                                      )}
-                                    </div>
-                                  </td>
-                                  <td className="p-2">{formatDateTime(binding.lastSeenAt)}</td>
-                                  <td className="p-2">
-                                    <span
-                                      className={`inline-flex rounded-full px-2 py-1 text-xs ${
-                                        binding.isActive ? "bg-emerald-500/15 text-emerald-700" : "bg-slate-500/15 text-slate-700"
-                                      }`}
-                                    >
-                                      {binding.isActive ? "نشط" : "متوقف"}
-                                    </span>
-                                  </td>
-                                  <td className="p-2">
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => setBindingToRevoke(binding._id)}
-                                      disabled={revokingBindingId === binding._id}
-                                    >
-                                      {revokingBindingId === binding._id ? "جارٍ الإبطال..." : "إبطال الربط"}
-                                    </Button>
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
                 </TabsContent>
 
                 <TabsContent value="messages">
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>الدفعات الواردة</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      {overview.recentMessages.length === 0 ? (
-                        <EmptyState text="لا توجد رسائل تتبع واردة ضمن النطاق الحالي." />
-                      ) : (
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-sm">
-                            <thead>
-                              <tr className="border-b text-right">
-                                <th className="p-2">وقت الوصول</th>
-                                <th className="p-2">المزوّد</th>
-                                <th className="p-2">{labels.branchLabel || "الفرع"}</th>
-                                <th className="p-2">{labels.vehicleLabel || "المركبة"}</th>
-                                <th className="p-2">الحالة</th>
-                                <th className="p-2">حجم الدفعة</th>
+                  <div className="rounded-xl border border-border bg-card overflow-hidden">
+                    {overview.recentMessages.length === 0 ? (
+                      <div className="p-4"><EmptyState text="لا توجد رسائل تتبع واردة ضمن النطاق الحالي." /></div>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b border-border bg-muted/40 text-right">
+                              <th className="px-4 py-2.5 text-xs font-medium text-muted-foreground">وقت الوصول</th>
+                              <th className="px-4 py-2.5 text-xs font-medium text-muted-foreground">المزوّد</th>
+                              <th className="px-4 py-2.5 text-xs font-medium text-muted-foreground">{labels.vehicleLabel || "المركبة"}</th>
+                              <th className="px-4 py-2.5 text-xs font-medium text-muted-foreground">الحالة</th>
+                              <th className="px-4 py-2.5 text-xs font-medium text-muted-foreground tabular-nums">الدفعة</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-border">
+                            {overview.recentMessages.map((message) => (
+                              <tr key={message._id} className="transition-colors hover:bg-muted/30">
+                                <td className="px-4 py-3 text-xs text-muted-foreground tabular-nums">{formatDateTime(message.receivedAt)}</td>
+                                <td className="px-4 py-3 text-sm">{message.providerLabel}</td>
+                                <td className="px-4 py-3">
+                                  <div className="text-sm">{message.vehicleName || "—"}</div>
+                                  <div className="text-xs text-muted-foreground">{message.branchName}</div>
+                                </td>
+                                <td className="px-4 py-3">
+                                  <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${getIngressStatusClasses(message.status)}`}>
+                                    {message.status === "processed" ? "معالجة"
+                                      : message.status === "duplicate" ? "مكررة"
+                                      : message.status === "ignored_late" ? "متأخرة"
+                                      : message.status === "rejected" ? "مرفوضة"
+                                      : message.status === "error" ? "خطأ"
+                                      : "مستلمة"}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3 text-sm tabular-nums text-muted-foreground">{message.batchSize ?? "—"}</td>
                               </tr>
-                            </thead>
-                            <tbody>
-                              {overview.recentMessages.map((message) => (
-                                <tr key={message._id} className="border-b align-top">
-                                  <td className="p-2">{formatDateTime(message.receivedAt)}</td>
-                                  <td className="p-2">{message.providerLabel}</td>
-                                  <td className="p-2">{message.branchName}</td>
-                                  <td className="p-2">{message.vehicleName || "—"}</td>
-                                  <td className="p-2">
-                                    <span className={`inline-flex rounded-full px-2 py-1 text-xs ${getIngressStatusClasses(message.status)}`}>
-                                      {message.status}
-                                    </span>
-                                  </td>
-                                  <td className="p-2">{message.batchSize ?? "—"}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
                 </TabsContent>
 
                 <TabsContent value="providers">
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>تفعيل المزودات حسب الفروع</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      {overview.branchProviders.length === 0 ? (
-                        <EmptyState text="لا توجد إعدادات مزودات ضمن النطاق الحالي." />
-                      ) : (
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-sm">
-                            <thead>
-                              <tr className="border-b text-right">
-                                <th className="p-2">{labels.branchLabel || "الفرع"}</th>
-                                <th className="p-2">أثر</th>
-                                <th className="p-2">تطبيق الموبايل</th>
-                                <th className="p-2">تراكار</th>
+                  <div className="rounded-xl border border-border bg-card overflow-hidden">
+                    {overview.branchProviders.length === 0 ? (
+                      <div className="p-4"><EmptyState text="لا توجد إعدادات مزودات ضمن النطاق الحالي." /></div>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b border-border bg-muted/40 text-right">
+                              <th className="px-4 py-2.5 text-xs font-medium text-muted-foreground">{labels.branchLabel || "الفرع"}</th>
+                              <th className="px-4 py-2.5 text-xs font-medium text-muted-foreground">أثر</th>
+                              <th className="px-4 py-2.5 text-xs font-medium text-muted-foreground">GPS</th>
+                              <th className="px-4 py-2.5 text-xs font-medium text-muted-foreground">Traccar</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-border">
+                            {overview.branchProviders.map((branch) => (
+                              <tr key={branch.branchId} className="transition-colors hover:bg-muted/30">
+                                <td className="px-4 py-3 font-medium">{branch.branchName}</td>
+                                {TRACKING_PROVIDERS.map((provider) => {
+                                  const providerState = branch.providers[provider]
+                                  return (
+                                    <td key={provider} className="px-4 py-3">
+                                      <span
+                                        className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
+                                          providerState.enabled
+                                            ? "bg-emerald-500/10 text-emerald-600"
+                                            : "bg-slate-500/10 text-slate-500"
+                                        }`}
+                                      >
+                                        <span className={`h-1.5 w-1.5 rounded-full ${providerState.enabled ? "bg-emerald-500" : "bg-slate-500"}`} />
+                                        {providerState.enabled ? "مفعّل" : "معطّل"}
+                                      </span>
+                                    </td>
+                                  )
+                                })}
                               </tr>
-                            </thead>
-                            <tbody>
-                              {overview.branchProviders.map((branch) => (
-                                <tr key={branch.branchId} className="border-b align-top">
-                                  <td className="p-2 font-medium">{branch.branchName}</td>
-                                  {TRACKING_PROVIDERS.map((provider) => {
-                                    const providerState = branch.providers[provider]
-                                    return (
-                                      <td key={provider} className="p-2">
-                                        <div className="space-y-1">
-                                          <span
-                                            className={`inline-flex rounded-full px-2 py-1 text-xs ${
-                                              providerState.enabled
-                                                ? "bg-emerald-500/15 text-emerald-700"
-                                                : "bg-slate-500/15 text-slate-700"
-                                            }`}
-                                          >
-                                            {providerState.enabled ? "مفعّل" : "غير مفعّل"}
-                                          </span>
-                                          <div className="text-xs text-muted-foreground">
-                                            {getProviderSourceLabel(
-                                              providerState.source,
-                                              provider === "athar" ? branch.providers.athar.legacyFallback : undefined,
-                                            )}
-                                          </div>
-                                        </div>
-                                      </td>
-                                    )
-                                  })}
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
                 </TabsContent>
               </Tabs>
             </TabsContent>

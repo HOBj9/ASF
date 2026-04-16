@@ -1,6 +1,7 @@
 import Link from "next/link"
 import { getServerSession } from "next-auth"
 import { redirect } from "next/navigation"
+import { Radio } from "lucide-react"
 import { TrackingMonitor } from "@/components/dashboard/tracking-monitor"
 import { Button } from "@/components/ui/button"
 import { authOptions } from "@/lib/auth"
@@ -20,18 +21,25 @@ export default async function TrackingPage() {
   }
 
   return (
-    <div className="text-right">
-      <div className="mb-6 flex flex-col gap-4 lg:mb-8 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold lg:text-3xl">لوحة مراقبة التتبع</h1>
-          <p className="mt-2 text-muted-foreground">
-            راقب الحالة الحية للمركبات، وربوط التتبع، وآخر الدفعات الواردة من المزوّدات المدعومة.
-          </p>
+    <div dir="rtl" className="space-y-6">
+      {/* Page header */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+            <Radio className="h-5 w-5" />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold leading-tight">لوحة مراقبة التتبع</h1>
+            <p className="text-sm text-muted-foreground">
+              الحالة الحية للمركبات · ربوط الأجهزة · دفعات التتبع
+            </p>
+          </div>
         </div>
-        <Button asChild variant="outline">
-          <Link href="/tracking-simulator">فتح محاكي الموبايل</Link>
+        <Button asChild variant="outline" size="sm" className="shrink-0 self-start">
+          <Link href="/tracking-simulator">محاكي الموبايل</Link>
         </Button>
       </div>
+
       <TrackingMonitor />
     </div>
   )

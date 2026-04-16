@@ -9,11 +9,11 @@ import MarkerClusterGroup from "react-leaflet-cluster";
 import "react-leaflet-cluster/lib/assets/MarkerCluster.css";
 import "react-leaflet-cluster/lib/assets/MarkerCluster.Default.css";
 import L from "leaflet";
-import { Maximize2, BusFront, MapPin, Hexagon, CarFront, X, BarChart2, CalendarDays, Layers, PanelRightOpen, PanelRightClose, Search, Play, Pause, SkipBack, SkipForward } from "lucide-react";
+import { Maximize2, BusFront, MapPin, Hexagon, CarFront, X, BarChart2, CalendarDays, Layers, PanelRightOpen, PanelRightClose, Search, Play, Pause, SkipBack, SkipForward, SlidersHorizontal, History } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { LoadingOverlay } from "@/components/ui/loading";
 import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
 import markerIcon from "leaflet/dist/images/marker-icon.png";
@@ -1739,492 +1739,369 @@ export function MunicipalityMap({
               )}
 
               {rightPanel === "live" && (
-                <div className="space-y-3 text-sm">
-                  <div className="rounded-xl border bg-muted/20 p-3">
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <div className="font-medium">مركز التتبع الحي</div>
-                        <div className="mt-1 text-xs text-muted-foreground">شاشة موحدة تعرض أثر وGPS الموبايل على نفس الخريطة.</div>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="h-8 px-3 text-xs"
-                        onClick={focusOnAllLiveVehicles}
-                        disabled={filteredLiveVehicles.length === 0}
-                      >
-                        تركيز النتائج
-                      </Button>
+                <div className="flex h-full flex-col gap-2 text-sm">
+                  {/* ── Top bar: KPI + action buttons ── */}
+                  <div className="flex items-center gap-1.5">
+                    {/* KPI dots */}
+                    <div className="flex flex-1 items-center gap-2 text-[11px] tabular-nums">
+                      <span className="font-semibold">{liveVehicleInventory.length}</span>
+                      <span className="text-border">·</span>
+                      <span className="flex items-center gap-1">
+                        <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                        <span className="text-muted-foreground">{liveStatusCounts.moving}</span>
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <span className="inline-block h-1.5 w-1.5 rounded-full bg-amber-500" />
+                        <span className="text-muted-foreground">{liveStatusCounts.stopped}</span>
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <span className="inline-block h-1.5 w-1.5 rounded-full bg-slate-400" />
+                        <span className="text-muted-foreground">{liveStatusCounts.offline}</span>
+                      </span>
+                      {(liveProviderFilter !== "all" || liveStatusFilter !== "all") && (
+                        <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">فلتر</span>
+                      )}
+                      {historyTrack && (
+                        <span className="rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700 dark:text-emerald-400">سجل</span>
+                      )}
                     </div>
-                    <div className="mt-1 text-xs text-muted-foreground">
-                      إجمالي مباشر: {liveVehicleInventory.length} • بعد الفلاتر: {visibleLiveVehicles.length}
-                      {liveVehiclesSearchQuery.trim() && ` • نتائج البحث: ${filteredLiveVehicles.length}`}
-                    </div>
-                    <div className="mt-2 text-xs text-muted-foreground">
-                      أثر: {liveProviderCounts.athar} • GPS الموبايل: {liveProviderCounts.mobile_app} • تراكار: {liveProviderCounts.traccar}
-                    </div>
-                    <div className="mt-1 text-xs text-muted-foreground">
-                      تعمل: {liveStatusCounts.moving} • متوقفة: {liveStatusCounts.stopped} • غير متصلة: {liveStatusCounts.offline}
-                    </div>
-                  </div>
+                    {/* Filters dialog trigger */}
+                    <Dialog>
+                      <DialogTrigger asChild>
+                        <Button type="button" variant="ghost" size="icon" className="h-7 w-7 flex-shrink-0" title="الفلاتر والإعدادات">
+                          <SlidersHorizontal className="h-3.5 w-3.5" />
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent className="max-w-sm" dir="rtl">
+                        <DialogHeader>
+                          <DialogTitle className="text-sm">فلاتر التتبع الحي</DialogTitle>
+                        </DialogHeader>
+                        <div className="space-y-4 pt-1">
+                          {trackingSource !== "all" ? (
+                            <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-[11px] text-amber-700 dark:text-amber-300">
+                              {`مساحة ${trackingSourceLabel || liveProviderFilterLabels[trackingSource]} فقط`}
+                            </div>
+                          ) : null}
 
-                  {trackingSource !== "all" ? (
-                    <div className="rounded-lg border border-dashed px-3 py-2 text-[11px] text-muted-foreground">
-                      {`أنت الآن داخل مساحة ${trackingSourceLabel || liveProviderFilterLabels[trackingSource]} فقط. ابدأ من قائمة المركبات، ثم افتح السجل أو التقرير المناسب من نفس البطاقة.`}
-                    </div>
-                  ) : null}
+                          {fixedLiveProviderFilter === "all" ? (
+                            <div className="space-y-2">
+                              <span className="text-xs font-medium text-muted-foreground">المصدر</span>
+                              <div className="flex flex-wrap gap-1.5">
+                                {(["all", "athar", "mobile_app", "traccar"] as const).map((provider) => (
+                                  <button
+                                    key={provider}
+                                    type="button"
+                                    onClick={() => setLiveProviderFilter(provider)}
+                                    className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
+                                      liveProviderFilter === provider ? "font-semibold shadow-sm" : "text-muted-foreground hover:bg-muted"
+                                    }`}
+                                    style={
+                                      liveProviderFilter === provider
+                                        ? provider === "all"
+                                          ? { borderColor: "hsl(var(--border))", backgroundColor: "hsl(var(--muted))" }
+                                          : { borderColor: getLiveProviderColor(provider), backgroundColor: `${getLiveProviderColor(provider)}18`, color: getLiveProviderColor(provider) }
+                                        : undefined
+                                    }
+                                  >
+                                    {liveProviderFilterLabels[provider]} {provider === "all" ? liveVehicleInventory.length : liveProviderCounts[provider]}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          ) : null}
 
-                  {fixedLiveProviderFilter === "all" ? (
-                  <div className="space-y-2 rounded-xl border p-3">
-                    <div className="text-xs font-medium text-muted-foreground">فلتر المصدر</div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {(["all", "athar", "mobile_app", "traccar"] as const).map((provider) => (
-                        <button
-                          key={provider}
+                          <div className="space-y-2">
+                            <span className="text-xs font-medium text-muted-foreground">الحالة</span>
+                            <div className="flex flex-wrap gap-1.5">
+                              {(["all", "moving", "stopped", "offline"] as const).map((status) => (
+                                <button
+                                  key={status}
+                                  type="button"
+                                  onClick={() => setLiveStatusFilter(status)}
+                                  className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
+                                    liveStatusFilter === status
+                                      ? status === "moving"
+                                        ? "border-emerald-500 bg-emerald-500/10 text-emerald-700"
+                                        : status === "stopped"
+                                          ? "border-amber-500 bg-amber-500/10 text-amber-700"
+                                          : status === "offline"
+                                            ? "border-slate-400 bg-slate-500/10 text-slate-600"
+                                            : "border-primary bg-primary/10 text-primary"
+                                      : "text-muted-foreground hover:bg-muted"
+                                  }`}
+                                >
+                                  {liveStatusFilterLabels[status]} {status === "all" ? liveVehicleInventory.length : liveStatusCounts[status]}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs text-muted-foreground">أسماء المركبات على الخريطة</span>
+                            <button
+                              type="button"
+                              onClick={() => setShowVehicleNamesOnMap((current) => !current)}
+                              className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                                showVehicleNamesOnMap ? "border-primary bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted"
+                              }`}
+                            >
+                              {showVehicleNamesOnMap ? "مفعّل" : "مخفي"}
+                            </button>
+                          </div>
+
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="w-full text-xs"
+                            onClick={focusOnAllLiveVehicles}
+                            disabled={filteredLiveVehicles.length === 0}
+                          >
+                            تركيز على النتائج المرئية
+                          </Button>
+                        </div>
+                      </DialogContent>
+                    </Dialog>
+
+                    {/* History dialog trigger */}
+                    <Dialog>
+                      <DialogTrigger asChild>
+                        <Button
                           type="button"
-                          onClick={() => setLiveProviderFilter(provider)}
-                          className={`rounded-full border px-2.5 py-1 text-[11px] transition-colors ${
-                            liveProviderFilter === provider ? "font-semibold shadow-sm" : "text-muted-foreground hover:bg-muted"
-                          }`}
-                          style={
-                            liveProviderFilter === provider
-                              ? provider === "all"
-                                ? { borderColor: "#0f172a", backgroundColor: "rgba(15, 23, 42, 0.06)" }
-                                : { borderColor: getLiveProviderColor(provider), backgroundColor: `${getLiveProviderColor(provider)}18`, color: getLiveProviderColor(provider) }
-                              : undefined
-                          }
+                          variant="ghost"
+                          size="icon"
+                          className={`h-7 w-7 flex-shrink-0 ${historyTrack ? "text-emerald-600 dark:text-emerald-400" : ""}`}
+                          title="سجل الحركة"
                         >
-                          {liveProviderFilterLabels[provider]} ({provider === "all" ? liveVehicleInventory.length : liveProviderCounts[provider]})
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  ) : null}
+                          <History className="h-3.5 w-3.5" />
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent className="max-w-md" dir="rtl">
+                        <DialogHeader>
+                          <DialogTitle className="text-sm">سجل حركة المركبة</DialogTitle>
+                        </DialogHeader>
+                        <div className="space-y-3 pt-1">
+                          {historyTrack ? (
+                            <div className="flex items-center justify-between rounded-lg border bg-muted/30 px-3 py-2 text-[11px]">
+                              <div>
+                                <span className="font-medium">{historyTrack.vehicle.name}</span>
+                                <span className="mr-1 text-muted-foreground">· {historyTrack.summary.pointsCount} نقطة</span>
+                                {!isHistoryViewMode ? <span className="mr-1 text-amber-600"> · مخفي</span> : null}
+                              </div>
+                              <div className="flex gap-1">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant={isHistoryViewMode ? "default" : "secondary"}
+                                  className="h-6 px-2 text-[11px]"
+                                  onClick={() => { setLiveDisplayMode("history"); onTabChange("live"); showPanel("live"); }}
+                                  disabled={historyLoading}
+                                >
+                                  {isHistoryViewMode ? "معروض" : "إظهار"}
+                                </Button>
+                                <Button type="button" size="sm" variant="ghost" className="h-6 px-2 text-[11px] text-muted-foreground" onClick={clearHistoryTrack}>
+                                  مسح
+                                </Button>
+                              </div>
+                            </div>
+                          ) : (
+                            <p className="text-[11px] text-muted-foreground">اختر مركبة من القائمة ثم اضغط "سجل الحركة" لتحميل النقاط.</p>
+                          )}
 
-                  <div className="space-y-2 rounded-xl border p-3">
-                    <div className="text-xs font-medium text-muted-foreground">فلتر الحالة</div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {(["all", "moving", "stopped", "offline"] as const).map((status) => (
-                        <button
-                          key={status}
-                          type="button"
-                          onClick={() => setLiveStatusFilter(status)}
-                          className={`rounded-full border px-2.5 py-1 text-[11px] transition-colors ${
-                            liveStatusFilter === status
-                              ? status === "moving"
-                                ? "border-emerald-500 bg-emerald-500/10 text-emerald-700"
-                                : status === "stopped"
-                                  ? "border-amber-500 bg-amber-500/10 text-amber-700"
-                                  : status === "offline"
-                                    ? "border-slate-500 bg-slate-500/10 text-slate-700"
-                                    : "border-primary bg-primary/10 text-primary"
-                              : "text-muted-foreground hover:bg-muted"
-                          }`}
-                        >
-                          {liveStatusFilterLabels[status]} ({status === "all" ? liveVehicleInventory.length : liveStatusCounts[status]})
-                        </button>
-                      ))}
-                    </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div className="space-y-1">
+                              <label className="text-[11px] text-muted-foreground">من</label>
+                              <Input type="datetime-local" step={60} value={historyFrom} onChange={(e) => setHistoryFrom(e.target.value)} className="h-8 text-xs" />
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-[11px] text-muted-foreground">إلى</label>
+                              <Input type="datetime-local" step={60} value={historyTo} onChange={(e) => setHistoryTo(e.target.value)} className="h-8 text-xs" />
+                            </div>
+                          </div>
+
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="w-full text-xs"
+                            onClick={() => activeHistoryVehicle && void loadVehicleHistory(activeHistoryVehicle)}
+                            disabled={!activeHistoryVehicle || historyLoading}
+                          >
+                            {historyLoading ? "جارٍ التحميل..." : "تحميل / تحديث السجل"}
+                          </Button>
+
+                          {historyError ? (
+                            <div className="rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-2 text-[11px] text-red-700 dark:text-red-300">{historyError}</div>
+                          ) : null}
+
+                          {historyTrack ? (
+                            <>
+                              <div className="grid grid-cols-2 gap-x-3 gap-y-1 rounded-lg border bg-muted/20 px-3 py-2 text-[11px]">
+                                <span className="text-muted-foreground">المصدر</span>
+                                <span>{historyTrack.summary.source === "athar_route" ? "أثر التاريخي" : "داخلي"}</span>
+                                <span className="text-muted-foreground">المسار</span>
+                                <span>{historyTrack.vehicle.routeName || "—"}</span>
+                                <span className="text-muted-foreground">البداية</span>
+                                <span className="tabular-nums">{historyTrack.summary.startedAt || "—"}</span>
+                                <span className="text-muted-foreground">النهاية</span>
+                                <span className="tabular-nums">{historyTrack.summary.endedAt || "—"}</span>
+                              </div>
+
+                              <div className="rounded-lg border bg-muted/30 px-3 py-2.5">
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="text-[11px] tabular-nums text-muted-foreground">
+                                    {Math.min(historyPlaybackIndex + 1, historyTrack.points.length)}/{historyTrack.points.length}
+                                    {currentPlaybackPoint?.recordedAt ? ` · ${currentPlaybackPoint.recordedAt}` : ""}
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    <Button type="button" size="icon" variant="ghost" className="h-7 w-7" onClick={() => jumpToHistoryPoint(0)} disabled={!historyTrack.points.length}>
+                                      <SkipBack className="h-3.5 w-3.5" />
+                                    </Button>
+                                    <Button type="button" size="icon" className="h-7 w-7" onClick={() => setHistoryPlaybackPlaying((c) => !c)} disabled={historyTrack.points.length <= 1}>
+                                      {historyPlaybackPlaying ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+                                    </Button>
+                                    <Button type="button" size="icon" variant="ghost" className="h-7 w-7" onClick={() => jumpToHistoryPoint(historyTrack.points.length - 1)} disabled={!historyTrack.points.length}>
+                                      <SkipForward className="h-3.5 w-3.5" />
+                                    </Button>
+                                  </div>
+                                </div>
+                                <div className="mt-2 flex gap-1">
+                                  {[{ label: "بطيء", value: 1400 }, { label: "متوسط", value: 800 }, { label: "سريع", value: 400 }].map((s) => (
+                                    <button
+                                      key={s.value}
+                                      type="button"
+                                      onClick={() => setHistoryPlaybackSpeedMs(s.value)}
+                                      className={`rounded-full border px-2 py-0.5 text-[11px] transition-colors ${historyPlaybackSpeedMs === s.value ? "border-primary bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted"}`}
+                                    >
+                                      {s.label}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+
+                              <div className="max-h-48 divide-y divide-border/60 overflow-y-auto rounded-lg border">
+                                {historyTrack.points.map((point, index) => (
+                                  <button
+                                    key={`${point.recordedAt}-${point.lat}-${point.lng}-${index}`}
+                                    type="button"
+                                    onClick={() => jumpToHistoryPoint(index)}
+                                    className={`flex w-full items-center justify-between px-3 py-1.5 text-right text-[11px] transition-colors ${historyPlaybackIndex === index ? "bg-primary/5" : "hover:bg-muted/40"}`}
+                                  >
+                                    <span className="text-muted-foreground">{index + 1}</span>
+                                    <div className="flex items-center gap-2 tabular-nums">
+                                      <span className="text-muted-foreground">{point.speed != null ? `${point.speed} ك/س` : "—"}</span>
+                                      <span>{point.recordedAt}</span>
+                                    </div>
+                                  </button>
+                                ))}
+                              </div>
+                            </>
+                          ) : null}
+                        </div>
+                      </DialogContent>
+                    </Dialog>
                   </div>
 
+                  {/* ── Search ── */}
                   <div className="relative">
                     <Search className="absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
                     <Input
                       type="search"
-                      placeholder="ابحث بالمركبة أو المسار التشغيلي أو السائق أو المصدر أو IMEI أو الجهاز..."
+                      placeholder="بحث بالمركبة أو السائق أو المصدر..."
                       value={liveVehiclesSearchQuery}
                       onChange={(e) => setLiveVehiclesSearchQuery(e.target.value)}
                       className="h-8 pr-8 text-xs"
                     />
                   </div>
 
-                  <div className="flex items-center justify-between gap-2 rounded-xl border border-dashed px-3 py-2 text-[11px] text-muted-foreground">
-                    <span>إظهار أسماء المركبات على الخريطة</span>
-                    <button
-                      type="button"
-                      onClick={() => setShowVehicleNamesOnMap((current) => !current)}
-                      className={`rounded-full border px-2.5 py-1 font-medium transition-colors ${
-                        showVehicleNamesOnMap ? "border-primary bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted"
-                      }`}
-                    >
-                      {showVehicleNamesOnMap ? "مفعّل" : "مخفي"}
-                    </button>
-                  </div>
-
-                  <div className="space-y-3 rounded-xl border p-3">
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <div className="text-xs font-medium text-muted-foreground">سجل حركة المركبة الفعلي</div>
-                        <div className="mt-1 text-[11px] text-muted-foreground">
-                          {historyTrack
-                            ? `${historyTrack.vehicle.name} • ${historyTrack.summary.pointsCount} نقطة حركة`
-                            : "اختر مركبة من القائمة ثم حمّل سجل الحركة الفعلي ضمن الفترة المطلوبة."}
-                        </div>
-                        {historyTrack && !isHistoryViewMode ? (
-                          <div className="mt-1 text-[11px] text-amber-700 dark:text-amber-300">
-                            السجل محمّل لكنه مخفي حاليًا لأنك انتقلت إلى عرض آخر.
-                          </div>
-                        ) : null}
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        {historyTrack ? (
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant={isHistoryViewMode ? "default" : "secondary"}
-                            className="h-8"
-                            onClick={() => {
-                              setLiveDisplayMode("history");
-                              onTabChange("live");
-                              showPanel("live");
-                            }}
-                            disabled={historyLoading}
-                          >
-                            {isHistoryViewMode ? "سجل الحركة معروض" : "إظهار السجل"}
-                          </Button>
-                        ) : null}
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          className="h-8"
-                          onClick={() => activeHistoryVehicle && void loadVehicleHistory(activeHistoryVehicle)}
-                          disabled={!activeHistoryVehicle || historyLoading}
-                        >
-                          {historyLoading ? "جارٍ التحميل..." : "تحديث السجل"}
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="ghost"
-                          className="h-8"
-                          onClick={clearHistoryTrack}
-                          disabled={!historyTrack && !historyVehicleId}
-                        >
-                          مسح
-                        </Button>
-                      </div>
-                    </div>
-
-                    <div className="grid gap-3 md:grid-cols-2">
-                      <div className="space-y-1">
-                        <label className="text-[11px] text-muted-foreground">من</label>
-                        <Input
-                          type="datetime-local"
-                          step={60}
-                          value={historyFrom}
-                          onChange={(event) => setHistoryFrom(event.target.value)}
-                          className="h-9 text-xs"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-[11px] text-muted-foreground">إلى</label>
-                        <Input
-                          type="datetime-local"
-                          step={60}
-                          value={historyTo}
-                          onChange={(event) => setHistoryTo(event.target.value)}
-                          className="h-9 text-xs"
-                        />
-                      </div>
-                    </div>
-
-                    {historyError ? (
-                      <div className="rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-2 text-[11px] text-red-700 dark:text-red-300">
-                        {historyError}
-                      </div>
-                    ) : null}
-
-                    {historyTrack ? (
-                      <>
-                        <div className="rounded-lg border border-dashed px-3 py-2 text-[11px] text-muted-foreground">
-                          <span className="font-medium text-foreground">تنبيه توضيحي:</span> المسار التشغيلي هو الخط المعيّن للمركبة داخل النظام، أما سجل الحركة فهو النقاط الفعلية التي التقطناها من جهاز التتبع وتم رسمها على الخريطة كما تحركت المركبة فعليًا.
-                        </div>
-
-                        <div className="grid gap-2 md:grid-cols-2">
-                          <div className="rounded-lg border px-3 py-2 text-[11px]">
-                            <div className="text-muted-foreground">مصدر سجل الحركة</div>
-                            <div className="mt-1 font-medium">
-                              {historyTrack.summary.source === "athar_route" ? "مسار أثر التاريخي" : "النقاط المحفوظة داخلياً"}
-                            </div>
-                          </div>
-                          <div className="rounded-lg border px-3 py-2 text-[11px]">
-                            <div className="text-muted-foreground">المسار التشغيلي للمركبة</div>
-                            <div className="mt-1 font-medium">{historyTrack.vehicle.routeName || "غير معيّن"}</div>
-                          </div>
-                          <div className="rounded-lg border px-3 py-2 text-[11px]">
-                            <div className="text-muted-foreground">الحفظ الداخلي</div>
-                            <div className="mt-1 font-medium">{historyTrack.summary.savedToSystem ? "تم الحفظ" : "عرض مباشر فقط"}</div>
-                          </div>
-                          <div className="rounded-lg border px-3 py-2 text-[11px]">
-                            <div className="text-muted-foreground">بداية الحركة</div>
-                            <div className="mt-1 font-medium">{historyTrack.summary.startedAt || "—"}</div>
-                          </div>
-                          <div className="rounded-lg border px-3 py-2 text-[11px]">
-                            <div className="text-muted-foreground">نهاية الحركة</div>
-                            <div className="mt-1 font-medium">{historyTrack.summary.endedAt || "—"}</div>
-                          </div>
-                        </div>
-
-                        <div className="rounded-lg border px-3 py-3">
-                          <div className="flex flex-wrap items-center justify-between gap-3">
-                            <div>
-                              <div className="text-[11px] font-medium text-muted-foreground">التشغيل التفاعلي لسجل الحركة</div>
-                              <div className="mt-1 text-[11px] text-muted-foreground">
-                                النقطة الحالية: {Math.min(historyPlaybackIndex + 1, historyTrack.points.length)} / {historyTrack.points.length}
-                              </div>
-                              <div className="mt-1 text-[11px] text-muted-foreground">
-                                الوقت الحالي: {currentPlaybackPoint?.recordedAt || "—"}
-                              </div>
-                            </div>
-                            <div className="flex flex-wrap items-center gap-2">
-                              <Button
-                                type="button"
-                                size="icon"
-                                variant="outline"
-                                className="h-8 w-8"
-                                onClick={() => jumpToHistoryPoint(0)}
-                                disabled={!historyTrack.points.length}
-                              >
-                                <SkipBack className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                type="button"
-                                size="icon"
-                                className="h-8 w-8"
-                                onClick={() => setHistoryPlaybackPlaying((current) => !current)}
-                                disabled={historyTrack.points.length <= 1}
-                              >
-                                {historyPlaybackPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-                              </Button>
-                              <Button
-                                type="button"
-                                size="icon"
-                                variant="outline"
-                                className="h-8 w-8"
-                                onClick={() => jumpToHistoryPoint(historyTrack.points.length - 1)}
-                                disabled={!historyTrack.points.length}
-                              >
-                                <SkipForward className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </div>
-
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            {[
-                              { label: "بطيء", value: 1400 },
-                              { label: "متوسط", value: 800 },
-                              { label: "سريع", value: 400 },
-                            ].map((speed) => (
-                              <button
-                                key={speed.value}
-                                type="button"
-                                onClick={() => setHistoryPlaybackSpeedMs(speed.value)}
-                                className={`rounded-full border px-2.5 py-1 text-[11px] transition-colors ${
-                                  historyPlaybackSpeedMs === speed.value
-                                    ? "border-primary bg-primary/10 text-primary"
-                                    : "text-muted-foreground hover:bg-muted"
-                                }`}
-                              >
-                                {speed.label}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-
-                        <div className="max-h-56 overflow-y-auto rounded-lg border border-border/70">
-                          {historyTrack.points.map((point, index) => (
-                            <button
-                              key={`${point.recordedAt}-${point.lat}-${point.lng}-${index}`}
-                              type="button"
-                              onClick={() => jumpToHistoryPoint(index)}
-                              className={`block w-full border-t border-border/70 px-3 py-2 text-right text-[11px] transition-colors first:border-t-0 ${
-                                historyPlaybackIndex === index ? "bg-primary/5" : "hover:bg-muted/40"
-                              }`}
-                            >
-                              <div className="flex items-center justify-between gap-2">
-                                <span className="text-muted-foreground">النقطة {index + 1}</span>
-                                <span>{point.recordedAt}</span>
-                              </div>
-                              <div className="mt-1 flex items-center justify-between gap-2">
-                                <span className="text-muted-foreground">الإحداثيات</span>
-                                <span>{point.lat.toFixed(5)}, {point.lng.toFixed(5)}</span>
-                              </div>
-                              <div className="mt-1 flex items-center justify-between gap-2">
-                                <span className="text-muted-foreground">السرعة</span>
-                                <span>{point.speed != null ? `${point.speed} كم/س` : "—"}</span>
-                              </div>
-                            </button>
-                          ))}
-                        </div>
-                      </>
-                    ) : null}
-                  </div>
-
+                  {/* ── Selected vehicle quick card ── */}
                   {selectedLiveVehicle ? (
-                    <div className="rounded-xl border border-dashed p-3 text-xs">
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="space-y-1 text-right">
-                          <div className="font-semibold">{selectedLiveVehicle.vehicleName || selectedLiveVehicle.busNumber}</div>
-                          <div className="text-muted-foreground">
-                            {selectedLiveVehicle.providerLabel} • {statusLabel[selectedLiveVehicle.status]} • {selectedLiveVehicle.lastUpdate}
-                          </div>
+                    <div className="rounded-xl border bg-card px-3 py-2 text-xs">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="truncate font-semibold">{selectedLiveVehicle.vehicleName || selectedLiveVehicle.busNumber}</div>
+                          <div className="text-[11px] text-muted-foreground">{selectedLiveVehicle.providerLabel} · {statusLabel[selectedLiveVehicle.status]}</div>
                         </div>
-                        <span
-                          className="inline-block h-2.5 w-2.5 rounded-full"
-                          style={{ backgroundColor: getLiveProviderColor(selectedLiveVehicle.provider) }}
-                        />
+                        <span className="h-2 w-2 flex-shrink-0 rounded-full" style={{ backgroundColor: getLiveProviderColor(selectedLiveVehicle.provider) }} />
                       </div>
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        <Button size="sm" className="h-8" onClick={() => focusOnLiveVehicle(selectedLiveVehicle)}>
-                          تركيز على الخريطة
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        <Button size="sm" className="h-6 text-[11px]" onClick={() => focusOnLiveVehicle(selectedLiveVehicle)}>تركيز</Button>
+                        <Button size="sm" variant="outline" className="h-6 text-[11px]" onClick={() => void loadVehicleHistory(selectedLiveVehicle)}>سجل الحركة</Button>
+                        <Button size="sm" variant="outline" className="h-6 text-[11px]" asChild>
+                          <Link href={getVehicleReportsHref(selectedLiveVehicle.id)}>الأحداث</Link>
                         </Button>
-                        <Button size="sm" variant="outline" className="h-8" onClick={() => void loadVehicleHistory(selectedLiveVehicle)}>
-                          عرض سجل الحركة
+                        <Button size="sm" variant="outline" className="h-6 text-[11px]" asChild>
+                          <Link href={getVehicleVisitLogHref(selectedLiveVehicle.id)}>الزيارات</Link>
                         </Button>
-                        <Button size="sm" variant="outline" className="h-8" asChild>
-                          <Link href={getVehicleReportsHref(selectedLiveVehicle.id)}>فتح تقرير الأحداث</Link>
-                        </Button>
-                        <Button size="sm" variant="outline" className="h-8" asChild>
-                          <Link href={getVehicleVisitLogHref(selectedLiveVehicle.id)}>فتح سجل الزيارات</Link>
-                        </Button>
-                        <Button size="sm" variant="ghost" className="h-8" asChild>
-                          <Link href={getVehicleGeneralReportHref(selectedLiveVehicle.id)}>التقرير العام</Link>
+                        <Button size="sm" variant="ghost" className="h-6 text-[11px]" asChild>
+                          <Link href={getVehicleGeneralReportHref(selectedLiveVehicle.id)}>التقرير</Link>
                         </Button>
                       </div>
                     </div>
                   ) : null}
 
-                  <div className="max-h-[540px] space-y-2 overflow-y-auto">
+                  {/* ── Vehicle list — fills remaining space ── */}
+                  <div className="flex-1 space-y-1.5 overflow-y-auto">
                     {filteredLiveVehicles.map((vehicle) => (
                       <div
                         key={`live-vehicle-${vehicle.id}`}
-                        className={`w-full rounded-xl border px-3 py-3 text-right transition-colors hover:bg-muted/50 ${
-                          historyTrack?.vehicle.id === vehicle.id ? "border-primary/50 bg-primary/5" : ""
+                        className={`rounded-xl border px-3 py-2 text-right transition-colors hover:bg-muted/40 ${
+                          historyTrack?.vehicle.id === vehicle.id ? "border-primary/50 bg-primary/5" : "bg-card"
                         }`}
                       >
+                        {/* Header */}
                         <div className="flex items-center justify-between gap-2">
                           <span
-                            className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                            className={`inline-block h-1.5 w-1.5 flex-shrink-0 rounded-full ${
                               vehicle.status === "moving"
-                                ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
+                                ? "bg-emerald-500 shadow-[0_0_4px_rgba(16,185,129,0.7)]"
                                 : vehicle.status === "stopped"
-                                  ? "bg-amber-500/15 text-amber-700 dark:text-amber-400"
-                                  : "bg-slate-500/15 text-slate-600 dark:text-slate-300"
+                                  ? "bg-amber-500"
+                                  : "bg-slate-400"
                             }`}
-                          >
-                            {statusLabel[vehicle.status]}
-                          </span>
-                          <div className="flex items-center gap-2">
-                            <span
-                              className="inline-block h-2.5 w-2.5 rounded-full"
-                              style={{ backgroundColor: getLiveProviderColor(vehicle.provider) }}
-                            />
-                            <span className="rounded-full border px-2 py-0.5 text-[10px] text-muted-foreground">{vehicle.providerLabel}</span>
-                            <span className="font-semibold">{vehicle.vehicleName || vehicle.busNumber}</span>
+                          />
+                          <div className="flex min-w-0 flex-1 items-center justify-end gap-1.5">
+                            <span className="truncate text-[12px] font-semibold">{vehicle.vehicleName || vehicle.busNumber}</span>
+                            <span className="h-2 w-2 flex-shrink-0 rounded-full" style={{ backgroundColor: getLiveProviderColor(vehicle.provider) }} />
                           </div>
                         </div>
-                        <div className="mt-3 overflow-hidden rounded-lg border border-border/70 bg-background/30">
-                          <div className="flex items-center justify-between px-3 py-2 text-[11px]">
-                            <span className="text-muted-foreground">المسار التشغيلي</span>
-                            <span>{vehicle.route || "مسار غير معين"}</span>
-                          </div>
-                          <div className="flex items-center justify-between border-t border-border/70 px-3 py-2 text-[11px]">
-                            <span className="text-muted-foreground">السائق</span>
-                            <span>{vehicle.driverName || "بدون سائق"}</span>
-                          </div>
-                          <div className="flex items-center justify-between border-t border-border/70 px-3 py-2 text-[11px]">
-                            <span className="text-muted-foreground">السرعة</span>
-                            <span>{vehicle.speed} كم/س</span>
-                          </div>
-                          <div className="flex items-center justify-between border-t border-border/70 px-3 py-2 text-[11px]">
-                            <span className="text-muted-foreground">آخر تحديث</span>
-                            <span>{vehicle.lastUpdate}</span>
-                          </div>
-                          {vehicle.plateNumber && (
-                            <div className="flex items-center justify-between border-t border-border/70 px-3 py-2 text-[11px]">
+                        {/* Compact metadata grid */}
+                        <div className="mt-1.5 grid grid-cols-2 gap-x-2 gap-y-0.5 text-[11px]">
+                          <span className="text-muted-foreground">المسار</span>
+                          <span className="truncate text-left">{vehicle.route || "—"}</span>
+                          <span className="text-muted-foreground">السائق</span>
+                          <span className="truncate text-left">{vehicle.driverName || "—"}</span>
+                          <span className="text-muted-foreground">السرعة</span>
+                          <span className="tabular-nums text-left">{vehicle.speed} كم/س · {vehicle.lastUpdate}</span>
+                          {vehicle.plateNumber ? (
+                            <>
                               <span className="text-muted-foreground">اللوحة</span>
-                              <span>{vehicle.plateNumber}</span>
-                            </div>
-                          )}
-                          <div className="flex items-center justify-between border-t border-border/70 px-3 py-2 text-[11px]">
-                            <span className="text-muted-foreground">المنطقة الحالية</span>
-                            <span>{vehicleZoneMap.get(vehicle.id) || "غير معروفة"}</span>
-                          </div>
-                          {vehicle.accuracy != null && (
-                            <div className="flex items-center justify-between border-t border-border/70 px-3 py-2 text-[11px]">
-                              <span className="text-muted-foreground">الدقة</span>
-                              <span>{vehicle.accuracy} م</span>
-                            </div>
-                          )}
-                          {vehicle.lastRecordedAt && (
-                            <div className="flex items-center justify-between border-t border-border/70 px-3 py-2 text-[11px]">
-                              <span className="text-muted-foreground">وقت التسجيل</span>
-                              <span>{vehicle.lastRecordedAt}</span>
-                            </div>
-                          )}
-                          {vehicle.lastReceivedAt && (
-                            <div className="flex items-center justify-between border-t border-border/70 px-3 py-2 text-[11px]">
-                              <span className="text-muted-foreground">وقت الاستقبال</span>
-                              <span>{vehicle.lastReceivedAt}</span>
-                            </div>
-                          )}
-                          {vehicle.trackingExternalId && (
-                            <div className="flex items-center justify-between border-t border-border/70 px-3 py-2 text-[11px]">
-                              <span className="text-muted-foreground">معرّف التتبع</span>
-                              <span>{vehicle.trackingExternalId}</span>
-                            </div>
-                          )}
-                          {vehicle.deviceName && (
-                            <div className="flex items-center justify-between border-t border-border/70 px-3 py-2 text-[11px]">
-                              <span className="text-muted-foreground">الجهاز</span>
-                              <span>{vehicle.deviceName}</span>
-                            </div>
-                          )}
-                          {vehicle.platform && (
-                            <div className="flex items-center justify-between border-t border-border/70 px-3 py-2 text-[11px]">
-                              <span className="text-muted-foreground">المنصة</span>
-                              <span>{vehicle.platform}</span>
-                            </div>
-                          )}
-                          {vehicle.appVersion && (
-                            <div className="flex items-center justify-between border-t border-border/70 px-3 py-2 text-[11px]">
-                              <span className="text-muted-foreground">إصدار التطبيق</span>
-                              <span>{vehicle.appVersion}</span>
-                            </div>
-                          )}
-                          {vehicle.imei && (
-                            <div className="flex items-center justify-between border-t border-border/70 px-3 py-2 text-[11px]">
-                              <span className="text-muted-foreground">IMEI</span>
-                              <span>{vehicle.imei}</span>
-                            </div>
-                          )}
+                              <span className="text-left">{vehicle.plateNumber}</span>
+                            </>
+                          ) : null}
+                          <span className="text-muted-foreground">المنطقة</span>
+                          <span className="truncate text-left">{vehicleZoneMap.get(vehicle.id) || "—"}</span>
                         </div>
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          <Button
-                            type="button"
-                            size="sm"
-                            className="h-8"
-                            onClick={() => focusOnLiveVehicle(vehicle)}
-                          >
-                            تحديد على الخريطة
+                        {/* Actions */}
+                        <div className="mt-1.5 flex gap-1">
+                          <Button type="button" size="sm" className="h-6 text-[11px]" onClick={() => focusOnLiveVehicle(vehicle)}>
+                            تحديد
                           </Button>
                           <Button
                             type="button"
                             size="sm"
                             variant="outline"
-                            className="h-8"
+                            className="h-6 text-[11px]"
                             onClick={() => void loadVehicleHistory(vehicle)}
                             disabled={historyLoading && historyVehicleId === vehicle.id}
                           >
-                            {historyLoading && historyVehicleId === vehicle.id ? "جارٍ التحميل..." : "عرض سجل الحركة"}
+                            {historyLoading && historyVehicleId === vehicle.id ? "..." : "سجل"}
                           </Button>
                         </div>
                       </div>
                     ))}
                     {filteredLiveVehicles.length === 0 && (
-                      <div className="rounded-lg border border-dashed px-3 py-4 text-center text-xs text-muted-foreground">
+                      <div className="rounded-lg border border-dashed px-3 py-6 text-center text-[11px] text-muted-foreground">
                         لا توجد مركبات تطابق الفلاتر الحالية.
                       </div>
                     )}
