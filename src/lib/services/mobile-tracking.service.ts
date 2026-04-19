@@ -345,7 +345,7 @@ export class MobileTrackingService {
       ).exec();
 
       await TrackingVehicleState.findOneAndUpdate(
-        { vehicleId },
+        { vehicleId, provider: 'mobile_app' },
         {
           $set: {
             branchId,
@@ -481,7 +481,7 @@ export class MobileTrackingService {
 
     if (binding?._id) {
       await TrackingVehicleState.findOneAndUpdate(
-        { vehicleId },
+        { vehicleId, provider: 'mobile_app' },
         {
           $set: {
             branchId,
@@ -680,7 +680,10 @@ export class MobileTrackingService {
         : Array.from(pointsFromDefinitions.values());
 
       const allowedPointIds = new Set(points.map((point) => String(point._id)));
-      const stateDoc = await TrackingVehicleState.findOne({ vehicleId }).lean();
+      const stateDoc = await TrackingVehicleState.findOne({
+        vehicleId,
+        provider: 'mobile_app',
+      }).lean();
       let currentInsidePointIds = new Set(
         (stateDoc?.insidePointIds || [])
           .map((value: any) => String(value))
@@ -770,7 +773,7 @@ export class MobileTrackingService {
       }).exec();
 
       await TrackingVehicleState.findOneAndUpdate(
-        { vehicleId },
+        { vehicleId, provider: 'mobile_app' },
         {
           $set: {
             branchId,
@@ -838,6 +841,7 @@ export class MobileTrackingService {
     await TrackingVehicleState.findOneAndUpdate(
       {
         vehicleId: binding.vehicleId,
+        provider: 'mobile_app',
         bindingId: binding._id,
       },
       {
@@ -884,7 +888,7 @@ export class MobileTrackingService {
           .lean()
       : null;
     const state = vehicleId
-      ? await TrackingVehicleState.findOne({ vehicleId }).lean()
+      ? await TrackingVehicleState.findOne({ vehicleId, provider: 'mobile_app' }).lean()
       : null;
 
     return {
@@ -952,6 +956,7 @@ export class MobileTrackingService {
 
     await TrackingVehicleState.updateMany(
       {
+        provider: 'mobile_app',
         bindingId: { $in: bindingIds },
       },
       {

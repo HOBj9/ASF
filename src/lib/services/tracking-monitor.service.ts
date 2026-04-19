@@ -113,7 +113,7 @@ export class TrackingMonitorService {
     const [vehicles, bindings, states, messages, providerConfigs, ingressStats, liveLocationsByBranch] =
       await Promise.all([
         Vehicle.find({ branchId: { $in: branchIds } })
-          .select('branchId name plateNumber imei trackingProvider driverId isActive')
+          .select('branchId name plateNumber imei trackingProvider acceptedTrackingProviders driverId isActive')
           .sort({ name: 1 })
           .lean(),
         TrackingBinding.find({ branchId: { $in: branchIds } })
@@ -189,20 +189,30 @@ export class TrackingMonitorService {
     const driverNameMap = new Map(drivers.map((driver) => [String(driver._id), driver.name || null]));
     const userMap = new Map(users.map((user) => [String(user._id), user]));
     const bindingMap = new Map(bindings.map((binding) => [String(binding._id), binding]));
-    const primaryBindingByVehicleId = new Map<string, any>();
-    const stateByVehicleId = new Map(states.map((state) => [String(state.vehicleId), state]));
+    const bindingByVehicleProvider = new Map<string, any>();
+    const stateByVehicleProvider = new Map(
+      states.map((state) => [`${String(state.vehicleId)}:${state.provider}`, state])
+    );
 
     for (const binding of bindings) {
-      if (binding.isPrimary) {
-        primaryBindingByVehicleId.set(String(binding.vehicleId), binding);
+      const key = `${String(binding.vehicleId)}:${binding.provider}`;
+      if (!bindingByVehicleProvider.has(key)) {
+        bindingByVehicleProvider.set(key, binding);
       }
     }
 
     const activeVehicles = vehicles.filter((vehicle) => vehicle.isActive !== false);
     const providerVehicleCounts = createEmptyProviderCounts(() => 0);
     for (const vehicle of activeVehicles) {
-      const provider = (vehicle.trackingProvider || 'athar') as TrackingProvider;
-      providerVehicleCounts[provider] += 1;
+      const acceptedProviders =
+        Array.isArray(vehicle.acceptedTrackingProviders) && vehicle.acceptedTrackingProviders.length > 0
+          ? vehicle.acceptedTrackingProviders
+          : [vehicle.trackingProvider || 'athar'];
+      for (const provider of acceptedProviders) {
+        if (provider in providerVehicleCounts) {
+          providerVehicleCounts[provider as TrackingProvider] += 1;
+        }
+      }
     }
 
     const activeBindingCounts = createEmptyProviderCounts(() => 0);
@@ -221,14 +231,15 @@ export class TrackingMonitorService {
     const liveVehicles = liveLocationsByBranch.flatMap(({ branchId, items }) =>
       items.map((item) => {
         const vehicle = vehicleMap.get(String(item.id));
-        const state = stateByVehicleId.get(String(item.id));
-        const binding = primaryBindingByVehicleId.get(String(item.id));
-        const user = binding?.userId ? userMap.get(String(binding.userId)) : null;
         const provider = (item.provider || vehicle?.trackingProvider || 'athar') as TrackingProvider;
+        const state = stateByVehicleProvider.get(`${String(item.id)}:${provider}`);
+        const binding = bindingByVehicleProvider.get(`${String(item.id)}:${provider}`);
+        const user = binding?.userId ? userMap.get(String(binding.userId)) : null;
 
         liveConnectivityCounts[item.status] += 1;
 
         return {
+          trackingKey: item.trackingKey || `${String(item.id)}:${provider}`,
           vehicleId: String(item.id),
           branchId,
           branchName: branchNameMap.get(branchId) || branchId,

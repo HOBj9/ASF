@@ -45,6 +45,7 @@ type HistoryInput = {
   vehicleId: string;
   from: Date;
   to: Date;
+  provider?: TrackingProvider | null;
   limit?: number;
 };
 
@@ -69,6 +70,11 @@ function normalizeHistoryLimit(limit?: number): number {
   const numeric = Number(limit || 1000);
   if (!Number.isFinite(numeric)) return 1000;
   return Math.max(1, Math.min(MAX_HISTORY_POINTS, Math.floor(numeric)));
+}
+
+function normalizeTrackingProvider(provider?: TrackingProvider | null): TrackingProvider {
+  if (provider === 'mobile_app' || provider === 'traccar') return provider;
+  return 'athar';
 }
 
 function parseAtharRoutePoint(entry: any): AtharRoutePoint | null {
@@ -150,7 +156,7 @@ export class VehicleTrackHistoryService {
     const route = routeId
       ? await Route.findById(routeId).select('name').lean()
       : null;
-    const provider = (vehicle.trackingProvider || 'athar') as TrackingProvider;
+    const provider = normalizeTrackingProvider(input.provider || vehicle.trackingProvider || 'athar');
 
     if (provider === 'athar') {
       const atharHistory = await this.getAtharVehicleHistory({
@@ -188,6 +194,7 @@ export class VehicleTrackHistoryService {
 
     const sampleHistory = await this.getTrackingSampleHistory({
       vehicleId: String(vehicle._id),
+      provider,
       from: input.from,
       to: input.to,
       limit,
@@ -218,6 +225,7 @@ export class VehicleTrackHistoryService {
 
   private async getTrackingSampleHistory(input: {
     vehicleId: string;
+    provider: TrackingProvider;
     from: Date;
     to: Date;
     limit: number;
@@ -227,6 +235,7 @@ export class VehicleTrackHistoryService {
   }> {
     const samples = await TrackingSample.find({
       vehicleId: input.vehicleId,
+      provider: input.provider,
       recordedAt: {
         $gte: input.from,
         $lte: input.to,
@@ -238,10 +247,11 @@ export class VehicleTrackHistoryService {
 
     const activeBinding = await TrackingBinding.findOne({
       vehicleId: input.vehicleId,
+      provider: input.provider,
       isActive: true,
-      isPrimary: true,
     })
       .select('externalId')
+      .sort({ isPrimary: -1, updatedAt: -1 })
       .lean();
 
     return {

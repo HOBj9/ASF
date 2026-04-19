@@ -5,6 +5,7 @@ import { requirePermission, handleApiError } from '@/lib/middleware/api-auth.mid
 import { resolveBranchId } from '@/lib/utils/municipality.util';
 import { permissionActions, permissionResources } from '@/constants/permissions';
 import { VehicleTrackHistoryService } from '@/lib/services/vehicle-track-history.service';
+import type { TrackingProvider } from '@/lib/tracking/types';
 
 const vehicleTrackHistoryService = new VehicleTrackHistoryService();
 
@@ -17,6 +18,11 @@ function parseRequiredDate(value: string | null, fieldName: string): Date {
     throw new Error(`${fieldName} غير صالح`);
   }
   return parsed;
+}
+
+function parseTrackingProvider(value: string | null): TrackingProvider | undefined {
+  if (value === 'athar' || value === 'mobile_app' || value === 'traccar') return value;
+  return undefined;
 }
 
 export async function GET(
@@ -32,6 +38,7 @@ export async function GET(
     const branchId = resolveBranchId(session, searchParams.get('branchId'));
     const from = parseRequiredDate(searchParams.get('from'), 'from');
     const to = parseRequiredDate(searchParams.get('to'), 'to');
+    const provider = parseTrackingProvider(searchParams.get('provider'));
     const limit = searchParams.get('limit') ? Number(searchParams.get('limit')) : undefined;
     const { id } = await params;
 
@@ -44,6 +51,7 @@ export async function GET(
       vehicleId: id,
       from,
       to,
+      provider,
       limit,
     });
 

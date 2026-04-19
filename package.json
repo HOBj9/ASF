@@ -16,6 +16,7 @@
     "repair:visits": "ts-node --project tsconfig.seed.json scripts/repair-visit-log.ts",
     "sync:permissions": "ts-node --project tsconfig.seed.json scripts/sync-permissions.ts",
     "fix:index:route-schedule-vehicles": "ts-node --project tsconfig.seed.json scripts/fix-route-schedule-vehicle-index.ts",
+    "fix:index:tracking-vehicle-state-provider": "ts-node --project tsconfig.seed.json scripts/fix-tracking-vehicle-state-provider-index.ts",
     "backfill:tracking-policies": "ts-node --project tsconfig.seed.json scripts/backfill-tracking-policies.ts"
   },
   "dependencies": {

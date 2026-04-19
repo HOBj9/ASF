@@ -11,6 +11,7 @@ import type { TrackingProvider } from '@/lib/tracking/types';
 
 export type VehicleLiveLocationItem = {
   id: string;
+  trackingKey: string;
   provider: TrackingProvider;
   providerLabel: string;
   vehicleName: string;
@@ -65,6 +66,10 @@ function normalizeAcceptedProviders(vehicle: {
   return [normalizeTrackingProvider(vehicle.trackingProvider)];
 }
 
+function getProviderEntityKey(vehicleId: string, provider: TrackingProvider): string {
+  return `${vehicleId}:${provider}`;
+}
+
 export class LiveTrackingService {
   private async resolveAtharService(branchId: string): Promise<AtharService | null> {
     const resolvedConfig = await resolveAtharProviderConfig(branchId);
@@ -109,6 +114,7 @@ export class LiveTrackingService {
       const status: VehicleLiveLocationItem['status'] = input.info?.engineStatus ? 'moving' : 'stopped';
       return {
         id: input.vehicleId,
+        trackingKey: getProviderEntityKey(input.vehicleId, input.provider),
         provider: input.provider,
         providerLabel: getProviderLabel(input.provider),
         vehicleName: input.vehicleName,
@@ -138,6 +144,7 @@ export class LiveTrackingService {
 
     return {
       id: input.vehicleId,
+      trackingKey: getProviderEntityKey(input.vehicleId, input.provider),
       provider: input.provider,
       providerLabel: getProviderLabel(input.provider),
       vehicleName: input.vehicleName,
@@ -186,6 +193,7 @@ export class LiveTrackingService {
 
     return {
       id: input.vehicleId,
+      trackingKey: getProviderEntityKey(input.vehicleId, input.provider),
       provider: input.provider,
       providerLabel: getProviderLabel(input.provider),
       vehicleName: input.vehicleName,
@@ -258,10 +266,10 @@ export class LiveTrackingService {
         .exec(),
       TrackingBinding.find({
         vehicleId: { $in: vehicles.map((vehicle) => vehicle._id) },
-        isPrimary: true,
         isActive: true,
       })
-        .select('vehicleId externalId metadata provider lastSeenAt')
+        .select('vehicleId externalId metadata provider lastSeenAt isPrimary')
+        .sort({ isPrimary: -1, updatedAt: -1 })
         .lean()
         .exec(),
     ]);
@@ -276,14 +284,27 @@ export class LiveTrackingService {
           )
         : {};
 
-    const trackingStateByVehicleId = new Map(
-      trackingStates.map((state) => [String(state.vehicleId), state])
+    const trackingStateByVehicleProvider = new Map(
+      trackingStates.map((state) => [
+        getProviderEntityKey(
+          String(state.vehicleId),
+          normalizeTrackingProvider(state.provider as TrackingProvider)
+        ),
+        state,
+      ])
     );
-    const bindingByVehicleId = new Map(
-      trackingBindings.map((binding) => [String(binding.vehicleId), binding])
-    );
+    const bindingByVehicleProvider = new Map<string, any>();
+    for (const binding of trackingBindings) {
+      const key = getProviderEntityKey(
+        String(binding.vehicleId),
+        normalizeTrackingProvider(binding.provider as TrackingProvider)
+      );
+      if (!bindingByVehicleProvider.has(key)) {
+        bindingByVehicleProvider.set(key, binding);
+      }
+    }
 
-    return vehicles.map((vehicle) => {
+    return vehicles.flatMap((vehicle) => {
       const vehicleId = String(vehicle._id);
       const driverName =
         (vehicle.driverId ? driverMap.get(String(vehicle.driverId)) : null) || 'غير محدد';
@@ -294,72 +315,52 @@ export class LiveTrackingService {
       const vehicleName = vehicle.name || createVehicleLabel(vehicleId);
       const plateNumber = vehicle.plateNumber || null;
       const busNumber = plateNumber || vehicleName || createVehicleLabel(vehicleId);
-      const binding = bindingByVehicleId.get(vehicleId);
-      const state = trackingStateByVehicleId.get(vehicleId);
-      const managedProvider = normalizeTrackingProvider(state?.provider || binding?.provider || null);
-      const lastReceivedAt = state?.lastReceivedAt ? new Date(state.lastReceivedAt) : null;
-      const managedHasCoordinates =
-        state?.lastLocation &&
-        Number.isFinite(Number(state.lastLocation.lat)) &&
-        Number.isFinite(Number(state.lastLocation.lng));
-      const managedIsRecent = !isTrackingStateOffline(lastReceivedAt);
       const acceptedProviders = normalizeAcceptedProviders(vehicle);
       const atharInfo = imei && acceptedProviders.includes('athar') ? locationsByImei[imei] : null;
-      const atharHasCoordinates =
-        atharInfo &&
-        atharInfo.lat !== null &&
-        atharInfo.lng !== null &&
-        Number.isFinite(Number(atharInfo.lat)) &&
-        Number.isFinite(Number(atharInfo.lng));
 
-      const shouldUseManagedState =
-        (managedProvider !== 'athar' && (managedHasCoordinates || managedIsRecent)) ||
-        (managedProvider !== 'athar' && !atharHasCoordinates && Boolean(binding || state));
+      const items: VehicleLiveLocationItem[] = [];
 
-      if (shouldUseManagedState) {
-        return this.buildManagedStateItem({
-          vehicleId,
-          provider: managedProvider,
-          vehicleName,
-          plateNumber,
-          busNumber,
-          driverName,
-          routeName,
-          routeId,
-          imei,
-          state,
-          binding,
-        });
+      if (acceptedProviders.includes('athar')) {
+        items.push(
+          this.buildAtharItem({
+            vehicleId,
+            provider: 'athar',
+            vehicleName,
+            plateNumber,
+            busNumber,
+            driverName,
+            routeName,
+            routeId,
+            imei,
+            info: atharInfo || null,
+          })
+        );
       }
 
-      if (atharHasCoordinates || normalizeTrackingProvider(vehicle.trackingProvider) === 'athar') {
-        return this.buildAtharItem({
-          vehicleId,
-          provider: 'athar',
-          vehicleName,
-          plateNumber,
-          busNumber,
-          driverName,
-          routeName,
-          routeId,
-          imei,
-          info: atharInfo || null,
-        });
+      for (const provider of acceptedProviders) {
+        if (provider === 'athar') continue;
+        const providerKey = getProviderEntityKey(vehicleId, provider);
+        const state = trackingStateByVehicleProvider.get(providerKey);
+        const binding = bindingByVehicleProvider.get(providerKey);
+
+        items.push(
+          this.buildManagedStateItem({
+            vehicleId,
+            provider,
+            vehicleName,
+            plateNumber,
+            busNumber,
+            driverName,
+            routeName,
+            routeId,
+            imei,
+            state,
+            binding,
+          })
+        );
       }
 
-      return this.buildManagedStateItem({
-        vehicleId,
-        provider: managedProvider,
-        vehicleName,
-        plateNumber,
-        busNumber,
-        driverName,
-        routeName,
-        routeId,
-        imei,
-        state,
-        binding,
-      });
+      return items;
     });
   }
 }

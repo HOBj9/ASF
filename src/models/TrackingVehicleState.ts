@@ -33,7 +33,6 @@ const TrackingVehicleStateSchema = new Schema(
       type: Schema.Types.ObjectId,
       ref: 'Vehicle',
       required: true,
-      unique: true,
       index: true,
     },
     branchId: {
@@ -114,6 +113,10 @@ const TrackingVehicleStateSchema = new Schema(
 
 TrackingVehicleStateSchema.index({ branchId: 1, provider: 1 });
 TrackingVehicleStateSchema.index({ branchId: 1, lastReceivedAt: -1 });
+TrackingVehicleStateSchema.index(
+  { vehicleId: 1, provider: 1 },
+  { unique: true, name: 'vehicleId_1_provider_1' }
+);
 
 let TrackingVehicleState: Model<ITrackingVehicleState>;
 

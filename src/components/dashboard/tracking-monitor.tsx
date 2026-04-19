@@ -70,6 +70,7 @@ type OverviewResponse = {
     providerEnabledBranches: Record<TrackingProvider, number>
   }
   liveVehicles: Array<{
+    trackingKey?: string
     vehicleId: string
     branchId: string
     branchName: string
@@ -1370,7 +1371,7 @@ export function TrackingMonitor() {
                         </thead>
                         <tbody>
                           {liveVehicles.map((item) => (
-                            <tr key={item.vehicleId} className="border-b align-top">
+                            <tr key={item.trackingKey || `${item.vehicleId}:${item.provider}`} className="border-b align-top">
                               <td className="p-2">{item.branchName}</td>
                               <td className="p-2">
                                 <div className="font-medium">{item.vehicleName}</div>

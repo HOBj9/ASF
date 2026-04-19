@@ -6,6 +6,37 @@
 import L from "leaflet";
 
 const patchApplied = "__leaflet_events_patch_applied";
+const markerClusterPatchApplied = "__leaflet_markercluster_patch_applied";
+
+function isTeardownMapError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  return (
+    message.includes("getMinZoom") ||
+    message.includes("getMaxZoom") ||
+    message.includes("_map") ||
+    message.includes("_zoom") ||
+    message.includes("_mapPane")
+  );
+}
+
+function wrapTeardownSafeMethod(proto: any, methodName: string, needsMap = false) {
+  const original = proto?.[methodName];
+  if (typeof original !== "function" || (original as any).__leafletSafeWrapped) return;
+
+  const wrapped = function (this: any, ...args: any[]) {
+    const map = this?._map ?? this?._group?._map ?? null;
+    if (needsMap && !map) return this;
+    try {
+      return original.apply(this, args);
+    } catch (error) {
+      if (isTeardownMapError(error)) return this;
+      throw error;
+    }
+  };
+
+  (wrapped as any).__leafletSafeWrapped = true;
+  proto[methodName] = wrapped;
+}
 
 function applyLeafletPatch() {
   if (typeof window === "undefined") return;
@@ -65,3 +96,47 @@ function applyLeafletPatch() {
 }
 
 applyLeafletPatch();
+
+export function applyLeafletMarkerClusterPatch() {
+  if (typeof window === "undefined") return;
+  if ((L as any)[markerClusterPatchApplied]) return;
+
+  const markerClusterGroup = (L as any).MarkerClusterGroup;
+  if (markerClusterGroup?.prototype) {
+    [
+      "_moveEnd",
+      "_zoomEnd",
+      "_generateInitialClusters",
+      "_removeFromGridUnclustered",
+      "_removeLayer",
+      "_hideCoverage",
+      "_zoomOrSpiderfy",
+      "_animationZoomIn",
+      "_animationZoomOut",
+      "_animationStart",
+      "_animationEnd",
+    ].forEach((methodName) => wrapTeardownSafeMethod(markerClusterGroup.prototype, methodName, true));
+
+    wrapTeardownSafeMethod(markerClusterGroup.prototype, "onRemove", false);
+    wrapTeardownSafeMethod(markerClusterGroup.prototype, "removeLayer", false);
+    wrapTeardownSafeMethod(markerClusterGroup.prototype, "removeLayers", false);
+    wrapTeardownSafeMethod(markerClusterGroup.prototype, "clearLayers", false);
+  }
+
+  const markerCluster = (L as any).MarkerCluster;
+  if (markerCluster?.prototype) {
+    [
+      "zoomToBounds",
+      "spiderfy",
+      "unspiderfy",
+      "_recursively",
+      "_recursivelyAnimateChildrenIn",
+      "_recursivelyAnimateChildrenInAndAddSelfToMap",
+      "_recursivelyBecomeVisible",
+      "_recursivelyAddChildrenToMap",
+      "_recursivelyRemoveChildrenFromMap",
+    ].forEach((methodName) => wrapTeardownSafeMethod(markerCluster.prototype, methodName, true));
+  }
+
+  (L as any)[markerClusterPatchApplied] = true;
+}
