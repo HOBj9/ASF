@@ -21,7 +21,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ar" dir="rtl" suppressHydrationWarning>
-      <body className={cairo.className}>
+      <body className={`${cairo.variable} font-sans`}>
         <AppProviders>
           {children}
         </AppProviders>

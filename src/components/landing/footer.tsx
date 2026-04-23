@@ -1,95 +1,59 @@
 "use client"
 
 import Link from "next/link"
-import Image from "next/image"
+import { cn } from "@/lib/utils"
+import { useLandingI18n } from "@/components/landing/landing-i18n"
+import { landingContainer } from "@/components/landing/styles"
+import { ScrollReveal } from "@/components/landing/scroll-reveal"
 
 export function Footer() {
   const currentYear = new Date().getFullYear()
-
-  const scrollToSection = (id: string) => {
-    const element = document.getElementById(id)
-    if (!element) return
-    element.scrollIntoView({ behavior: "smooth" })
-  }
+  const { content, dir } = useLandingI18n()
+  const footer = content.footer
+  const links = content.nav.links
 
   return (
-    <footer className="relative bg-gradient-to-b from-muted/80 via-muted/70 to-muted/60 overflow-hidden">
-      <div className="absolute inset-0 opacity-5">
-        <div className="absolute top-0 right-0 w-96 h-96 bg-primary rounded-full blur-3xl"></div>
-        <div className="absolute bottom-0 left-0 w-96 h-96 bg-primary rounded-full blur-3xl"></div>
-      </div>
-
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-12 relative z-10">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
-          <div className="space-y-4">
-            <Link href="/" className="flex items-center gap-3 group">
-              <div className="w-14 h-14 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform duration-300 relative">
-                <Image
-                  src="/logo.png"
-                  alt="Logo"
-                  width={56}
-                  height={56}
-                  className="object-contain relative z-10"
-                />
-              </div>
-            </Link>
-            <p className="text-sm text-muted-foreground leading-relaxed">
-              منصة تشغيل موحدة لإدارة المؤسسات وفروعها ميدانياً، مع خرائط تفاعلية، تتبع حي،
-              تقارير وتحليلات قابلة للتصدير.
+    <footer className="border-t border-border/60 bg-muted/20 py-14">
+      <div className={landingContainer}>
+        <ScrollReveal className="grid gap-8 md:grid-cols-3">
+          <div className={cn("space-y-3", dir === "rtl" ? "text-right" : "text-left")}>
+            <p className="text-lg font-semibold tracking-tight text-foreground">{footer.brand}</p>
+            <p className="max-w-sm text-sm leading-7 text-muted-foreground">
+              {footer.description}
             </p>
           </div>
 
-          <div>
-            <h3 className="text-sm font-semibold text-foreground mb-4">روابط سريعة</h3>
+          <div className={cn(dir === "rtl" ? "text-right" : "text-left")}>
+            <h3 className="mb-4 text-sm font-semibold uppercase tracking-wider text-foreground/85">{footer.quickLinks}</h3>
             <ul className="space-y-2 text-sm text-muted-foreground">
-              <li>
-                <button
-                  onClick={() => scrollToSection("overview")}
-                  className="hover:text-primary transition-colors"
-                >
-                  نظرة عامة
-                </button>
-              </li>
-              <li>
-                <button
-                  onClick={() => scrollToSection("modules")}
-                  className="hover:text-primary transition-colors"
-                >
-                  الوحدات الرئيسية
-                </button>
-              </li>
-              <li>
-                <button
-                  onClick={() => scrollToSection("scenario")}
-                  className="hover:text-primary transition-colors"
-                >
-                  سيناريو التشغيل
-                </button>
-              </li>
+              {links.map((link: { href: string; label: string }) => (
+                <li key={link.href}>
+                  <a href={link.href} className="transition-colors hover:text-foreground">
+                    {link.label}
+                  </a>
+                </li>
+              ))}
             </ul>
           </div>
 
-          <div>
-            <h3 className="text-sm font-semibold text-foreground mb-4">الدخول للنظام</h3>
+          <div className={cn(dir === "rtl" ? "text-right" : "text-left")}>
+            <h3 className="mb-4 text-sm font-semibold uppercase tracking-wider text-foreground/85">{footer.contact}</h3>
             <ul className="space-y-2 text-sm text-muted-foreground">
+              <li>{footer.emailLabel}: info@alather.net</li>
+              <li>{footer.phoneLabel}: +963 993 370 560</li>
               <li>
-                <Link href="/login" className="hover:text-primary transition-colors">
-                  تسجيل الدخول
-                </Link>
-              </li>
-              <li>
-                <Link href="/register" className="hover:text-primary transition-colors">
-                  إنشاء حساب
+                <Link href="/login" className="transition-colors hover:text-foreground">
+                  {footer.loginLink}
                 </Link>
               </li>
             </ul>
           </div>
-        </div>
+        </ScrollReveal>
 
-        <div className="pt-8 border-t border-border/40 flex flex-col md:flex-row items-center justify-between gap-4">
-          <p className="text-sm text-muted-foreground">© {currentYear} جميع الحقوق محفوظة.</p>
-          <p className="text-xs text-muted-foreground">منصة تشغيل المؤسسات والفروع</p>
-        </div>
+        <ScrollReveal delayMs={120} className="mt-10 flex flex-col items-center justify-between gap-3 border-t border-border/60 pt-6 sm:flex-row">
+          <p className="text-sm text-muted-foreground">© {currentYear} {footer.brand}</p>
+          <p className="text-xs text-muted-foreground">{footer.rights}</p>
+        </ScrollReveal>
       </div>
     </footer>
   )

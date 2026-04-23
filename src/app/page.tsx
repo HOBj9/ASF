@@ -1,32 +1,12 @@
 import type { Metadata } from "next"
-import { Navbar } from "@/components/landing/navbar"
-import { HeroSection } from "@/components/landing/hero-section"
-import { AboutSection } from "@/components/landing/about-section"
-import { FeaturesSection } from "@/components/landing/features-section"
-import { BenefitsSection } from "@/components/landing/benefits-section"
-import { Footer } from "@/components/landing/footer"
-import { WaveBackground } from "@/components/landing/wave-background"
+import { LandingPageShell } from "@/components/landing/landing-page-shell"
 
 export const metadata: Metadata = {
-  title: "منصة إدارة الفروع والمركبات والنقاط",
+  title: "منصة إدارة العمليات الميدانية وإدارة النفايات",
   description:
-    "منصة تشغيل موحدة للمؤسسات وفروعها لإدارة المركبات والسائقين والنقاط والخطوط والتقارير التشغيلية.",
+    "منصة تشغيل مركزية لإدارة الأساطيل والمسارات والنقاط والتتبع الحي والتقارير والصلاحيات للجهات المشغلة والبلديات.",
 }
 
 export default function LandingPage() {
-  return (
-    <main className="min-h-screen relative">
-      <WaveBackground opacity="opacity-15 dark:opacity-8" />
-      <div className="fixed inset-0 backdrop-blur-[2px] z-[1] pointer-events-none"></div>
-
-      <div className="relative z-10">
-        <Navbar />
-        <HeroSection />
-        <AboutSection />
-        <FeaturesSection />
-        <BenefitsSection />
-        <Footer />
-      </div>
-    </main>
-  )
+  return <LandingPageShell />
 }

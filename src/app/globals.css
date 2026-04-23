@@ -7,36 +7,36 @@
     /* ============================================
        Base Colors - Light Mode
        ============================================ */
-    --background: 150 30% 8%;
-    --foreground: 0 0% 98%;
-    --card: 150 25% 10%;
-    --card-foreground: 0 0% 98%;
-    --popover: 150 25% 10%;
-    --popover-foreground: 0 0% 98%;
+    --background: 0 0% 99%;
+    --foreground: 160 24% 12%;
+    --card: 0 0% 100%;
+    --card-foreground: 160 24% 12%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 160 24% 12%;
     
     /* Primary Colors - Msgly Green (Bright Emerald/Spring Green) */
-    --primary: 150 70% 35%;
+    --primary: 150 70% 36%;
     --primary-foreground: 0 0% 100%;
     --primary-hover: 150 70% 40%;
     --primary-light: 150 70% 45%;
     --primary-dark: 150 70% 28%;
-    --primary-bg: 150 25% 14%;
-    --primary-bg-hover: 150 25% 18%;
+    --primary-bg: 150 42% 94%;
+    --primary-bg-hover: 150 42% 91%;
     
     /* Secondary Colors */
-    --secondary: 150 20% 14%;
-    --secondary-foreground: 0 0% 96%;
-    --secondary-hover: 150 20% 18%;
+    --secondary: 150 22% 95%;
+    --secondary-foreground: 160 24% 16%;
+    --secondary-hover: 150 22% 92%;
     
     /* Muted Colors */
-    --muted: 150 15% 14%;
-    --muted-foreground: 150 10% 70%;
-    --muted-hover: 150 15% 18%;
+    --muted: 160 16% 94%;
+    --muted-foreground: 160 10% 41%;
+    --muted-hover: 160 16% 90%;
     
     /* Accent Colors */
-    --accent: 150 30% 18%;
-    --accent-foreground: 0 0% 98%;
-    --accent-hover: 150 30% 22%;
+    --accent: 150 26% 92%;
+    --accent-foreground: 160 24% 16%;
+    --accent-hover: 150 26% 88%;
     
     /* Destructive Colors */
     --destructive: 0 84.2% 60.2%;
@@ -46,8 +46,8 @@
     --destructive-bg-hover: 0 84.2% 95%;
     
     /* Border & Input */
-    --border: 150 15% 20%;
-    --input: 150 15% 20%;
+    --border: 160 16% 86%;
+    --input: 160 16% 86%;
     --ring: 150 70% 40%;
     
     /* Status Colors */
@@ -100,17 +100,17 @@
     --green-bg: 150 25% 14%;
     
     /* Table Colors */
-    --table-bg: 150 25% 10%;
-    --table-bg-hover: 150 25% 12%;
-    --table-border: 150 15% 22%;
-    --table-header-bg: 150 25% 12%;
-    --table-header-text: 0 0% 98%;
+    --table-bg: 0 0% 100%;
+    --table-bg-hover: 160 18% 97%;
+    --table-border: 160 16% 88%;
+    --table-header-bg: 160 20% 95%;
+    --table-header-text: 160 24% 18%;
     
     /* Widget/Stats Colors */
-    --widget-bg: 150 25% 10%;
-    --widget-border: 150 15% 22%;
-    --widget-shadow: 0 0% 0% / 0.35;
-    --widget-hover-shadow: 0 0% 0% / 0.45;
+    --widget-bg: 0 0% 100%;
+    --widget-border: 160 16% 88%;
+    --widget-shadow: 160 24% 20% / 0.08;
+    --widget-hover-shadow: 160 24% 20% / 0.12;
     
     /* Icon Colors */
     --icon-primary: 150 70% 40%;
@@ -119,9 +119,9 @@
     --icon-hover: 150 70% 45%;
     
     /* Sidebar Colors */
-    --sidebar-bg: 150 25% 10%;
-    --sidebar-border: 150 15% 22%;
-    --sidebar-item-hover: 150 25% 14%;
+    --sidebar-bg: 0 0% 100%;
+    --sidebar-border: 160 16% 88%;
+    --sidebar-item-hover: 160 20% 95%;
     --sidebar-item-active: 150 70% 35%;
     --sidebar-item-active-text: 0 0% 100%;
     --sidebar-item-active-bg: 150 70% 35%;
@@ -146,7 +146,7 @@
     /* Loader Colors */
     --loader-primary: 150 70% 40%;
     --loader-secondary: 150 50% 35%;
-    --loader-bg: 150 20% 12%;
+    --loader-bg: 160 20% 92%;
     
     /* Radius */
     --radius: 0.75rem;
@@ -303,8 +303,27 @@
   * {
     @apply border-border;
   }
+  html {
+    color-scheme: light;
+  }
+  html.dark {
+    color-scheme: dark;
+  }
   body {
     @apply bg-background text-foreground;
+    transition:
+      background-color 280ms ease,
+      color 280ms ease,
+      border-color 280ms ease;
+  }
+  body *,
+  body *::before,
+  body *::after {
+    transition:
+      background-color 280ms ease,
+      color 280ms ease,
+      border-color 280ms ease,
+      box-shadow 280ms ease;
   }
 }
 
