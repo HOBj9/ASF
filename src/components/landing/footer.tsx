@@ -13,9 +13,9 @@ export function Footer() {
   const links = content.nav.links
 
   return (
-    <footer className="border-t border-border/60 bg-muted/20 py-14">
+    <footer className="border-t border-border/60 bg-muted/20 py-10 sm:py-14">
       <div className={landingContainer}>
-        <ScrollReveal className="grid gap-8 md:grid-cols-3">
+        <ScrollReveal className="grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
           <div className={cn("space-y-3", dir === "rtl" ? "text-right" : "text-left")}>
             <p className="text-lg font-semibold tracking-tight text-foreground">{footer.brand}</p>
             <p className="max-w-sm text-sm leading-7 text-muted-foreground">
@@ -50,9 +50,9 @@ export function Footer() {
           </div>
         </ScrollReveal>
 
-        <ScrollReveal delayMs={120} className="mt-10 flex flex-col items-center justify-between gap-3 border-t border-border/60 pt-6 sm:flex-row">
-          <p className="text-sm text-muted-foreground">© {currentYear} {footer.brand}</p>
-          <p className="text-xs text-muted-foreground">{footer.rights}</p>
+        <ScrollReveal delayMs={120} className="mt-8 flex flex-col items-center justify-between gap-3 border-t border-border/60 pt-6 sm:mt-10 sm:flex-row">
+          <p className="text-center text-sm text-muted-foreground sm:text-start">© {currentYear} {footer.brand}</p>
+          <p className="text-center text-xs text-muted-foreground sm:text-start">{footer.rights}</p>
         </ScrollReveal>
       </div>
     </footer>

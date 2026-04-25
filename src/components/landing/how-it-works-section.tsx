@@ -18,13 +18,13 @@ export function HowItWorksSection() {
   const workflow = content.workflow
   const markerLaneClass =
     dir === "rtl"
-      ? "right-[2%] md:right-[3%] lg:right-[4%]"
-      : "left-[2%] md:left-[3%] lg:left-[4%]"
+      ? "lg:right-[4%]"
+      : "lg:left-[4%]"
 
   return (
     <section id="workflow" className={cn("relative", sectionSpacing)}>
       <RouteMarker stopId="workflow" index={3} dir={dir} className={markerLaneClass} />
-      <div className={landingContainer}>
+      <div className={cn(landingContainer, "relative z-10")}>
         <ScrollReveal className={cn("mx-auto mb-10 max-w-3xl", dir === "rtl" ? "text-right" : "text-left")}>
           <h2 className={sectionTitle}>{workflow.title}</h2>
           <p className={sectionDescription}>
@@ -33,14 +33,14 @@ export function HowItWorksSection() {
         </ScrollReveal>
 
         <div className="mx-auto max-w-5xl lg:px-20 xl:px-24">
-          <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-2">
+          <div className="grid gap-4 sm:gap-5 md:grid-cols-2 lg:grid-cols-2">
             {workflow.steps.map((step: { title: string; description: string }, index: number) => (
               <ScrollReveal key={step.title} delayMs={index * 80}>
                 <div
                   className={cn(
                     premiumCardBase,
                     premiumCardHover,
-                    "relative overflow-hidden p-6",
+                    "relative overflow-hidden p-5 sm:p-6",
                     dir === "rtl" ? "text-right" : "text-left",
                   )}
                 >

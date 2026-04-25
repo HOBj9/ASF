@@ -20,7 +20,7 @@ export function RouteMarker({ stopId, index, dir, className }: RouteMarkerProps)
       data-route-stop={stopId}
       data-route-active="false"
       className={cn(
-        "group pointer-events-none absolute top-1/2 z-20 -translate-y-1/2 transition-transform duration-300",
+        "group pointer-events-none absolute top-1/2 z-[3] -translate-y-1/2 transition-transform duration-300",
         placeOnLeft ? "left-[9%] md:left-[11%] lg:left-[13%]" : "right-[9%] md:right-[11%] lg:right-[13%]",
         className,
       )}
@@ -34,15 +34,15 @@ export function RouteMarker({ stopId, index, dir, className }: RouteMarkerProps)
           height={200}
           unoptimized
           className={cn(
-            "marker-core h-32 w-32 object-contain opacity-95 transition-all duration-300 md:h-40 md:w-40",
-            "drop-shadow-[0_0_12px_rgba(16,185,129,0.45)]",
+            "marker-core h-28 w-28 object-contain opacity-75 transition-all duration-300 sm:h-32 sm:opacity-90 md:h-40 md:w-40 md:opacity-95",
+            "drop-shadow-[0_0_8px_rgba(16,185,129,0.28)] sm:drop-shadow-[0_0_12px_rgba(16,185,129,0.45)]",
             "group-data-[route-active=true]:scale-110 group-data-[route-active=true]:opacity-100",
-            "group-data-[route-active=true]:drop-shadow-[0_0_24px_rgba(16,185,129,0.9)]",
+            "group-data-[route-active=true]:drop-shadow-[0_0_14px_rgba(16,185,129,0.55)] sm:group-data-[route-active=true]:drop-shadow-[0_0_24px_rgba(16,185,129,0.9)]",
           )}
         />
         <span
           className={cn(
-            "absolute left-1/2 top-[82%] h-20 w-20 -translate-x-1/2 -translate-y-1/2 rounded-full border border-primary/45 opacity-0",
+            "absolute left-1/2 top-[82%] h-16 w-16 -translate-x-1/2 -translate-y-1/2 rounded-full border border-primary/35 opacity-0 sm:h-20 sm:w-20 sm:border-primary/45",
             "transition-all duration-300 group-data-[route-active=true]:opacity-100 group-data-[route-active=true]:animate-ping",
           )}
         />

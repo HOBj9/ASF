@@ -21,8 +21,8 @@ export function PlatformOverviewSection() {
   const overview = content.overview
   const markerLaneClass =
     dir === "rtl"
-      ? "right-[2%] md:right-[3%] lg:right-[4%]"
-      : "left-[2%] md:left-[3%] lg:left-[4%]"
+      ? "lg:right-[4%]"
+      : "lg:left-[4%]"
   const cardsLanePaddingClass =
     dir === "rtl"
       ? "lg:pr-24 xl:pr-28 lg:pl-8"
@@ -31,16 +31,16 @@ export function PlatformOverviewSection() {
   return (
     <section id="overview" className={cn("relative", sectionSpacing)}>
       <RouteMarker stopId="overview" index={1} dir={dir} className={markerLaneClass} />
-      <div className={landingContainer}>
-        <ScrollReveal className={cn("mx-auto -mt-8 mb-28 max-w-3xl sm:-mt-6", dir === "rtl" ? "text-right" : "text-left")}>
+      <div className={cn(landingContainer, "relative z-10")}>
+        <ScrollReveal className={cn("mx-auto -mt-4 mb-12 max-w-3xl sm:-mt-2 sm:mb-16 lg:mb-24", dir === "rtl" ? "text-right" : "text-left")}>
           <h2 className={sectionTitle}>{overview.title}</h2>
           <p className={sectionDescription}>
             {overview.description}
           </p>
         </ScrollReveal>
 
-        <div className={cn("mx-auto mt-14 max-w-5xl", cardsLanePaddingClass)}>
-          <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-2">
+        <div className={cn("mx-auto mt-8 max-w-5xl sm:mt-12", cardsLanePaddingClass)}>
+          <div className="grid gap-4 sm:gap-5 md:grid-cols-2 lg:grid-cols-2">
             {overview.cards.map((item: { title: string; description: string; icon: LucideIcon }, index: number) => {
               const Icon = item.icon
               return (

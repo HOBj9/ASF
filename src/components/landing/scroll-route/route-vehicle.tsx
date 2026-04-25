@@ -16,7 +16,7 @@ type RouteVehicleProps = {
 export function RouteVehicle({ x, y, angle, compact, prefersReducedMotion }: RouteVehicleProps) {
   return (
     <motion.div
-      className="absolute overflow-visible"
+      className="absolute z-[2] overflow-visible"
       style={{
         left: x,
         top: y,

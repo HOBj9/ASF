@@ -9,6 +9,9 @@ import { useScrollProgress } from "@/components/landing/scroll-route/use-scroll-
 
 const SECTION_IDS = ["home", "overview", "features", "workflow", "stats", "cta"] as const
 const VEHICLE_HEADING_OFFSET = 180
+const HASH_SECTION_ALIASES: Record<string, (typeof SECTION_IDS)[number]> = {
+  metrics: "stats",
+}
 
 function normalizeAngleDelta(delta: number) {
   let next = delta
@@ -83,24 +86,70 @@ function buildPathD(stops: RouteStopPoint[], startPoint: { x: number; y: number 
   return d
 }
 
-function interpolateProgressFromStops(stops: RouteStopPoint[], scrollY: number, viewportHeight: number) {
-  if (stops.length < 2 || viewportHeight <= 0) return 0
-  const triggers = stops.map((stop) => stop.y - viewportHeight * 0.55)
-  const lastIndex = triggers.length - 1
+function findClosestLengthOnPath(pathNode: SVGPathElement, totalLength: number, target: { x: number; y: number }) {
+  if (totalLength <= 0) return 0
+  const sampleCount = 220
+  let bestLength = 0
+  let bestDistance = Number.POSITIVE_INFINITY
 
-  if (scrollY <= triggers[0]) return 0
-  if (scrollY >= triggers[lastIndex]) return 1
-
-  for (let i = 0; i < lastIndex; i += 1) {
-    const start = triggers[i]
-    const end = triggers[i + 1]
-    if (scrollY >= start && scrollY <= end) {
-      const local = end > start ? (scrollY - start) / (end - start) : 0
-      return (i + local) / lastIndex
+  for (let i = 0; i <= sampleCount; i += 1) {
+    const length = (i / sampleCount) * totalLength
+    const point = pathNode.getPointAtLength(length)
+    const dx = point.x - target.x
+    const dy = point.y - target.y
+    const distanceSq = dx * dx + dy * dy
+    if (distanceSq < bestDistance) {
+      bestDistance = distanceSq
+      bestLength = length
     }
   }
 
-  return 1
+  let low = Math.max(0, bestLength - totalLength / sampleCount)
+  let high = Math.min(totalLength, bestLength + totalLength / sampleCount)
+  for (let i = 0; i < 8; i += 1) {
+    const left = low + (high - low) / 3
+    const right = high - (high - low) / 3
+    const leftPoint = pathNode.getPointAtLength(left)
+    const rightPoint = pathNode.getPointAtLength(right)
+    const leftDx = leftPoint.x - target.x
+    const leftDy = leftPoint.y - target.y
+    const rightDx = rightPoint.x - target.x
+    const rightDy = rightPoint.y - target.y
+    const leftDist = leftDx * leftDx + leftDy * leftDy
+    const rightDist = rightDx * rightDx + rightDy * rightDy
+    if (leftDist <= rightDist) high = right
+    else low = left
+  }
+
+  return (low + high) / 2
+}
+
+function interpolateCheckpointProgress(
+  stops: RouteStopPoint[],
+  stopProgresses: number[],
+  scrollY: number,
+  viewportHeight: number,
+) {
+  if (stops.length < 2 || viewportHeight <= 0 || stopProgresses.length !== stops.length) return 0
+  const centerY = scrollY + viewportHeight * 0.5
+  const firstY = stops[0].y
+  const lastY = stops[stops.length - 1].y
+
+  if (centerY <= firstY) return stopProgresses[0] ?? 0
+  if (centerY >= lastY) return stopProgresses[stops.length - 1] ?? 1
+
+  for (let i = 0; i < stops.length - 1; i += 1) {
+    const startY = stops[i].y
+    const endY = stops[i + 1].y
+    if (centerY >= startY && centerY <= endY) {
+      const local = endY > startY ? (centerY - startY) / (endY - startY) : 0
+      const startProgress = stopProgresses[i] ?? 0
+      const endProgress = stopProgresses[i + 1] ?? startProgress
+      return startProgress + (endProgress - startProgress) * local
+    }
+  }
+
+  return stopProgresses[stops.length - 1] ?? 1
 }
 
 function updateActiveMarker(stops: RouteStopPoint[], progress: number) {
@@ -120,10 +169,17 @@ export function LandingRouteSystem({ dir }: { dir: RouteDir }) {
   const pathRef = useRef<SVGPathElement | null>(null)
   const pathLengthRef = useRef(0)
   const stopsRef = useRef<RouteStopPoint[]>([])
+  const localizedStopsRef = useRef<RouteStopPoint[]>([])
+  const stopProgressesRef = useRef<number[]>([])
+  const markerLengthsRef = useRef<number[]>([])
+  const markerStartLengthRef = useRef(0)
+  const markerEndLengthRef = useRef(0)
+  const routeTopOffsetRef = useRef(0)
   const viewportHeightRef = useRef(0)
   const lastAngleRef = useRef(0)
   const [viewportWidth, setViewportWidth] = useState(0)
   const [docHeight, setDocHeight] = useState(0)
+  const [routeTopOffset, setRouteTopOffset] = useState(0)
   const [pathD, setPathD] = useState("")
   const [pathLengthState, setPathLengthState] = useState(0)
 
@@ -132,7 +188,12 @@ export function LandingRouteSystem({ dir }: { dir: RouteDir }) {
   const vehicleAngle = useMotionValue(0)
 
   const computeProgress = useCallback((scrollY: number) => {
-    return interpolateProgressFromStops(stopsRef.current, scrollY, viewportHeightRef.current)
+    return interpolateCheckpointProgress(
+      stopsRef.current,
+      stopProgressesRef.current,
+      scrollY,
+      viewportHeightRef.current,
+    )
   }, [])
 
   const { progress, updateProgress } = useScrollProgress(computeProgress)
@@ -141,34 +202,50 @@ export function LandingRouteSystem({ dir }: { dir: RouteDir }) {
     damping: prefersReducedMotion ? 34 : 26,
     mass: prefersReducedMotion ? 0.45 : 0.6,
   })
-  const distance = useTransform(smoothProgress, (value) => value * pathLengthRef.current)
+  const distance = useTransform(smoothProgress, (value) => {
+    const start = markerStartLengthRef.current
+    const end = markerEndLengthRef.current
+    const span = Math.max(0, end - start)
+    return start + span * value
+  })
 
   useEffect(() => {
     const collectStops = () => {
-      const nextStops: RouteStopPoint[] = []
+      const absoluteStops: RouteStopPoint[] = []
       SECTION_IDS.forEach((id) => {
         const marker = document.querySelector<HTMLElement>(`[data-route-stop="${id}"]`)
         if (!marker) return
         const rect = marker.getBoundingClientRect()
-        nextStops.push({
+        absoluteStops.push({
           id,
           x: rect.left + rect.width / 2,
           y: rect.top + window.scrollY + rect.height / 2,
         })
       })
 
-      stopsRef.current = nextStops
+      stopsRef.current = absoluteStops
       viewportHeightRef.current = window.innerHeight
       setViewportWidth(window.innerWidth)
-      setDocHeight(document.documentElement.scrollHeight)
-      const startAnchor = document.querySelector<HTMLElement>("[data-route-start='s']")
-      const startPoint = startAnchor
-        ? {
-            x: startAnchor.getBoundingClientRect().left + startAnchor.getBoundingClientRect().width / 2,
-            y: startAnchor.getBoundingClientRect().top + window.scrollY + startAnchor.getBoundingClientRect().height / 2,
-          }
-        : null
-      setPathD(buildPathD(nextStops, startPoint))
+      const nextDocHeight = document.documentElement.scrollHeight
+      setDocHeight(nextDocHeight)
+
+      const navbar = document.querySelector<HTMLElement>("header.sticky")
+      const headerHeight = navbar?.offsetHeight ?? 80
+      const firstStopY = absoluteStops[0]?.y ?? headerHeight + 120
+      const topSafe = headerHeight + 16
+      const centeredTop = firstStopY - window.innerHeight * 0.45
+      const nextTopOffset = Math.max(topSafe, Math.min(centeredTop, firstStopY - 40))
+
+      routeTopOffsetRef.current = nextTopOffset
+      setRouteTopOffset(nextTopOffset)
+
+      const localizedStops = absoluteStops.map((stop) => ({
+        ...stop,
+        y: stop.y - nextTopOffset,
+      }))
+      localizedStopsRef.current = localizedStops
+
+      setPathD(buildPathD(localizedStops, null))
       updateProgress(window.scrollY)
     }
 
@@ -193,8 +270,41 @@ export function LandingRouteSystem({ dir }: { dir: RouteDir }) {
     const length = pathRef.current.getTotalLength()
     pathLengthRef.current = length
     setPathLengthState(length)
+    const localStops = localizedStopsRef.current
+    if (localStops.length) {
+      const markerLengths = localStops.map((stop) =>
+        findClosestLengthOnPath(pathRef.current as SVGPathElement, length, { x: stop.x, y: stop.y }),
+      )
+      markerLengthsRef.current = markerLengths
+      const startLength = markerLengths[0] ?? 0
+      const endLength = markerLengths[markerLengths.length - 1] ?? length
+      markerStartLengthRef.current = startLength
+      markerEndLengthRef.current = endLength
+      const span = Math.max(1, endLength - startLength)
+      stopProgressesRef.current = markerLengths.map((markerLength) => (markerLength - startLength) / span)
+    }
     updateActiveMarker(stopsRef.current, progress.get())
-  }, [pathD])
+  }, [pathD, progress])
+
+  useEffect(() => {
+    const applyHashCheckpoint = () => {
+      const hash = window.location.hash.replace("#", "")
+      if (!hash) return
+      const sectionId = HASH_SECTION_ALIASES[hash] ?? hash
+      const stopIndex = SECTION_IDS.findIndex((id) => id === sectionId)
+      if (stopIndex < 0) return
+      const checkpoint = stopProgressesRef.current[stopIndex]
+      if (typeof checkpoint !== "number") return
+      progress.set(checkpoint)
+      updateActiveMarker(stopsRef.current, checkpoint)
+    }
+
+    applyHashCheckpoint()
+    window.addEventListener("hashchange", applyHashCheckpoint)
+    return () => {
+      window.removeEventListener("hashchange", applyHashCheckpoint)
+    }
+  }, [progress])
 
   useEffect(() => {
     const pathNode = pathRef.current
@@ -239,17 +349,22 @@ export function LandingRouteSystem({ dir }: { dir: RouteDir }) {
   })
 
   const compact = viewportWidth < 768
-  const shouldRender = Boolean(pathD) && viewportWidth > 0 && docHeight > 0
+  const routeHeight = Math.max(0, docHeight - routeTopOffset)
+  const shouldRender = Boolean(pathD) && viewportWidth > 0 && routeHeight > 0
 
   if (!shouldRender) return null
 
   return (
-    <div className="pointer-events-none absolute inset-0 z-[2] overflow-hidden" aria-hidden="true">
+    <div
+      className="pointer-events-none absolute inset-x-0 z-[1] overflow-hidden"
+      style={{ top: routeTopOffset, height: routeHeight }}
+      aria-hidden="true"
+    >
       <svg
-        className="absolute inset-0"
+        className="absolute inset-0 z-[1]"
         width={viewportWidth}
-        height={docHeight}
-        viewBox={`0 0 ${viewportWidth} ${docHeight}`}
+        height={routeHeight}
+        viewBox={`0 0 ${viewportWidth} ${routeHeight}`}
         preserveAspectRatio="none"
       >
         <RoutePath

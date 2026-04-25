@@ -20,7 +20,7 @@ export function StatsSection() {
   return (
     <section id="stats" className={cn("relative border-y border-border/60 bg-muted/30", sectionSpacing)}>
       <RouteMarker stopId="stats" index={4} dir={dir} />
-      <div className={landingContainer}>
+      <div className={cn(landingContainer, "relative z-10")}>
         <ScrollReveal className={cn("mx-auto mb-8 max-w-3xl", dir === "rtl" ? "text-right" : "text-left")}>
           <h2 className={sectionTitle}>{stats.title}</h2>
           <p className={sectionDescription}>
@@ -29,18 +29,18 @@ export function StatsSection() {
         </ScrollReveal>
 
         <div className="mx-auto max-w-5xl lg:px-20 xl:px-24">
-          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-2 sm:gap-5 lg:grid-cols-2">
             {stats.items.map((item: { label: string; value: string }, index: number) => (
               <ScrollReveal key={item.label} delayMs={index * 70}>
                 <div
                   className={cn(
                     premiumCardBase,
                     premiumCardHover,
-                    "bg-background/95 p-6",
+                    "bg-background/95 p-5 sm:p-6",
                     dir === "rtl" ? "text-right" : "text-left",
                   )}
                 >
-                  <p className="text-4xl font-semibold tracking-tight text-foreground">{item.value}</p>
+                  <p className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">{item.value}</p>
                   <p className="mt-3 text-sm font-medium text-muted-foreground">{item.label}</p>
                 </div>
               </ScrollReveal>

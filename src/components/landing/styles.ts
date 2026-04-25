@@ -1,12 +1,12 @@
-export const landingContainer = "mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8"
+export const landingContainer = "mx-auto w-full max-w-7xl px-3 sm:px-6 lg:px-8"
 
-export const sectionSpacing = "py-20 sm:py-24 lg:py-28"
+export const sectionSpacing = "py-14 sm:py-20 lg:py-28"
 
 export const sectionTitle =
-  "text-3xl font-semibold tracking-tight text-foreground sm:text-4xl"
+  "text-2xl font-semibold tracking-tight leading-tight text-foreground sm:text-3xl lg:text-4xl"
 
 export const sectionDescription =
-  "mt-5 text-base leading-8 text-muted-foreground sm:text-lg"
+  "mt-4 text-sm leading-7 text-muted-foreground sm:mt-5 sm:text-base sm:leading-8 lg:text-lg"
 
 export const premiumCardBase =
   "rounded-2xl border border-border/70 bg-card/95 shadow-sm transition-all duration-300"
